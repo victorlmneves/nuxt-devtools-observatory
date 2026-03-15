@@ -1,5 +1,4 @@
 import { ref, readonly } from 'vue'
-import type { NuxtApp } from '#app'
 
 export interface FetchEntry {
     id: string
@@ -18,7 +17,7 @@ export interface FetchEntry {
     line?: number
 }
 
-export function setupFetchRegistry(_nuxtApp: NuxtApp) {
+export function setupFetchRegistry() {
     const entries = ref<Map<string, FetchEntry>>(new Map())
 
     function register(entry: FetchEntry) {
@@ -28,7 +27,11 @@ export function setupFetchRegistry(_nuxtApp: NuxtApp) {
 
     function update(id: string, patch: Partial<FetchEntry>) {
         const existing = entries.value.get(id)
-        if (!existing) return
+
+        if (!existing) {
+            return
+        }
+
         const updated = { ...existing, ...patch }
         entries.value.set(id, updated)
         emit('fetch:update', updated)
@@ -44,8 +47,11 @@ export function setupFetchRegistry(_nuxtApp: NuxtApp) {
     }
 
     function emit(event: string, data: unknown) {
-        if (!import.meta.client) return
-        const channel = (window as any).__nuxt_devtools__?.channel
+        if (!import.meta.client) {
+            return
+        }
+
+        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } }).__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -55,15 +61,20 @@ export function setupFetchRegistry(_nuxtApp: NuxtApp) {
 // ── Dev shim called by the Vite transform ─────────────────────────────────
 // This function is injected at call sites: __devFetch(url, opts, meta)
 export function __devFetch(
-    originalFn: Function,
+    originalFn: (url: string, opts: Record<string, unknown>) => Promise<unknown>,
     url: string,
     opts: Record<string, unknown>,
     meta: { key: string; file: string; line: number }
 ) {
-    if (!import.meta.dev || !import.meta.client) return originalFn(url, opts)
+    if (!import.meta.dev || !import.meta.client) {
+        return originalFn(url, opts)
+    }
 
-    const registry = (window as any).__observatory__?.fetch
-    if (!registry) return originalFn(url, opts)
+    const registry = (window as Window & { __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> } }).__observatory__?.fetch
+
+    if (!registry) {
+        return originalFn(url, opts)
+    }
 
     const id = `${meta.key}::${Date.now()}`
     const startTime = performance.now()
@@ -94,7 +105,10 @@ export function __devFetch(
                 size,
                 cached,
             })
-            if (typeof opts.onResponse === 'function') opts.onResponse({ response })
+
+            if (typeof opts.onResponse === 'function') {
+                opts.onResponse({ response })
+            }
         },
         onResponseError({ response }: { response: Response }) {
             registry.update(id, {
@@ -102,7 +116,10 @@ export function __devFetch(
                 endTime: performance.now(),
                 ms: Math.round(performance.now() - startTime),
             })
-            if (typeof opts.onResponseError === 'function') opts.onResponseError({ response })
+            
+            if (typeof opts.onResponseError === 'function') {
+                opts.onResponseError({ response })
+            }
         },
     })
 }

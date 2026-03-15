@@ -1,5 +1,4 @@
 import { ref, isRef, isReactive, unref, getCurrentInstance, provide, inject } from 'vue'
-import type { NuxtApp } from '#app'
 
 export interface ProvideEntry {
     key: string
@@ -22,7 +21,7 @@ export interface InjectEntry {
     line: number
 }
 
-export function setupProvideInjectRegistry(_nuxtApp: NuxtApp) {
+export function setupProvideInjectRegistry() {
     const provides = ref<ProvideEntry[]>([])
     const injects = ref<InjectEntry[]>([])
 
@@ -41,8 +40,11 @@ export function setupProvideInjectRegistry(_nuxtApp: NuxtApp) {
     }
 
     function emit(event: string, data: unknown) {
-        if (!import.meta.client) return
-        const channel = (window as any).__nuxt_devtools__?.channel
+        if (!import.meta.client) {
+            return
+        }
+
+        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } }).__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -54,9 +56,15 @@ export function setupProvideInjectRegistry(_nuxtApp: NuxtApp) {
 export function __devProvide(key: string | symbol, value: unknown, meta: { file: string; line: number }) {
     provide(key, value)
 
-    if (!import.meta.dev || !import.meta.client) return
-    const registry = (window as any).__observatory__?.provideInject
-    if (!registry) return
+    if (!import.meta.dev || !import.meta.client) {
+        return
+    }
+
+    const registry = (window as Window & { __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> } }).__observatory__?.provideInject
+
+    if (!registry) {
+        return
+    }
 
     const instance = getCurrentInstance()
     registry.registerProvide({
@@ -73,9 +81,15 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
 export function __devInject<T>(key: string | symbol, defaultValue: T | undefined, meta: { file: string; line: number }): T | undefined {
     const resolved = inject<T>(key, defaultValue as T)
 
-    if (!import.meta.dev || !import.meta.client) return resolved
-    const registry = (window as any).__observatory__?.provideInject
-    if (!registry) return resolved
+    if (!import.meta.dev || !import.meta.client) {
+        return resolved
+    }
+
+    const registry = (window as Window & { __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> } }).__observatory__?.provideInject
+
+    if (!registry) {
+        return resolved
+    }
 
     const instance = getCurrentInstance()
     const providerInfo = findProvider(String(key), instance)
@@ -96,25 +110,36 @@ export function __devInject<T>(key: string | symbol, defaultValue: T | undefined
 
 function findProvider(key: string, instance: ReturnType<typeof getCurrentInstance>) {
     let cur = instance?.parent
+
     while (cur) {
         if (cur.appContext?.provides && key in cur.appContext.provides) {
             return { file: cur.type?.__file ?? 'unknown', uid: cur.uid }
         }
-        if ((cur as any).provides && key in (cur as any).provides) {
+
+        if ((cur as { provides?: Record<string, unknown> }).provides && key in ((cur as { provides?: Record<string, unknown> }).provides ?? {})) {
             return { file: cur.type?.__file ?? 'unknown', uid: cur.uid }
         }
+
         cur = cur.parent
     }
+
     return null
 }
 
 function safeSnapshot(value: unknown): unknown {
     try {
-        if (value === null || value === undefined) return value
-        if (typeof value === 'function') return '[Function]'
+        if (value === null || value === undefined) {
+            return value
+        }
+
+        if (typeof value === 'function') {
+            return '[Function]'
+        }
+
         if (typeof value === 'object') {
             return JSON.parse(JSON.stringify(value))
         }
+
         return value
     } catch {
         return '[unserializable]'

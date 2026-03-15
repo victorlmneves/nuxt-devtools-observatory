@@ -95,6 +95,9 @@ importers:
       typescript-eslint:
         specifier: ^8.54.0
         version: 8.57.0(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
+      unbuild:
+        specifier: ^3.6.1
+        version: 3.6.1(typescript@5.9.3)(vue-sfc-transformer@0.1.17(@vue/compiler-core@3.5.30)(esbuild@0.27.4)(vue@3.5.30(typescript@5.9.3)))(vue@3.5.30(typescript@5.9.3))
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@25.5.0)(terser@5.46.0)

@@ -1,5 +1,4 @@
-import { ref, isRef, isReadonly, unref, getCurrentInstance, onUnmounted, watch } from 'vue'
-import type { NuxtApp } from '#app'
+import { ref, isRef, isReadonly, unref, getCurrentInstance, onUnmounted } from 'vue'
 
 export interface ComposableEntry {
     id: string
@@ -22,7 +21,7 @@ export interface ComposableEntry {
     line: number
 }
 
-export function setupComposableRegistry(_nuxtApp: NuxtApp) {
+export function setupComposableRegistry() {
     const entries = ref<Map<string, ComposableEntry>>(new Map())
 
     function register(entry: ComposableEntry) {
@@ -32,7 +31,11 @@ export function setupComposableRegistry(_nuxtApp: NuxtApp) {
 
     function update(id: string, patch: Partial<ComposableEntry>) {
         const existing = entries.value.get(id)
-        if (!existing) return
+
+        if (!existing) {
+            return
+        }
+
         const updated = { ...existing, ...patch }
         entries.value.set(id, updated)
         emit('composable:update', updated)
@@ -43,8 +46,11 @@ export function setupComposableRegistry(_nuxtApp: NuxtApp) {
     }
 
     function emit(event: string, data: unknown) {
-        if (!import.meta.client) return
-        const channel = (window as any).__nuxt_devtools__?.channel
+        if (!import.meta.client) {
+            return
+        }
+
+        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } }).__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -54,11 +60,19 @@ export function setupComposableRegistry(_nuxtApp: NuxtApp) {
 // ── Dev shim called by Vite transform ─────────────────────────────────────
 
 export function __trackComposable<T>(name: string, callFn: () => T, meta: { file: string; line: number }): T {
-    if (!import.meta.dev) return callFn()
-    if (!import.meta.client) return callFn()
+    if (!import.meta.dev) {
+        return callFn()
+    }
 
-    const registry = (window as any).__observatory__?.composable
-    if (!registry) return callFn()
+    if (!import.meta.client) {
+        return callFn()
+    }
+
+    const registry = (window as Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }).__observatory__?.composable
+
+    if (!registry) {
+        return callFn()
+    }
 
     const instance = getCurrentInstance()
     const id = `${name}::${instance?.uid ?? 'global'}::${meta.file}:${meta.line}::${Date.now()}`
@@ -70,13 +84,17 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     const clearedIntervals = new Set<number>()
 
     window.setInterval = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => {
-        const id = originalSetInterval(fn as any, ms, ...rest)
+        const id = originalSetInterval(fn, ms, ...rest)
         trackedIntervals.push(id as number)
+
         return id
     }) as typeof window.setInterval
 
     window.clearInterval = ((id?: number) => {
-        if (id !== undefined) clearedIntervals.add(id)
+        if (id !== undefined) {
+            clearedIntervals.add(id)
+        }
+
         originalClearInterval(id)
     }) as typeof window.clearInterval
 
@@ -91,6 +109,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
 
     // Snapshot reactive return values
     const refs: ComposableEntry['refs'] = {}
+
     if (result && typeof result === 'object') {
         for (const [key, val] of Object.entries(result as object)) {
             if (isRef(val)) {
@@ -135,6 +154,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         if (leakedWatchers.length > 0) {
             reasons.push(`${leakedWatchers.length} watcher${leakedWatchers.length > 1 ? 's' : ''} still active after unmount`)
         }
+
         if (leakedIntervals.length > 0) {
             reasons.push(`setInterval #${leakedIntervals.join(', #')} never cleared`)
         }
@@ -156,13 +176,24 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
 
 function safeSnapshot(value: unknown): unknown {
     try {
-        if (value === null || value === undefined) return value
-        if (typeof value === 'function') return '[Function]'
-        if (Array.isArray(value)) return `Array(${value.length})`
+        if (value === null || value === undefined) {
+            return value
+        }
+
+        if (typeof value === 'function') {
+            return '[Function]'
+        }
+
+        if (Array.isArray(value)) {
+            return `Array(${value.length})`
+        }
+
         if (typeof value === 'object') {
             const str = JSON.stringify(value)
+
             return str.length > 120 ? str.slice(0, 120) + '…' : JSON.parse(str)
         }
+
         return value
     } catch {
         return '[unserializable]'

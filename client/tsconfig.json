@@ -6,7 +6,11 @@
         "strict": true,
         "jsx": "preserve",
         "lib": ["ESNext", "DOM"],
-        "baseUrl": "."
+        "baseUrl": ".",
+        "forceConsistentCasingInFileNames": true,
+        "paths": {
+            "*": ["../node_modules/*"]
+        }
     },
     "include": ["**/*.ts", "**/*.vue"]
 }

@@ -52,20 +52,22 @@ export default defineNuxtModule<ModuleOptions>({
 
     setup(options, nuxt) {
         // Only active in dev mode
-        if (!nuxt.options.dev) return
+        if (!nuxt.options.dev) {
+            return
+        }
 
         const resolver = createResolver(import.meta.url)
 
         // ── Vite aliases for runtime shims (dev resolution) ──────────────────
         nuxt.hook('vite:extendConfig', (config) => {
-            config.resolve = config.resolve ?? {}
-            config.resolve.alias = config.resolve.alias ?? {}
-            const aliases = config.resolve.alias as Record<string, string>
+            const alias = config.resolve?.alias
+            const aliases = (Array.isArray(alias) ? {} : (alias ?? {})) as Record<string, string>
             aliases['nuxt-devtools-observatory/runtime/composable-registry'] = resolver.resolve('./runtime/composables/composable-registry')
             aliases['nuxt-devtools-observatory/runtime/provide-inject-registry'] = resolver.resolve(
                 './runtime/composables/provide-inject-registry'
             )
             aliases['nuxt-devtools-observatory/runtime/fetch-registry'] = resolver.resolve('./runtime/composables/fetch-registry')
+            ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
         // ── Vite transforms ───────────────────────────────────────────────────
@@ -83,13 +85,6 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Runtime plugins ───────────────────────────────────────────────────
         addPlugin(resolver.resolve('./runtime/plugin'))
-
-        // ── Enable Vue performance API for heatmap ────────────────────────────
-        if (options.renderHeatmap) {
-            nuxt.hook('vue:setup', (app: any) => {
-                app.config.performance = true
-            })
-        }
 
         // ── Nitro plugin for SSR fetch capture ────────────────────────────────
         if (options.fetchDashboard) {
@@ -124,6 +119,8 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Devtools integration ──────────────────────────────────────────────
         const base = `http://localhost:${CLIENT_PORT}`
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         nuxt.hook('devtools:customTabs', (tabs: any[]) => {
             if (options.fetchDashboard) {
                 tabs.push({
@@ -133,6 +130,7 @@ export default defineNuxtModule<ModuleOptions>({
                     view: { type: 'iframe', src: `${base}/fetch` },
                 })
             }
+
             if (options.provideInjectGraph) {
                 tabs.push({
                     name: 'observatory-provide',
@@ -141,6 +139,7 @@ export default defineNuxtModule<ModuleOptions>({
                     view: { type: 'iframe', src: `${base}/provide` },
                 })
             }
+
             if (options.composableTracker) {
                 tabs.push({
                     name: 'observatory-composables',
@@ -149,6 +148,7 @@ export default defineNuxtModule<ModuleOptions>({
                     view: { type: 'iframe', src: `${base}/composables` },
                 })
             }
+
             if (options.renderHeatmap) {
                 tabs.push({
                     name: 'observatory-heatmap',

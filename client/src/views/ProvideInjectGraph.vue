@@ -1,79 +1,5 @@
-<template>
-    <div class="view">
-        <div class="toolbar">
-            <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all keys</button>
-            <button v-for="k in allKeys" :key="k" :class="{ active: filter === k }" @click="filter = k" style="font-family: var(--mono)">
-                {{ k }}
-            </button>
-            <button :class="{ 'danger-active': filter === 'warn' }" @click="filter = 'warn'" style="margin-left: auto">
-                warnings only
-            </button>
-        </div>
-
-        <div class="split">
-            <!-- Graph -->
-            <div class="graph-area">
-                <div class="legend">
-                    <span class="dot" style="background: var(--teal)"></span>
-                    <span>provides</span>
-                    <span class="dot" style="background: var(--blue)"></span>
-                    <span>both</span>
-                    <span class="dot" style="background: var(--text3)"></span>
-                    <span>injects</span>
-                    <span class="dot" style="background: var(--red)"></span>
-                    <span>missing provider</span>
-                </div>
-                <div class="tree">
-                    <TreeNode
-                        v-for="node in rootNodes"
-                        :key="node.id"
-                        :node="node"
-                        :selected="selected?.id"
-                        :filter="filter"
-                        @select="selected = $event"
-                    />
-                </div>
-            </div>
-
-            <!-- Detail -->
-            <div v-if="selected" class="detail-panel">
-                <div class="detail-header">
-                    <span class="mono bold" style="font-size: 12px">{{ selected.label }}</span>
-                    <button @click="selected = null">×</button>
-                </div>
-
-                <div v-if="selected.provides.length">
-                    <div class="section-label">provides ({{ selected.provides.length }})</div>
-                    <div v-for="p in selected.provides" :key="p.key" class="provide-row">
-                        <span class="mono text-sm" style="min-width: 100px; color: var(--text2)">{{ p.key }}</span>
-                        <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                            {{ p.val }}
-                        </span>
-                        <span class="badge" :class="p.reactive ? 'badge-ok' : 'badge-gray'">{{ p.reactive ? 'reactive' : 'static' }}</span>
-                    </div>
-                </div>
-
-                <div v-if="selected.injects.length" :style="{ marginTop: selected.provides.length ? '10px' : '0' }">
-                    <div class="section-label">injects ({{ selected.injects.length }})</div>
-                    <div v-for="inj in selected.injects" :key="inj.key" class="inject-row" :class="{ 'inject-miss': !inj.ok }">
-                        <span class="mono text-sm" style="min-width: 100px">{{ inj.key }}</span>
-                        <span v-if="inj.ok" class="badge badge-ok">resolved</span>
-                        <span v-else class="badge badge-err">no provider</span>
-                        <span class="mono muted text-sm" style="margin-left: auto">{{ inj.from ?? 'undefined' }}</span>
-                    </div>
-                </div>
-
-                <div v-if="!selected.provides.length && !selected.injects.length" class="muted text-sm" style="margin-top: 8px">
-                    no provide/inject in this component
-                </div>
-            </div>
-            <div v-else class="detail-empty">click a node to inspect</div>
-        </div>
-    </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, defineComponent, h } from 'vue'
+import { ref, computed, defineComponent, h, type VNode } from 'vue'
 
 interface TreeNodeData {
     id: string
@@ -89,7 +15,7 @@ const TreeNode = defineComponent({
     name: 'TreeNode',
     props: { node: Object as () => TreeNodeData, selected: String, filter: String },
     emits: ['select'],
-    setup(props, { emit }) {
+    setup(props, { emit }): () => VNode {
         return () => {
             const n = props.node!
             const hasError = n.injects.some((i) => !i.ok)
@@ -233,12 +159,13 @@ const nodes = ref<TreeNodeData[]>([
     },
 ])
 
-const filter = ref('all')
-const selected = ref<TreeNodeData | null>(null)
+const activeFilter = ref('all')
+const selectedNode = ref<TreeNodeData | null>(null)
 const rootNodes = computed(() => nodes.value)
 
 const allKeys = computed(() => {
     const keys = new Set<string>()
+
     function collect(ns: TreeNodeData[]) {
         ns.forEach((n) => {
             n.provides.forEach((p) => keys.add(p.key))
@@ -246,10 +173,86 @@ const allKeys = computed(() => {
             collect(n.children)
         })
     }
+
     collect(nodes.value)
+
     return [...keys]
 })
 </script>
+
+<template>
+    <div class="view">
+        <div class="toolbar">
+            <button :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">all keys</button>
+            <button v-for="k in allKeys" :key="k" style="font-family: var(--mono)" :class="{ active: activeFilter === k }" @click="activeFilter = k">
+                {{ k }}
+            </button>
+            <button style="margin-left: auto" :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = 'warn'">
+                warnings only
+            </button>
+        </div>
+
+        <div class="split">
+            <!-- Graph -->
+            <div class="graph-area">
+                <div class="legend">
+                    <span class="dot" style="background: var(--teal)"></span>
+                    <span>provides</span>
+                    <span class="dot" style="background: var(--blue)"></span>
+                    <span>both</span>
+                    <span class="dot" style="background: var(--text3)"></span>
+                    <span>injects</span>
+                    <span class="dot" style="background: var(--red)"></span>
+                    <span>missing provider</span>
+                </div>
+                <div class="tree">
+                    <TreeNode
+                        v-for="rootNode in rootNodes"
+                        :key="rootNode.id"
+                        :node="rootNode"
+                        :selected="selectedNode?.id"
+                        :filter="activeFilter"
+                        @select="selectedNode = $event"
+                    />
+                </div>
+            </div>
+
+            <!-- Detail -->
+            <div v-if="selectedNode" class="detail-panel">
+                <div class="detail-header">
+                    <span class="mono bold" style="font-size: 12px">{{ selectedNode.label }}</span>
+                    <button @click="selectedNode = null">×</button>
+                </div>
+
+                <div v-if="selectedNode.provides.length">
+                    <div class="section-label">provides ({{ selectedNode.provides.length }})</div>
+                    <div v-for="p in selectedNode.provides" :key="p.key" class="provide-row">
+                        <span class="mono text-sm" style="min-width: 100px; color: var(--text2)">{{ p.key }}</span>
+                        <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                            {{ p.val }}
+                        </span>
+                        <span class="badge" :class="p.reactive ? 'badge-ok' : 'badge-gray'">{{ p.reactive ? 'reactive' : 'static' }}</span>
+                    </div>
+                </div>
+
+                <div v-if="selectedNode.injects.length" :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }">
+                    <div class="section-label">injects ({{ selectedNode.injects.length }})</div>
+                    <div v-for="inj in selectedNode.injects" :key="inj.key" class="inject-row" :class="{ 'inject-miss': !inj.ok }">
+                        <span class="mono text-sm" style="min-width: 100px">{{ inj.key }}</span>
+                        <span v-if="inj.ok" class="badge badge-ok">resolved</span>
+                        <span v-else class="badge badge-err">no provider</span>
+                        <span class="mono muted text-sm" style="margin-left: auto">{{ inj.from ?? 'undefined' }}</span>
+                    </div>
+                </div>
+
+                <div v-if="!selectedNode.provides.length && !selectedNode.injects.length" class="muted text-sm" style="margin-top: 8px">
+                    no provide/inject in this component
+                </div>
+            </div>
+            <div v-else class="detail-empty">click a node to inspect</div>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .view {
@@ -330,6 +333,7 @@ const allKeys = computed(() => {
 }
 
 .tree-node.selected {
+    outline: none;
 }
 
 .tree-children {

@@ -38,7 +38,7 @@ async function triggerError() {
                 <h2>useFetch Dashboard</h2>
                 <p v-if="product">Product: {{ product.name }} — ${{ product.price }}</p>
                 <p v-if="fetchError" style="color: red">Error: {{ fetchError }}</p>
-                <button @click="refreshProduct">refresh product</button>
+                <button @click="() => refreshProduct()">refresh product</button>
                 <button @click="triggerError">trigger 404</button>
             </section>
 

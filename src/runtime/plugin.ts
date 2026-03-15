@@ -1,24 +1,34 @@
-import { defineNuxtPlugin, useRuntimeConfig } from '#app'
+import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig } from '#app'
 import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
 import { setupComposableRegistry } from './composables/composable-registry'
 import { setupRenderRegistry } from './composables/render-registry'
 
-export default defineNuxtPlugin((nuxtApp) => {
-    if (!import.meta.dev) return
+interface ObservatoryWindow extends Window {
+    __observatory__?: Record<string, unknown>
+    __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
+}
 
+export default defineNuxtPlugin(() => {
+    if (!import.meta.dev) {
+        return
+    }
+
+    const nuxtApp = useNuxtApp()
     const config = useRuntimeConfig().public.observatory as { heatmapThreshold: number }
 
+    // Enable Vue performance API for render heatmap
+    nuxtApp.vueApp.config.performance = true
+
     // Each registry attaches to the Vue app and exposes data over the WS channel
-    const fetchRegistry = setupFetchRegistry(nuxtApp)
-    const provideInjectRegistry = setupProvideInjectRegistry(nuxtApp)
-    const composableRegistry = setupComposableRegistry(nuxtApp)
+    const fetchRegistry = setupFetchRegistry()
+    const provideInjectRegistry = setupProvideInjectRegistry()
+    const composableRegistry = setupComposableRegistry()
     const renderRegistry = setupRenderRegistry(nuxtApp, config.heatmapThreshold)
 
     // Expose registries globally so Vite transform shims can reach them
     if (import.meta.client) {
-        const w = window as any
-        w.__observatory__ = {
+        (window as ObservatoryWindow).__observatory__ = {
             fetch: fetchRegistry,
             provideInject: provideInjectRegistry,
             composable: composableRegistry,
@@ -32,9 +42,16 @@ export default defineNuxtPlugin((nuxtApp) => {
     })
 
     function broadcastAll() {
-        if (!import.meta.client) return
+        if (!import.meta.client) {
+            return
+        }
+
         const channel = getDevtoolsChannel()
-        if (!channel) return
+
+        if (!channel) {
+            return
+        }
+
         channel.send('observatory:snapshot', {
             fetch: fetchRegistry.getAll(),
             provideInject: provideInjectRegistry.getAll(),
@@ -45,6 +62,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
     function getDevtoolsChannel() {
         // Connects to @nuxt/devtools WS bridge if available
-        return (window as any).__nuxt_devtools__?.channel ?? null
+        return (window as ObservatoryWindow).__nuxt_devtools__?.channel ?? null
     }
 })
