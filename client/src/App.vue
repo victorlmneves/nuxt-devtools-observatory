@@ -5,7 +5,15 @@ import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
 import RenderHeatmap from './views/RenderHeatmap.vue'
 
-const activeTab = ref('fetch')
+const pathMap: Record<string, string> = {
+    fetch: 'fetch',
+    provide: 'provide',
+    composables: 'composable',
+    heatmap: 'heatmap',
+}
+
+const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
+const activeTab = ref(pathMap[segment] ?? 'fetch')
 
 const tabs = [
     { id: 'fetch', label: 'useFetch', icon: '⬡' },

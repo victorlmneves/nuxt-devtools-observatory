@@ -1,0 +1,13 @@
+diff --git a/dist/shared/unimport.Cyews8CQ.mjs b/dist/shared/unimport.Cyews8CQ.mjs
+index e9c0c8efbc8db6141182910aafd3e910fb83d7b1..db38ce40b5951cc99ba343105b3cdd7b9ac2a0c9 100644
+--- a/dist/shared/unimport.Cyews8CQ.mjs
++++ b/dist/shared/unimport.Cyews8CQ.mjs
+@@ -1396,8 +1396,6 @@ function createInternalContext(opts) {
+     metadata = {
+       injectionsUsageMap: /* @__PURE__ */ new Map(),
+       get injectionUsage() {
+-        const stack = new Error().stack;
+-        console.warn("[unimport] `injectionUsage` is deprecated, use `injectionsUsageMap` instead", stack);
+         return Object.fromEntries(this.injectionsUsageMap);
+       }
+     };

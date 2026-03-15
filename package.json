@@ -3,24 +3,20 @@
     "version": "0.1.0",
     "description": "Vue/Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "type": "module",
-    "main": "./dist/module.cjs",
+    "main": "./dist/module.mjs",
     "module": "./dist/module.mjs",
     "exports": {
         ".": {
-            "import": "./dist/module.mjs",
-            "require": "./dist/module.cjs"
+            "import": "./dist/module.mjs"
         },
         "./runtime/composable-registry": {
-            "import": "./dist/runtime/composables/composable-registry.mjs",
-            "require": "./dist/runtime/composables/composable-registry.cjs"
+            "import": "./dist/runtime/composables/composable-registry.js"
         },
         "./runtime/provide-inject-registry": {
-            "import": "./dist/runtime/composables/provide-inject-registry.mjs",
-            "require": "./dist/runtime/composables/provide-inject-registry.cjs"
+            "import": "./dist/runtime/composables/provide-inject-registry.js"
         },
         "./runtime/fetch-registry": {
-            "import": "./dist/runtime/composables/fetch-registry.mjs",
-            "require": "./dist/runtime/composables/fetch-registry.cjs"
+            "import": "./dist/runtime/composables/fetch-registry.js"
         }
     },
     "files": [
@@ -29,7 +25,8 @@
     ],
     "scripts": {
         "dev": "nuxi dev playground",
-        "build": "nuxt-module-build build",
+        "build:client": "vite build --config client/vite.config.ts",
+        "build": "npm run build:client && nuxt-module-build build",
         "lint": "eslint .",
         "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .gitignore && stylelint '**/*.{css,vue}' --ignore-pattern '.nuxt/**' --ignore-pattern '.output/**' --ignore-pattern 'coverage/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern 'coverage/**'",
         "typecheck": "vue-tsc --noEmit",
@@ -45,6 +42,7 @@
         "@nuxt/kit": "^3.0.0"
     },
     "devDependencies": {
+        "@vitejs/plugin-vue": "^6.0.0",
         "@eslint/js": "^9.39.2",
         "@nuxt/eslint": "^1.13.0",
         "@nuxt/kit": "^4.0.0",
@@ -78,5 +76,10 @@
         "vue",
         "performance",
         "debugging"
-    ]
+    ],
+    "pnpm": {
+        "patchedDependencies": {
+            "unimport@6.0.1": "patches/unimport@6.0.1.patch"
+        }
+    }
 }

@@ -1,0 +1,2 @@
+patchedDependencies:
+  unimport@6.0.1: patches/unimport@6.0.1.patch

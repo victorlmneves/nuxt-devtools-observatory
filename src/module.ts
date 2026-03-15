@@ -99,14 +99,38 @@ export default defineNuxtModule<ModuleOptions>({
             })
         }
 
+        // ── Serve the client SPA on its own Vite dev server ──────────────────
+        const CLIENT_PORT = 4949
+
+        nuxt.hook('vite:serverCreated', async (_viteServer, env) => {
+            if (!env.isClient) return
+
+            const { createServer } = await import('vite')
+            const { default: vue } = await import('@vitejs/plugin-vue')
+
+            const inner = await createServer({
+                root: resolver.resolve('../client'),
+                base: '/',
+                server: { port: CLIENT_PORT, strictPort: false, cors: true },
+                appType: 'spa',
+                configFile: false,
+                plugins: [vue()],
+                logLevel: 'warn',
+            })
+
+            await inner.listen()
+            nuxt.hook('close', () => inner.close())
+        })
+
         // ── Devtools integration ──────────────────────────────────────────────
+        const base = `http://localhost:${CLIENT_PORT}`
         nuxt.hook('devtools:customTabs', (tabs: any[]) => {
             if (options.fetchDashboard) {
                 tabs.push({
                     name: 'observatory-fetch',
                     title: 'useFetch',
                     icon: 'carbon:radio-button',
-                    view: { type: 'iframe', src: '/__observatory__/fetch' },
+                    view: { type: 'iframe', src: `${base}/fetch` },
                 })
             }
             if (options.provideInjectGraph) {
@@ -114,7 +138,7 @@ export default defineNuxtModule<ModuleOptions>({
                     name: 'observatory-provide',
                     title: 'provide/inject',
                     icon: 'carbon:branch',
-                    view: { type: 'iframe', src: '/__observatory__/provide' },
+                    view: { type: 'iframe', src: `${base}/provide` },
                 })
             }
             if (options.composableTracker) {
@@ -122,7 +146,7 @@ export default defineNuxtModule<ModuleOptions>({
                     name: 'observatory-composables',
                     title: 'Composables',
                     icon: 'carbon:function',
-                    view: { type: 'iframe', src: '/__observatory__/composables' },
+                    view: { type: 'iframe', src: `${base}/composables` },
                 })
             }
             if (options.renderHeatmap) {
@@ -130,7 +154,7 @@ export default defineNuxtModule<ModuleOptions>({
                     name: 'observatory-heatmap',
                     title: 'Heatmap',
                     icon: 'carbon:heat-map',
-                    view: { type: 'iframe', src: '/__observatory__/heatmap' },
+                    view: { type: 'iframe', src: `${base}/heatmap` },
                 })
             }
         })
