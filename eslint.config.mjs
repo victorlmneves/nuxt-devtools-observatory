@@ -186,6 +186,12 @@ export default [
         },
     },
     eslintPluginPrettierRecommended,
+    {
+        files: ['tests/**/*.ts'],
+        rules: {
+            'vue/one-component-per-file': 'off',
+        },
+    },
     // Add specific rules for API and auth related files
     {
         files: ['**/api/**/*.ts', '**/auth/**/*.ts', '**/server/**/*.ts'],
