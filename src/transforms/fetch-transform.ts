@@ -5,17 +5,25 @@ import _generate from '@babel/generator'
 import * as t from '@babel/types'
 
 // CJS/ESM compat shims
-const traverse = (_traverse as any).default ?? _traverse
-const generate = (_generate as any).default ?? _generate
+const traverse = (_traverse as typeof _traverse & { default?: typeof _traverse }).default ?? _traverse
+const generate = (_generate as typeof _generate & { default?: typeof _generate }).default ?? _generate
 
 // Extract <script> block from a Vue SFC, returning content and its position
 function extractScriptBlock(code: string): { content: string; start: number; end: number } | null {
     const openTagRE = /<script(\s[^>]*)?>/i
     const openMatch = openTagRE.exec(code)
-    if (!openMatch) return null
+
+    if (!openMatch) {
+        return null
+    }
+
     const start = openMatch.index + openMatch[0].length
     const end = code.indexOf('</script>', start)
-    if (end === -1) return null
+
+    if (end === -1) {
+        return null
+    }
+
     return { content: code.slice(start, end), start, end }
 }
 
@@ -28,7 +36,9 @@ export function fetchInstrumentPlugin(): Plugin {
 
         transform(code, id) {
             const isVue = id.endsWith('.vue')
-            if (!isVue && !id.endsWith('.ts') && !id.endsWith('.js')) return
+            if (!isVue && !id.endsWith('.ts') && !id.endsWith('.js')) {
+                return
+            }
 
             // Skip the observatory's own runtime files to prevent infinite recursion
             if (
@@ -36,21 +46,29 @@ export function fetchInstrumentPlugin(): Plugin {
                 id.includes('composable-registry') ||
                 id.includes('provide-inject-registry') ||
                 id.includes('fetch-registry')
-            )
+            ) {
                 return
+            }
 
             // For Vue SFCs, extract only the <script> block to avoid parsing <template>
             let scriptCode = code
             let scriptStart = 0
+
             if (isVue) {
                 const block = extractScriptBlock(code)
-                if (!block) return null
+
+                if (!block) {
+                    return null
+                }
+
                 scriptCode = block.content
                 scriptStart = block.start
             }
 
             // Quick bail if none of the target functions appear in source
-            if (![...FETCH_FNS].some((fn) => scriptCode.includes(fn))) return
+            if (![...FETCH_FNS].some((fn) => scriptCode.includes(fn))) {
+                return
+            }
 
             try {
                 const ast = parse(scriptCode, {
@@ -60,13 +78,19 @@ export function fetchInstrumentPlugin(): Plugin {
 
                 let modified = false
                 // Inject import at top if not present
-                let hasImport = scriptCode.includes('__devFetch')
+                const hasImport = scriptCode.includes('__devFetch')
 
                 traverse(ast, {
-                    CallExpression(path: any) {
+                    CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
                         const callee = path.node.callee
-                        if (!t.isIdentifier(callee)) return
-                        if (!FETCH_FNS.has(callee.name)) return
+
+                        if (!t.isIdentifier(callee)) {
+                            return
+                        }
+
+                        if (!FETCH_FNS.has(callee.name)) {
+                            return
+                        }
 
                         // Skip if already wrapped
                         if (
@@ -74,8 +98,9 @@ export function fetchInstrumentPlugin(): Plugin {
                             t.isCallExpression(path.parent) &&
                             t.isIdentifier(path.parent.callee) &&
                             path.parent.callee.name === '__devFetch'
-                        )
+                        ) {
                             return
+                        }
 
                         const originalName = callee.name
                         const args = path.node.arguments
@@ -84,10 +109,13 @@ export function fetchInstrumentPlugin(): Plugin {
 
                         // Extract or generate a key
                         let key = originalName
+
                         if (t.isObjectExpression(optsArg)) {
                             const keyProp = optsArg.properties.find(
-                                (p: any) => t.isObjectProperty(p) && t.isIdentifier(p.key) && p.key.name === 'key'
+                                (p: t.ObjectMethod | t.ObjectProperty | t.SpreadElement) =>
+                                    t.isObjectProperty(p) && t.isIdentifier(p.key) && (p.key as t.Identifier).name === 'key'
                             ) as t.ObjectProperty | undefined
+
                             if (keyProp && t.isStringLiteral(keyProp.value)) {
                                 key = keyProp.value.value
                             } else {
@@ -113,23 +141,29 @@ export function fetchInstrumentPlugin(): Plugin {
                     },
                 })
 
-                if (!modified) return null
+                if (!modified) {
+                    return null
+                }
 
                 // Inject the shim import at the top of the file
                 const importStatement = hasImport ? '' : `import { __devFetch } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
 
                 const output = generate(ast, { retainLines: true }, scriptCode)
+
                 if (isVue) {
                     const newCode = code.slice(0, scriptStart) + importStatement + output.code + code.slice(scriptStart + scriptCode.length)
+
                     return { code: newCode }
                 }
+
                 return {
                     code: importStatement + output.code,
                     map: output.map,
                 }
-            } catch (e) {
+            } catch (err) {
                 // If AST transform fails, return original code unchanged
-                console.warn('[observatory] fetch transform error:', e)
+                console.warn('[observatory] fetch transform error:', err)
+
                 return null
             }
         },

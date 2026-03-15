@@ -17,6 +17,13 @@ export interface RenderEntry {
     parentUid?: number
 }
 
+/**
+ * Sets up a render registry for the given Nuxt app.
+ * @param {{ vueApp: import('vue').App }} nuxtApp - The Nuxt app object.
+ * @param {object} nuxtApp.vueApp - The Vue app instance.
+ * @param {number} threshold - The minimum number of renders required for a component to be tracked.
+ * @returns {object} The render registry object.
+ */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, threshold: number) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
 
@@ -49,7 +56,14 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, thre
             entry.renders++
             const r: DOMRect | undefined = this.$el?.getBoundingClientRect?.()
             entry.rect = r
-                ? { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height), top: Math.round(r.top), left: Math.round(r.left) }
+                ? {
+                      x: Math.round(r.x),
+                      y: Math.round(r.y),
+                      width: Math.round(r.width),
+                      height: Math.round(r.height),
+                      top: Math.round(r.top),
+                      left: Math.round(r.left),
+                  }
                 : undefined
             emit('render:update', { uid, renders: entry.renders })
         },
@@ -86,8 +100,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, thre
     }
 
     function getAll(): RenderEntry[] {
-        return [...entries.value.values()]
-            .filter((e) => e.renders >= threshold)
+        return [...entries.value.values()].filter((e) => e.renders >= threshold)
     }
 
     function snapshot(): RenderEntry[] {
@@ -106,12 +119,19 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, thre
     return { getAll, snapshot }
 }
 
+/**
+ * Creates a new RenderEntry object from a given component instance.
+ * @param {number} uid - A unique identifier for the component.
+ * @param {ComponentPublicInstance} instance - The component instance.
+ * @returns {RenderEntry} A new RenderEntry object.
+ */
 function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry {
     return {
         uid,
-        name: (instance.$.type as { __name?: string; __file?: string }).__name
-            ?? (instance.$.type as { __file?: string }).__file?.split('/').pop()
-            ?? `Component#${uid}`,
+        name:
+            (instance.$.type as { __name?: string; __file?: string }).__name ??
+            (instance.$.type as { __file?: string }).__file?.split('/').pop() ??
+            `Component#${uid}`,
         file: (instance.$.type as { __file?: string }).__file ?? 'unknown',
         renders: 0,
         totalMs: 0,

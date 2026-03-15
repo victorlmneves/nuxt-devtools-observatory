@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { inject } from 'vue'
+
 // This inject resolves correctly — 'theme' is provided by app.vue
 const theme = inject<string>('theme')
 </script>

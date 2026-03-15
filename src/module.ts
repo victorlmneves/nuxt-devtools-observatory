@@ -98,7 +98,9 @@ export default defineNuxtModule<ModuleOptions>({
         const CLIENT_PORT = 4949
 
         nuxt.hook('vite:serverCreated', async (_viteServer, env) => {
-            if (!env.isClient) return
+            if (!env.isClient) {
+                return
+            }
 
             const { createServer } = await import('vite')
             const { default: vue } = await import('@vitejs/plugin-vue')

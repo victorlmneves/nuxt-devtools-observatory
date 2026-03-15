@@ -1,99 +1,5 @@
-<template>
-    <div class="view">
-        <!-- Controls -->
-        <div class="controls">
-            <div class="mode-group">
-                <button :class="{ active: mode === 'count' }" @click="mode = 'count'">render count</button>
-                <button :class="{ active: mode === 'time' }" @click="mode = 'time'">render time</button>
-            </div>
-            <div class="threshold-group">
-                <span class="muted text-sm">threshold</span>
-                <input type="range" min="1" max="30" step="1" v-model.number="threshold" style="width: 90px" />
-                <span class="mono text-sm">{{ threshold }}+</span>
-            </div>
-            <button :class="{ active: hotOnly }" @click="hotOnly = !hotOnly">hot only</button>
-            <button :class="{ active: frozen }" @click="toggleFreeze" style="margin-left: auto">
-                {{ frozen ? 'unfreeze' : 'freeze snapshot' }}
-            </button>
-        </div>
-
-        <!-- Stats -->
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-label">components</div>
-                <div class="stat-val">{{ allComponents.length }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">total renders</div>
-                <div class="stat-val">{{ totalRenders }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">hot</div>
-                <div class="stat-val" style="color: var(--red)">{{ hotCount }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">avg time</div>
-                <div class="stat-val">{{ avgTime }}ms</div>
-            </div>
-        </div>
-
-        <div class="split">
-            <!-- Page mockup -->
-            <div class="page-frame">
-                <div class="legend">
-                    <div class="swatch-row">
-                        <span class="swatch" style="background: #eaf3de"></span>
-                        <span class="swatch" style="background: #97c459"></span>
-                        <span class="swatch" style="background: #ef9f27"></span>
-                        <span class="swatch" style="background: #e24b4a"></span>
-                    </div>
-                    <span class="muted text-sm">cool → hot</span>
-                </div>
-                <ComponentBlock
-                    v-for="node in rootNodes"
-                    :key="node.id"
-                    :node="node"
-                    :mode="mode"
-                    :threshold="threshold"
-                    :hot-only="hotOnly"
-                    :selected="selected?.id"
-                    @select="selected = $event"
-                />
-            </div>
-
-            <!-- Detail panel -->
-            <div class="sidebar">
-                <template v-if="selected">
-                    <div class="detail-header">
-                        <span class="mono bold" style="font-size: 12px">{{ selected.label }}</span>
-                        <button @click="selected = null">×</button>
-                    </div>
-
-                    <div class="meta-grid">
-                        <span class="muted text-sm">renders</span>
-                        <span class="mono text-sm">{{ selected.renders }}</span>
-                        <span class="muted text-sm">avg time</span>
-                        <span class="mono text-sm">{{ selected.avgMs.toFixed(1) }}ms</span>
-                        <span class="muted text-sm">hot?</span>
-                        <span class="text-sm" :style="{ color: isHot(selected) ? 'var(--red)' : 'var(--teal)' }">
-                            {{ isHot(selected) ? 'yes' : 'no' }}
-                        </span>
-                        <span class="muted text-sm">file</span>
-                        <span class="mono text-sm muted">{{ selected.file }}</span>
-                    </div>
-
-                    <div class="section-label">triggers</div>
-                    <div v-for="t in selected.triggers" :key="t" class="trigger-item mono text-sm">{{ t }}</div>
-                    <div v-if="!selected.triggers.length" class="muted text-sm">no triggers recorded</div>
-                </template>
-                <div v-else class="detail-empty">click a component to inspect</div>
-            </div>
-        </div>
-    </div>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, defineComponent, h, onUnmounted } from 'vue'
+import { ref, computed, defineComponent, h, onUnmounted, type VNode } from 'vue'
 
 interface ComponentNode {
     id: string
@@ -116,27 +22,45 @@ const ComponentBlock = defineComponent({
         selected: String,
     },
     emits: ['select'],
-    setup(props, { emit }) {
+    setup(props, { emit }): () => VNode | null {
         function getVal(n: ComponentNode) {
             return props.mode === 'count' ? n.renders : n.avgMs
         }
+
         function getMax(): number {
             let max = 1
+
             function walk(ns: ComponentNode[]) {
                 ns.forEach((n) => {
                     const v = getVal(n)
-                    if (v > max) max = v
+
+                    if (v > max) {
+                        max = v
+                    }
+
                     walk(n.children)
                 })
             }
-            // Walk from root — approximate with a fixed reference
+
+            walk([props.node!])
+
             return Math.max(max, props.mode === 'count' ? 40 : 20)
         }
         function heatColor(val: number, max: number) {
             const r = Math.min(val / max, 1)
-            if (r < 0.25) return { bg: '#EAF3DE', text: '#27500A', border: '#97C459' }
-            if (r < 0.55) return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
-            if (r < 0.8) return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
+
+            if (r < 0.25) {
+                return { bg: '#EAF3DE', text: '#27500A', border: '#97C459' }
+            }
+
+            if (r < 0.55) {
+                return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
+            }
+
+            if (r < 0.8) {
+                return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
+            }
+
             return { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' }
         }
         function isHot(n: ComponentNode) {
@@ -145,8 +69,10 @@ const ComponentBlock = defineComponent({
 
         return () => {
             const n = props.node!
-            if (props.hotOnly && !isHot(n) && !n.children.some((c) => (props.mode === 'count' ? c.renders : c.avgMs) >= props.threshold!))
+
+            if (props.hotOnly && !isHot(n) && !n.children.some((c) => (props.mode === 'count' ? c.renders : c.avgMs) >= props.threshold!)) {
                 return null
+            }
 
             const max = getMax()
             const val = getVal(n)
@@ -285,24 +211,27 @@ const baseNodes = ref<ComponentNode[]>([
     { id: 'Footer', label: 'Footer.vue', file: 'components/Footer.vue', renders: 1, avgMs: 0.3, triggers: ['initial mount'], children: [] },
 ])
 
-const mode = ref<'count' | 'time'>('count')
-const threshold = ref(5)
-const hotOnly = ref(false)
+const activeMode = ref<'count' | 'time'>('count')
+const activeThreshold = ref(5)
+const activeHotOnly = ref(false)
 const frozen = ref(false)
-const selected = ref<ComponentNode | null>(null)
+const activeSelected = ref<ComponentNode | null>(null)
 let liveInterval: ReturnType<typeof setInterval> | null = null
 
 const rootNodes = computed(() => baseNodes.value)
 
 const allComponents = computed(() => {
     const all: ComponentNode[] = []
+
     function collect(ns: ComponentNode[]) {
         ns.forEach((n) => {
             all.push(n)
             collect(n.children)
         })
     }
+
     collect(baseNodes.value)
+
     return all
 })
 
@@ -310,17 +239,24 @@ const totalRenders = computed(() => allComponents.value.reduce((a, n) => a + n.r
 const hotCount = computed(() => allComponents.value.filter((n) => isHot(n)).length)
 const avgTime = computed(() => {
     const comps = allComponents.value.filter((n) => n.avgMs > 0)
-    if (!comps.length) return '0.0'
+
+    if (!comps.length) {
+        return '0.0'
+    }
+
     return (comps.reduce((a, n) => a + n.avgMs, 0) / comps.length).toFixed(1)
 })
 
 function isHot(n: ComponentNode) {
-    return (mode.value === 'count' ? n.renders : n.avgMs) >= threshold.value
+    return (activeMode.value === 'count' ? n.renders : n.avgMs) >= activeThreshold.value
 }
 
 function startLive() {
     liveInterval = setInterval(() => {
-        if (frozen.value) return
+        if (frozen.value) {
+            return
+        }
+
         allComponents.value.forEach((n) => {
             if (Math.random() < 0.3) n.renders += Math.floor(Math.random() * 3) + 1
         })
@@ -336,6 +272,100 @@ onUnmounted(() => {
     if (liveInterval) clearInterval(liveInterval)
 })
 </script>
+
+<template>
+    <div class="view">
+        <!-- Controls -->
+        <div class="controls">
+            <div class="mode-group">
+                <button :class="{ active: activeMode === 'count' }" @click="activeMode = 'count'">render count</button>
+                <button :class="{ active: activeMode === 'time' }" @click="activeMode = 'time'">render time</button>
+            </div>
+            <div class="threshold-group">
+                <span class="muted text-sm">threshold</span>
+                <input v-model.number="activeThreshold" type="range" min="1" max="30" step="1" style="width: 90px" />
+                <span class="mono text-sm">{{ activeThreshold }}+</span>
+            </div>
+            <button :class="{ active: activeHotOnly }" @click="activeHotOnly = !activeHotOnly">hot only</button>
+            <button :class="{ active: frozen }" style="margin-left: auto" @click="toggleFreeze">
+                {{ frozen ? 'unfreeze' : 'freeze snapshot' }}
+            </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">components</div>
+                <div class="stat-val">{{ allComponents.length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">total renders</div>
+                <div class="stat-val">{{ totalRenders }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">hot</div>
+                <div class="stat-val" style="color: var(--red)">{{ hotCount }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">avg time</div>
+                <div class="stat-val">{{ avgTime }}ms</div>
+            </div>
+        </div>
+
+        <div class="split">
+            <!-- Page mockup -->
+            <div class="page-frame">
+                <div class="legend">
+                    <div class="swatch-row">
+                        <span class="swatch" style="background: #eaf3de"></span>
+                        <span class="swatch" style="background: #97c459"></span>
+                        <span class="swatch" style="background: #ef9f27"></span>
+                        <span class="swatch" style="background: #e24b4a"></span>
+                    </div>
+                    <span class="muted text-sm">cool → hot</span>
+                </div>
+                <ComponentBlock
+                    v-for="rootNode in rootNodes"
+                    :key="rootNode.id"
+                    :node="rootNode"
+                    :mode="activeMode"
+                    :threshold="activeThreshold"
+                    :hot-only="activeHotOnly"
+                    :selected="activeSelected?.id"
+                    @select="activeSelected = $event"
+                />
+            </div>
+
+            <!-- Detail panel -->
+            <div class="sidebar">
+                <template v-if="activeSelected">
+                    <div class="detail-header">
+                        <span class="mono bold" style="font-size: 12px">{{ activeSelected.label }}</span>
+                        <button @click="activeSelected = null">×</button>
+                    </div>
+
+                    <div class="meta-grid">
+                        <span class="muted text-sm">renders</span>
+                        <span class="mono text-sm">{{ activeSelected.renders }}</span>
+                        <span class="muted text-sm">avg time</span>
+                        <span class="mono text-sm">{{ activeSelected.avgMs.toFixed(1) }}ms</span>
+                        <span class="muted text-sm">hot?</span>
+                        <span class="text-sm" :style="{ color: isHot(activeSelected) ? 'var(--red)' : 'var(--teal)' }">
+                            {{ isHot(activeSelected) ? 'yes' : 'no' }}
+                        </span>
+                        <span class="muted text-sm">file</span>
+                        <span class="mono text-sm muted">{{ activeSelected.file }}</span>
+                    </div>
+
+                    <div class="section-label">triggers</div>
+                    <div v-for="t in activeSelected.triggers" :key="t" class="trigger-item mono text-sm">{{ t }}</div>
+                    <div v-if="!activeSelected.triggers.length" class="muted text-sm">no triggers recorded</div>
+                </template>
+                <div v-else class="detail-empty">click a component to inspect</div>
+            </div>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .view {

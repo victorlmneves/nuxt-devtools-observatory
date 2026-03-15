@@ -1,9 +1,9 @@
 import { ref } from 'vue'
 
 /**
- * @devtools-demo This composable intentionally leaks its setInterval
- * to demonstrate the composable tracker's leak detection.
- * Do NOT use this pattern in real code.
+ * Intentionally leaks its setInterval to demonstrate the composable tracker's
+ * leak detection. Do NOT use this pattern in real code.
+ * @returns {{ ticks: import('vue').Ref<number> }} Reactive tick counter
  */
 export function useLeakyPoller() {
     const ticks = ref(0)

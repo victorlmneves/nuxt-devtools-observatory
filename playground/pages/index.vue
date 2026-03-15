@@ -90,6 +90,12 @@ h1 {
     margin-bottom: 4px;
 }
 
+p {
+    font-size: 14px;
+    color: #444;
+    margin-bottom: 8px;
+}
+
 header p {
     color: #888780;
     font-size: 14px;
@@ -113,12 +119,6 @@ h2 {
     font-size: 15px;
     font-weight: 600;
     margin-bottom: 12px;
-}
-
-p {
-    font-size: 14px;
-    color: #444;
-    margin-bottom: 8px;
 }
 
 button {

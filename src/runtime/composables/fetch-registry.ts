@@ -17,6 +17,11 @@ export interface FetchEntry {
     line?: number
 }
 
+/**
+ * Sets up the fetch registry, which tracks all fetch requests and their
+ * associated metadata (e.g. duration, size, origin).
+ * @returns {object} The fetch registry with `register`, `update`, `getAll`, `clear`, and `entries` members.
+ */
 export function setupFetchRegistry() {
     const entries = ref<Map<string, FetchEntry>>(new Map())
 
@@ -51,7 +56,8 @@ export function setupFetchRegistry() {
             return
         }
 
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } }).__nuxt_devtools__?.channel
+        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
+            .__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -116,7 +122,7 @@ export function __devFetch(
                 endTime: performance.now(),
                 ms: Math.round(performance.now() - startTime),
             })
-            
+
             if (typeof opts.onResponseError === 'function') {
                 opts.onResponseError({ response })
             }

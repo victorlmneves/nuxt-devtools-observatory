@@ -171,13 +171,9 @@ const layout = computed<LayoutNode[]>(() => {
     return flat
 })
 
-const canvasW = computed(() =>
-    layout.value.reduce((m, n) => Math.max(m, n.x + NODE_W / 2 + 20), 400)
-)
+const canvasW = computed(() => layout.value.reduce((m, n) => Math.max(m, n.x + NODE_W / 2 + 20), 400))
 
-const canvasH = computed(() =>
-    layout.value.reduce((m, n) => Math.max(m, n.y + NODE_H / 2 + 20), 200)
-)
+const canvasH = computed(() => layout.value.reduce((m, n) => Math.max(m, n.y + NODE_H / 2 + 20), 200))
 
 const edges = computed<Edge[]>(() => {
     const byId = new Map(layout.value.map((n) => [n.data.id, n]))
@@ -200,7 +196,13 @@ const edges = computed<Edge[]>(() => {
     <div class="view">
         <div class="toolbar">
             <button :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">all keys</button>
-            <button v-for="k in allKeys" :key="k" style="font-family: var(--mono)" :class="{ active: activeFilter === k }" @click="activeFilter = k">
+            <button
+                v-for="k in allKeys"
+                :key="k"
+                style="font-family: var(--mono)"
+                :class="{ active: activeFilter === k }"
+                @click="activeFilter = k"
+            >
                 {{ k }}
             </button>
             <button style="margin-left: auto" :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = 'warn'">
@@ -222,12 +224,7 @@ const edges = computed<Edge[]>(() => {
                     <span>missing provider</span>
                 </div>
                 <div class="canvas-wrap" :style="{ width: canvasW + 'px', height: canvasH + 'px' }">
-                    <svg
-                        class="edges-svg"
-                        :width="canvasW"
-                        :height="canvasH"
-                        :viewBox="`0 0 ${canvasW} ${canvasH}`"
-                    >
+                    <svg class="edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
                         <path
                             v-for="e in edges"
                             :key="e.id"
@@ -376,7 +373,9 @@ const edges = computed<Edge[]>(() => {
     border: 0.5px solid var(--border);
     background: var(--bg3);
     cursor: pointer;
-    transition: border-color 0.12s, background 0.12s;
+    transition:
+        border-color 0.12s,
+        background 0.12s;
     overflow: hidden;
     box-sizing: border-box;
     white-space: nowrap;

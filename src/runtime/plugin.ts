@@ -28,7 +28,7 @@ export default defineNuxtPlugin(() => {
 
     // Expose registries globally so Vite transform shims can reach them
     if (import.meta.client) {
-        (window as ObservatoryWindow).__observatory__ = {
+        ;(window as ObservatoryWindow).__observatory__ = {
             fetch: fetchRegistry,
             provideInject: provideInjectRegistry,
             composable: composableRegistry,

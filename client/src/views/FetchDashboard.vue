@@ -1,151 +1,3 @@
-<template>
-    <div class="view">
-        <!-- Stats row -->
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-label">total</div>
-                <div class="stat-val">{{ entries.length }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">success</div>
-                <div class="stat-val" style="color: var(--teal)">{{ counts.ok }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">pending</div>
-                <div class="stat-val" style="color: var(--amber)">{{ counts.pending }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">error</div>
-                <div class="stat-val" style="color: var(--red)">{{ counts.error }}</div>
-            </div>
-        </div>
-
-        <!-- Toolbar -->
-        <div class="toolbar">
-            <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
-            <button :class="{ 'danger-active': filter === 'error' }" @click="filter = 'error'">errors</button>
-            <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'">pending</button>
-            <button :class="{ active: filter === 'cached' }" @click="filter = 'cached'">cached</button>
-            <input v-model="search" type="search" placeholder="search key or url…" style="max-width: 240px; margin-left: auto" />
-            <button @click="clearAll">clear</button>
-        </div>
-
-        <!-- Split view -->
-        <div class="split">
-            <!-- Table -->
-            <div class="table-wrap">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>key</th>
-                            <th>url</th>
-                            <th>status</th>
-                            <th>origin</th>
-                            <th>size</th>
-                            <th>time</th>
-                            <th style="min-width: 80px">bar</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="e in filtered" :key="e.id" :class="{ selected: selected?.id === e.id }" @click="selected = e">
-                            <td>
-                                <span class="mono" style="font-size: 11px; color: var(--text2)">{{ e.key }}</span>
-                            </td>
-                            <td>
-                                <span
-                                    class="mono"
-                                    style="
-                                        font-size: 11px;
-                                        max-width: 200px;
-                                        display: block;
-                                        overflow: hidden;
-                                        text-overflow: ellipsis;
-                                        white-space: nowrap;
-                                    "
-                                    :title="e.url"
-                                >
-                                    {{ e.url }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge" :class="statusClass(e.status)">{{ e.status }}</span>
-                            </td>
-                            <td>
-                                <span class="badge" :class="e.origin === 'ssr' ? 'badge-info' : 'badge-gray'">{{ e.origin }}</span>
-                            </td>
-                            <td class="muted text-sm">{{ e.size ? formatSize(e.size) : '—' }}</td>
-                            <td class="mono text-sm">{{ e.ms != null ? e.ms + 'ms' : '—' }}</td>
-                            <td>
-                                <div style="height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden">
-                                    <div
-                                        :style="{
-                                            width: barWidth(e) + '%',
-                                            background: barColor(e.status),
-                                            height: '100%',
-                                            borderRadius: '2px',
-                                        }"
-                                    ></div>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Detail panel -->
-            <div v-if="selected" class="detail-panel">
-                <div class="detail-header">
-                    <span class="mono bold" style="font-size: 12px">{{ selected.key }}</span>
-                    <div class="flex gap-2">
-                        <button @click="replayFetch">↺ replay</button>
-                        <button @click="selected = null">×</button>
-                    </div>
-                </div>
-
-                <div class="meta-grid">
-                    <template v-for="[k, v] in metaRows" :key="k">
-                        <span class="muted text-sm">{{ k }}</span>
-                        <span class="mono text-sm" style="word-break: break-all">{{ v }}</span>
-                    </template>
-                </div>
-
-                <div class="section-label">payload</div>
-                <pre class="payload-box">{{ payloadStr }}</pre>
-
-                <div class="section-label" style="margin-top: 10px">source</div>
-                <div class="mono text-sm muted">{{ selected.file }}:{{ selected.line }}</div>
-            </div>
-            <div v-else class="detail-empty">select a call to inspect</div>
-        </div>
-
-        <!-- Waterfall -->
-        <div class="waterfall">
-            <div class="section-label" style="margin-bottom: 6px">waterfall</div>
-            <div v-for="e in entries" :key="e.id" class="wf-row">
-                <span
-                    class="mono muted text-sm"
-                    style="width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0"
-                >
-                    {{ e.key }}
-                </span>
-                <div class="wf-track">
-                    <div
-                        class="wf-bar"
-                        :style="{
-                            left: wfLeft(e) + '%',
-                            width: Math.max(2, wfWidth(e)) + '%',
-                            background: barColor(e.status),
-                        }"
-                    ></div>
-                </div>
-                <span class="mono muted text-sm" style="width: 44px; text-align: right; flex-shrink: 0">
-                    {{ e.ms != null ? e.ms + 'ms' : '—' }}
-                </span>
-            </div>
-        </div>
-    </div>
-</template>
-
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 
@@ -358,6 +210,154 @@ function clearAll() {
     selected.value = null
 }
 </script>
+
+<template>
+    <div class="view">
+        <!-- Stats row -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">total</div>
+                <div class="stat-val">{{ entries.length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">success</div>
+                <div class="stat-val" style="color: var(--teal)">{{ counts.ok }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">pending</div>
+                <div class="stat-val" style="color: var(--amber)">{{ counts.pending }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">error</div>
+                <div class="stat-val" style="color: var(--red)">{{ counts.error }}</div>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
+            <button :class="{ 'danger-active': filter === 'error' }" @click="filter = 'error'">errors</button>
+            <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'">pending</button>
+            <button :class="{ active: filter === 'cached' }" @click="filter = 'cached'">cached</button>
+            <input v-model="search" type="search" placeholder="search key or url…" style="max-width: 240px; margin-left: auto" />
+            <button @click="clearAll">clear</button>
+        </div>
+
+        <!-- Split view -->
+        <div class="split">
+            <!-- Table -->
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>key</th>
+                            <th>url</th>
+                            <th>status</th>
+                            <th>origin</th>
+                            <th>size</th>
+                            <th>time</th>
+                            <th style="min-width: 80px">bar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="e in filtered" :key="e.id" :class="{ selected: selected?.id === e.id }" @click="selected = e">
+                            <td>
+                                <span class="mono" style="font-size: 11px; color: var(--text2)">{{ e.key }}</span>
+                            </td>
+                            <td>
+                                <span
+                                    class="mono"
+                                    style="
+                                        font-size: 11px;
+                                        max-width: 200px;
+                                        display: block;
+                                        overflow: hidden;
+                                        text-overflow: ellipsis;
+                                        white-space: nowrap;
+                                    "
+                                    :title="e.url"
+                                >
+                                    {{ e.url }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge" :class="statusClass(e.status)">{{ e.status }}</span>
+                            </td>
+                            <td>
+                                <span class="badge" :class="e.origin === 'ssr' ? 'badge-info' : 'badge-gray'">{{ e.origin }}</span>
+                            </td>
+                            <td class="muted text-sm">{{ e.size ? formatSize(e.size) : '—' }}</td>
+                            <td class="mono text-sm">{{ e.ms != null ? e.ms + 'ms' : '—' }}</td>
+                            <td>
+                                <div style="height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden">
+                                    <div
+                                        :style="{
+                                            width: barWidth(e) + '%',
+                                            background: barColor(e.status),
+                                            height: '100%',
+                                            borderRadius: '2px',
+                                        }"
+                                    ></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Detail panel -->
+            <div v-if="selected" class="detail-panel">
+                <div class="detail-header">
+                    <span class="mono bold" style="font-size: 12px">{{ selected.key }}</span>
+                    <div class="flex gap-2">
+                        <button @click="replayFetch">↺ replay</button>
+                        <button @click="selected = null">×</button>
+                    </div>
+                </div>
+
+                <div class="meta-grid">
+                    <template v-for="[k, v] in metaRows" :key="k">
+                        <span class="muted text-sm">{{ k }}</span>
+                        <span class="mono text-sm" style="word-break: break-all">{{ v }}</span>
+                    </template>
+                </div>
+
+                <div class="section-label">payload</div>
+                <pre class="payload-box">{{ payloadStr }}</pre>
+
+                <div class="section-label" style="margin-top: 10px">source</div>
+                <div class="mono text-sm muted">{{ selected.file }}:{{ selected.line }}</div>
+            </div>
+            <div v-else class="detail-empty">select a call to inspect</div>
+        </div>
+
+        <!-- Waterfall -->
+        <div class="waterfall">
+            <div class="section-label" style="margin-bottom: 6px">waterfall</div>
+            <div v-for="e in entries" :key="e.id" class="wf-row">
+                <span
+                    class="mono muted text-sm"
+                    style="width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0"
+                >
+                    {{ e.key }}
+                </span>
+                <div class="wf-track">
+                    <div
+                        class="wf-bar"
+                        :style="{
+                            left: wfLeft(e) + '%',
+                            width: Math.max(2, wfWidth(e)) + '%',
+                            background: barColor(e.status),
+                        }"
+                    ></div>
+                </div>
+                <span class="mono muted text-sm" style="width: 44px; text-align: right; flex-shrink: 0">
+                    {{ e.ms != null ? e.ms + 'ms' : '—' }}
+                </span>
+            </div>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .view {

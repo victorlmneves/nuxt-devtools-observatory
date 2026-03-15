@@ -21,6 +21,11 @@ export interface InjectEntry {
     line: number
 }
 
+/**
+ * Sets up the provide/inject registry, which tracks all provide/inject calls
+ * and their associated metadata (e.g. component name, file, line).
+ * @returns {object} The provide/inject registry with `registerProvide`, `registerInject`, and `getAll` members.
+ */
 export function setupProvideInjectRegistry() {
     const provides = ref<ProvideEntry[]>([])
     const injects = ref<InjectEntry[]>([])
@@ -44,7 +49,8 @@ export function setupProvideInjectRegistry() {
             return
         }
 
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } }).__nuxt_devtools__?.channel
+        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
+            .__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -60,7 +66,8 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
         return
     }
 
-    const registry = (window as Window & { __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> } }).__observatory__?.provideInject
+    const registry = (window as Window & { __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> } })
+        .__observatory__?.provideInject
 
     if (!registry) {
         return
@@ -85,7 +92,8 @@ export function __devInject<T>(key: string | symbol, defaultValue: T | undefined
         return resolved
     }
 
-    const registry = (window as Window & { __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> } }).__observatory__?.provideInject
+    const registry = (window as Window & { __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> } })
+        .__observatory__?.provideInject
 
     if (!registry) {
         return resolved
@@ -108,6 +116,12 @@ export function __devInject<T>(key: string | symbol, defaultValue: T | undefined
     return resolved
 }
 
+/**
+ * Walks up the `instance.parent` chain to find the first ancestor that provides the given key.
+ * @param {string} key - The injection key to search for
+ * @param {ReturnType<typeof getCurrentInstance>} instance - The current component instance
+ * @returns {{ file: string, uid: number } | null} The providing ancestor's file and uid, or null
+ */
 function findProvider(key: string, instance: ReturnType<typeof getCurrentInstance>) {
     let cur = instance?.parent
 
@@ -116,7 +130,10 @@ function findProvider(key: string, instance: ReturnType<typeof getCurrentInstanc
             return { file: cur.type?.__file ?? 'unknown', uid: cur.uid }
         }
 
-        if ((cur as { provides?: Record<string, unknown> }).provides && key in ((cur as { provides?: Record<string, unknown> }).provides ?? {})) {
+        if (
+            (cur as { provides?: Record<string, unknown> }).provides &&
+            key in ((cur as { provides?: Record<string, unknown> }).provides ?? {})
+        ) {
             return { file: cur.type?.__file ?? 'unknown', uid: cur.uid }
         }
 

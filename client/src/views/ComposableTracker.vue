@@ -1,88 +1,3 @@
-<template>
-    <div class="view">
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-label">total</div>
-                <div class="stat-val">{{ entries.length }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">mounted</div>
-                <div class="stat-val" style="color: var(--teal)">{{ counts.mounted }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">leaks</div>
-                <div class="stat-val" style="color: var(--red)">{{ counts.leaks }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">instances</div>
-                <div class="stat-val">{{ entries.reduce((a, e) => a + e.instances, 0) }}</div>
-            </div>
-        </div>
-
-        <div class="toolbar">
-            <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
-            <button :class="{ 'danger-active': filter === 'leak' }" @click="filter = 'leak'">leaks only</button>
-            <button :class="{ active: filter === 'unmounted' }" @click="filter = 'unmounted'">unmounted</button>
-            <input
-                v-model="search"
-                type="search"
-                placeholder="search composable or component…"
-                style="max-width: 220px; margin-left: auto"
-            />
-        </div>
-
-        <div class="list">
-            <div
-                v-for="e in filtered"
-                :key="e.id"
-                class="comp-card"
-                :class="{ leak: e.leak, expanded: expanded === e.id }"
-                @click="expanded = expanded === e.id ? null : e.id"
-            >
-                <div class="comp-header">
-                    <span class="mono bold" style="font-size: 12px">{{ e.name }}</span>
-                    <span class="muted text-sm" style="margin-left: 4px">{{ e.component }}</span>
-                    <div class="comp-meta">
-                        <span v-if="e.instances > 1" class="muted text-sm">{{ e.instances }}×</span>
-                        <span v-if="e.watchers > 0 && !e.leak" class="badge badge-warn">
-                            {{ e.watchers }} watcher{{ e.watchers > 1 ? 's' : '' }}
-                        </span>
-                        <span v-if="e.intervals > 0 && !e.leak" class="badge badge-warn">
-                            {{ e.intervals }} interval{{ e.intervals > 1 ? 's' : '' }}
-                        </span>
-                        <span v-if="e.leak" class="badge badge-err">leak detected</span>
-                        <span v-else-if="e.status === 'mounted'" class="badge badge-ok">mounted</span>
-                        <span v-else class="badge badge-gray">unmounted</span>
-                    </div>
-                </div>
-
-                <!-- Expanded detail -->
-                <div v-if="expanded === e.id" class="comp-detail" @click.stop>
-                    <div v-if="e.leak" class="leak-banner">{{ e.leakReason }}</div>
-
-                    <div class="section-label">reactive state</div>
-                    <div v-for="r in e.refs" :key="r.key" class="ref-row">
-                        <span class="mono text-sm" style="min-width: 90px; color: var(--text2)">{{ r.key }}</span>
-                        <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                            {{ r.val }}
-                        </span>
-                        <span class="badge badge-info text-xs">{{ r.type }}</span>
-                    </div>
-
-                    <div class="section-label" style="margin-top: 8px">lifecycle</div>
-                    <div class="lc-row" v-for="lc in lifecycleRows(e)" :key="lc.label">
-                        <span class="lc-dot" :style="{ background: lc.ok ? 'var(--teal)' : 'var(--red)' }"></span>
-                        <span class="muted text-sm" style="min-width: 110px">{{ lc.label }}</span>
-                        <span class="text-sm" :style="{ color: lc.ok ? 'var(--teal)' : 'var(--red)' }">{{ lc.status }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div v-if="!filtered.length" class="muted text-sm" style="padding: 16px 0">no composables match</div>
-        </div>
-    </div>
-</template>
-
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 
@@ -229,6 +144,91 @@ function lifecycleRows(e: ComposableEntry) {
     ]
 }
 </script>
+
+<template>
+    <div class="view">
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">total</div>
+                <div class="stat-val">{{ entries.length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">mounted</div>
+                <div class="stat-val" style="color: var(--teal)">{{ counts.mounted }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">leaks</div>
+                <div class="stat-val" style="color: var(--red)">{{ counts.leaks }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">instances</div>
+                <div class="stat-val">{{ entries.reduce((a, e) => a + e.instances, 0) }}</div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
+            <button :class="{ 'danger-active': filter === 'leak' }" @click="filter = 'leak'">leaks only</button>
+            <button :class="{ active: filter === 'unmounted' }" @click="filter = 'unmounted'">unmounted</button>
+            <input
+                v-model="search"
+                type="search"
+                placeholder="search composable or component…"
+                style="max-width: 220px; margin-left: auto"
+            />
+        </div>
+
+        <div class="list">
+            <div
+                v-for="e in filtered"
+                :key="e.id"
+                class="comp-card"
+                :class="{ leak: e.leak, expanded: expanded === e.id }"
+                @click="expanded = expanded === e.id ? null : e.id"
+            >
+                <div class="comp-header">
+                    <span class="mono bold" style="font-size: 12px">{{ e.name }}</span>
+                    <span class="muted text-sm" style="margin-left: 4px">{{ e.component }}</span>
+                    <div class="comp-meta">
+                        <span v-if="e.instances > 1" class="muted text-sm">{{ e.instances }}×</span>
+                        <span v-if="e.watchers > 0 && !e.leak" class="badge badge-warn">
+                            {{ e.watchers }} watcher{{ e.watchers > 1 ? 's' : '' }}
+                        </span>
+                        <span v-if="e.intervals > 0 && !e.leak" class="badge badge-warn">
+                            {{ e.intervals }} interval{{ e.intervals > 1 ? 's' : '' }}
+                        </span>
+                        <span v-if="e.leak" class="badge badge-err">leak detected</span>
+                        <span v-else-if="e.status === 'mounted'" class="badge badge-ok">mounted</span>
+                        <span v-else class="badge badge-gray">unmounted</span>
+                    </div>
+                </div>
+
+                <!-- Expanded detail -->
+                <div v-if="expanded === e.id" class="comp-detail" @click.stop>
+                    <div v-if="e.leak" class="leak-banner">{{ e.leakReason }}</div>
+
+                    <div class="section-label">reactive state</div>
+                    <div v-for="r in e.refs" :key="r.key" class="ref-row">
+                        <span class="mono text-sm" style="min-width: 90px; color: var(--text2)">{{ r.key }}</span>
+                        <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                            {{ r.val }}
+                        </span>
+                        <span class="badge badge-info text-xs">{{ r.type }}</span>
+                    </div>
+
+                    <div class="section-label" style="margin-top: 8px">lifecycle</div>
+                    <div v-for="lc in lifecycleRows(e)" :key="lc.label" class="lc-row">
+                        <span class="lc-dot" :style="{ background: lc.ok ? 'var(--teal)' : 'var(--red)' }"></span>
+                        <span class="muted text-sm" style="min-width: 110px">{{ lc.label }}</span>
+                        <span class="text-sm" :style="{ color: lc.ok ? 'var(--teal)' : 'var(--red)' }">{{ lc.status }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="!filtered.length" class="muted text-sm" style="padding: 16px 0">no composables match</div>
+        </div>
+    </div>
+</template>
 
 <style scoped>
 .view {

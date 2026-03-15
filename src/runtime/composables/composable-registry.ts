@@ -21,6 +21,14 @@ export interface ComposableEntry {
     line: number
 }
 
+/**
+ * Registers a new composable entry, updates an existing one, or retrieves all entries.
+ * @remarks The returned object exposes the following methods:
+ * - `register`: Registers a new composable entry.
+ * - `update`: Updates an existing composable entry.
+ * - `getAll`: Retrieves all composable entries.
+ * @returns {{ register: (entry: ComposableEntry) => void, update: (id: string, patch: Partial<ComposableEntry>) => void, getAll: () => ComposableEntry[] }} An object with `register`, `update`, and `getAll` methods.
+ */
 export function setupComposableRegistry() {
     const entries = ref<Map<string, ComposableEntry>>(new Map())
 
@@ -50,7 +58,8 @@ export function setupComposableRegistry() {
             return
         }
 
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } }).__nuxt_devtools__?.channel
+        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
+            .__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -68,7 +77,8 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         return callFn()
     }
 
-    const registry = (window as Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }).__observatory__?.composable
+    const registry = (window as Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }).__observatory__
+        ?.composable
 
     if (!registry) {
         return callFn()
@@ -174,6 +184,11 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     return result
 }
 
+/**
+ * Safely snapshots a value to a string representation.
+ * @param {unknown} value - The value to snapshot
+ * @returns {unknown} A serializable snapshot of the value
+ */
 function safeSnapshot(value: unknown): unknown {
     try {
         if (value === null || value === undefined) {

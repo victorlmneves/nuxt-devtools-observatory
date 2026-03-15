@@ -4,17 +4,25 @@ import _traverse from '@babel/traverse'
 import _generate from '@babel/generator'
 import * as t from '@babel/types'
 
-const traverse = (_traverse as any).default ?? _traverse
-const generate = (_generate as any).default ?? _generate
+const traverse = (_traverse as typeof _traverse & { default?: typeof _traverse }).default ?? _traverse
+const generate = (_generate as typeof _generate & { default?: typeof _generate }).default ?? _generate
 
 // Extract <script> block from a Vue SFC, returning content and its position
 function extractScriptBlock(code: string): { content: string; start: number; end: number } | null {
     const openTagRE = /<script(\s[^>]*)?>/i
     const openMatch = openTagRE.exec(code)
-    if (!openMatch) return null
+
+    if (!openMatch) {
+        return null
+    }
+
     const start = openMatch.index + openMatch[0].length
     const end = code.indexOf('</script>', start)
-    if (end === -1) return null
+
+    if (end === -1) {
+        return null
+    }
+
     return { content: code.slice(start, end), start, end }
 }
 
@@ -47,7 +55,10 @@ export function composableTrackerPlugin(): Plugin {
 
         transform(code, id) {
             const isVue = id.endsWith('.vue')
-            if (!isVue && !id.endsWith('.ts')) return
+
+            if (!isVue && !id.endsWith('.ts')) {
+                return
+            }
 
             // Skip the observatory's own runtime files to prevent infinite recursion
             if (
@@ -55,20 +66,28 @@ export function composableTrackerPlugin(): Plugin {
                 id.includes('composable-registry') ||
                 id.includes('provide-inject-registry') ||
                 id.includes('fetch-registry')
-            )
+            ) {
                 return
+            }
 
             // For Vue SFCs, extract only the <script> block to avoid parsing <template>
             let scriptCode = code
             let scriptStart = 0
+
             if (isVue) {
                 const block = extractScriptBlock(code)
-                if (!block) return null
+
+                if (!block) {
+                    return null
+                }
+
                 scriptCode = block.content
                 scriptStart = block.start
             }
 
-            if (!COMPOSABLE_RE.test(scriptCode)) return
+            if (!COMPOSABLE_RE.test(scriptCode)) {
+                return
+            }
 
             try {
                 const ast = parse(scriptCode, {
@@ -79,17 +98,27 @@ export function composableTrackerPlugin(): Plugin {
                 let modified = false
 
                 traverse(ast, {
-                    CallExpression(path: any) {
+                    CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
                         const callee = path.node.callee
-                        if (!t.isIdentifier(callee)) return
+
+                        if (!t.isIdentifier(callee)) {
+                            return
+                        }
 
                         const name = callee.name
-                        if (!COMPOSABLE_RE.test(name)) return
-                        if (SKIP_LIST.has(name)) return
+
+                        if (!COMPOSABLE_RE.test(name)) {
+                            return
+                        }
+
+                        if (SKIP_LIST.has(name)) {
+                            return
+                        }
 
                         // Skip if the call is already inside __trackComposable
-                        let parent = path.parentPath
+                        let parent: import('@babel/traverse').NodePath | null = path.parentPath
                         let isWrapped = false
+
                         while (parent) {
                             if (
                                 t.isCallExpression(parent.node) &&
@@ -99,14 +128,21 @@ export function composableTrackerPlugin(): Plugin {
                                 isWrapped = true
                                 break
                             }
-                            parent = parent.parentPath
+
+                            parent = parent.parentPath ?? null
                         }
-                        if (isWrapped) return
+
+                        if (isWrapped) {
+                            return
+                        }
 
                         // Check for @devtools-ignore comment
                         const comments = (path.node.leadingComments ?? []).concat(path.parentPath?.node?.leadingComments ?? [])
-                        const ignored = comments.some((c: any) => c.value.includes('@devtools-ignore'))
-                        if (ignored) return
+                        const ignored = comments.some((c: t.Comment) => c.value.includes('@devtools-ignore'))
+
+                        if (ignored) {
+                            return
+                        }
 
                         const args = path.node.arguments
                         const loc = path.node.loc
@@ -128,17 +164,23 @@ export function composableTrackerPlugin(): Plugin {
                     },
                 })
 
-                if (!modified) return null
+                if (!modified) {
+                    return null
+                }
 
                 const importLine = `import { __trackComposable } from 'nuxt-devtools-observatory/runtime/composable-registry';\n`
                 const output = generate(ast, { retainLines: true }, scriptCode)
+
                 if (isVue) {
                     const newCode = code.slice(0, scriptStart) + importLine + output.code + code.slice(scriptStart + scriptCode.length)
+
                     return { code: newCode }
                 }
+
                 return { code: importLine + output.code, map: output.map }
-            } catch (e) {
-                console.warn('[observatory] composable transform error:', e)
+            } catch (err) {
+                console.warn('[observatory] composable transform error:', err)
+
                 return null
             }
         },
