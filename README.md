@@ -10,7 +10,7 @@ Vue/Nuxt DevTools extension providing four missing observability features:
 ## Installation
 
 ```bash
-npm install nuxt-devtools-observatory
+pnpm add nuxt-devtools-observatory
 ```
 
 ```ts
@@ -31,6 +31,8 @@ export default defineNuxtConfig({
 ```
 
 Open the Nuxt DevTools panel — four new tabs will appear.
+
+The DevTools client SPA runs on a dedicated Vite development server (port **4949**).
 
 ## How it works
 
@@ -91,60 +93,64 @@ const result = useMyComposable()
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Run the playground
-npm run dev
+pnpm dev
 
-# Build the module
-npm run build
+# Build the module (client SPA + Nuxt module)
+pnpm build
 ```
 
 ## Architecture
 
 ```
 src/
-├── module.ts                    ← Nuxt module entry — registers transforms, plugins, devtools tabs
+├── module.ts                           ← Nuxt module entry — registers transforms, plugins, devtools tabs
 ├── transforms/
-│   ├── fetch-transform.ts       ← AST wraps useFetch/useAsyncData
-│   ├── provide-inject-transform.ts  ← AST wraps provide/inject
-│   └── composable-transform.ts  ← AST wraps useX() composables
+│   ├── fetch-transform.ts              ← AST wraps useFetch/useAsyncData
+│   ├── provide-inject-transform.ts     ← AST wraps provide/inject
+│   └── composable-transform.ts         ← AST wraps useX() composables
 ├── runtime/
-│   ├── plugin.ts                ← Client runtime bootstrap
+│   ├── plugin.ts                       ← Client runtime bootstrap
 │   └── composables/
-│       ├── fetch-registry.ts    ← Fetch tracking store + __devFetch shim
+│       ├── fetch-registry.ts           ← Fetch tracking store + __devFetch shim
 │       ├── provide-inject-registry.ts  ← Injection tracking + __devProvide/__devInject
 │       ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
-│       └── render-registry.ts   ← Render performance data via PerformanceObserver
+│       └── render-registry.ts          ← Render performance data via PerformanceObserver
 └── nitro/
-    └── fetch-capture.ts         ← SSR-side fetch timing
+    └── fetch-capture.ts                ← SSR-side fetch timing
 
 client/
 ├── index.html
-├── main.ts
+├── vite.config.ts                      ← Client SPA Vite config (built to client/dist/)
+├── tsconfig.json
 └── src/
-    ├── App.vue                  ← Tab navigation shell
-    ├── style.css                ← Design system
+    ├── App.vue                         ← Tab navigation shell
+    ├── main.ts
+    ├── style.css                       ← Design system
+    ├── components/
+    ├── stores/
     └── views/
-        ├── FetchDashboard.vue   ← useFetch tab UI
-        ├── ProvideInjectGraph.vue  ← provide/inject tab UI
-        ├── ComposableTracker.vue   ← Composable tab UI
-        └── RenderHeatmap.vue    ← Heatmap tab UI
+        ├── FetchDashboard.vue          ← useFetch tab UI
+        ├── ProvideInjectGraph.vue      ← provide/inject tab UI
+        ├── ComposableTracker.vue       ← Composable tab UI
+        └── RenderHeatmap.vue           ← Heatmap tab UI
 
 playground/
-├── app.vue                      ← Demo app exercising all four features
+├── app.vue                             ← Demo app exercising all four features
 ├── nuxt.config.ts
 ├── composables/
-│   ├── useCounter.ts            ← Clean composable (properly cleaned up)
-│   └── useLeakyPoller.ts        ← Intentionally leaky (for demo)
+│   ├── useCounter.ts                   ← Clean composable (properly cleaned up)
+│   └── useLeakyPoller.ts               ← Intentionally leaky (for demo)
 ├── components/
-│   ├── ThemeConsumer.vue        ← Successfully injects 'theme'
-│   ├── MissingProviderConsumer.vue  ← Injects 'cartContext' (no provider — red node)
-│   ├── LeakyComponent.vue       ← Mounts useLeakyPoller
-│   ├── HeavyList.vue            ← Re-renders on every shuffle (heatmap demo)
-│   └── PriceDisplay.vue         ← Leaf component with high render count
+│   ├── ThemeConsumer.vue               ← Successfully injects 'theme'
+│   ├── MissingProviderConsumer.vue     ← Injects 'cartContext' (no provider — red node)
+│   ├── LeakyComponent.vue              ← Mounts useLeakyPoller
+│   ├── HeavyList.vue                   ← Re-renders on every shuffle (heatmap demo)
+│   └── PriceDisplay.vue                ← Leaf component with high render count
 └── server/api/
-    └── product.ts               ← Mock API endpoint
+    └── product.ts                      ← Mock API endpoint
 ```
 
 ## License
