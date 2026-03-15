@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, defineComponent, h, type VNode } from 'vue'
+import { ref, computed } from 'vue'
 
 interface TreeNodeData {
     id: string
@@ -10,80 +10,42 @@ interface TreeNodeData {
     children: TreeNodeData[]
 }
 
-// TreeNode recursive component
-const TreeNode = defineComponent({
-    name: 'TreeNode',
-    props: { node: Object as () => TreeNodeData, selected: String, filter: String },
-    emits: ['select'],
-    setup(props, { emit }): () => VNode {
-        return () => {
-            const n = props.node!
-            const hasError = n.injects.some((i) => !i.ok)
-            const matchesFilter =
-                props.filter === 'all' || props.filter === 'warn'
-                    ? props.filter === 'warn'
-                        ? hasError
-                        : true
-                    : n.provides.some((p) => p.key === props.filter) || n.injects.some((i) => i.key === props.filter)
+interface LayoutNode {
+    data: TreeNodeData
+    parentId: string | null
+    x: number
+    y: number
+}
 
-            const color = hasError
-                ? 'var(--red)'
-                : n.type === 'both'
-                  ? 'var(--blue)'
-                  : n.type === 'provider'
-                    ? 'var(--teal)'
-                    : 'var(--text3)'
-            const isSel = props.selected === n.id
+interface Edge {
+    id: string
+    x1: number
+    y1: number
+    x2: number
+    y2: number
+}
 
-            return h('div', { class: 'tree-node-wrap' }, [
-                h(
-                    'div',
-                    {
-                        class: ['tree-node', isSel && 'selected'],
-                        style: {
-                            opacity: matchesFilter ? '1' : '0.25',
-                            borderColor: isSel ? color : 'var(--border)',
-                            background: isSel ? color + '14' : 'var(--bg3)',
-                        },
-                        onClick: () => emit('select', n),
-                    },
-                    [
-                        h('span', { class: 'node-dot', style: { background: color } }),
-                        h('span', { class: 'mono', style: { fontSize: '11px', fontWeight: isSel ? '500' : '400' } }, n.label),
-                        n.provides.length
-                            ? h(
-                                  'span',
-                                  { class: 'badge badge-ok', style: { fontSize: '9px', marginLeft: 'auto' } },
-                                  '+' + n.provides.length
-                              )
-                            : null,
-                        hasError
-                            ? h(
-                                  'span',
-                                  { class: 'badge badge-err', style: { fontSize: '9px', marginLeft: n.provides.length ? '4px' : 'auto' } },
-                                  '!'
-                              )
-                            : null,
-                    ]
-                ),
-                n.children.length
-                    ? h(
-                          'div',
-                          { class: 'tree-children' },
-                          n.children.map((child) =>
-                              h(TreeNode, {
-                                  node: child,
-                                  selected: props.selected,
-                                  filter: props.filter,
-                                  onSelect: (v: TreeNodeData) => emit('select', v),
-                              })
-                          )
-                      )
-                    : null,
-            ])
-        }
-    },
-})
+const NODE_W = 140
+const NODE_H = 32
+const V_GAP = 72
+const H_GAP = 18
+
+function nodeColor(n: TreeNodeData): string {
+    if (n.injects.some((i) => !i.ok)) return 'var(--red)'
+    if (n.type === 'both') return 'var(--blue)'
+    if (n.type === 'provider') return 'var(--teal)'
+    return 'var(--text3)'
+}
+
+function matchesFilter(n: TreeNodeData, filter: string): boolean {
+    if (filter === 'all') return true
+    if (filter === 'warn') return n.injects.some((i) => !i.ok)
+    return n.provides.some((p) => p.key === filter) || n.injects.some((i) => i.key === filter)
+}
+
+function countLeaves(n: TreeNodeData): number {
+    return n.children.length === 0 ? 1 : n.children.reduce((s, c) => s + countLeaves(c), 0)
+}
 
 const nodes = ref<TreeNodeData[]>([
     {
@@ -161,7 +123,6 @@ const nodes = ref<TreeNodeData[]>([
 
 const activeFilter = ref('all')
 const selectedNode = ref<TreeNodeData | null>(null)
-const rootNodes = computed(() => nodes.value)
 
 const allKeys = computed(() => {
     const keys = new Set<string>()
@@ -177,6 +138,61 @@ const allKeys = computed(() => {
     collect(nodes.value)
 
     return [...keys]
+})
+
+const layout = computed<LayoutNode[]>(() => {
+    const flat: LayoutNode[] = []
+    const pad = H_GAP
+
+    function place(node: TreeNodeData, depth: number, slotLeft: number, parentId: string | null) {
+        const leaves = countLeaves(node)
+        const slotW = leaves * (NODE_W + H_GAP) - H_GAP
+        flat.push({
+            data: node,
+            parentId,
+            x: Math.round(slotLeft + slotW / 2),
+            y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
+        })
+        let childLeft = slotLeft
+        for (const child of node.children) {
+            const cl = countLeaves(child)
+            place(child, depth + 1, childLeft, node.id)
+            childLeft += cl * (NODE_W + H_GAP)
+        }
+    }
+
+    let left = pad
+    for (const root of nodes.value) {
+        const leaves = countLeaves(root)
+        place(root, 0, left, null)
+        left += leaves * (NODE_W + H_GAP) + H_GAP * 2
+    }
+
+    return flat
+})
+
+const canvasW = computed(() =>
+    layout.value.reduce((m, n) => Math.max(m, n.x + NODE_W / 2 + 20), 400)
+)
+
+const canvasH = computed(() =>
+    layout.value.reduce((m, n) => Math.max(m, n.y + NODE_H / 2 + 20), 200)
+)
+
+const edges = computed<Edge[]>(() => {
+    const byId = new Map(layout.value.map((n) => [n.data.id, n]))
+    return layout.value
+        .filter((n) => n.parentId !== null)
+        .map((n) => {
+            const p = byId.get(n.parentId!)!
+            return {
+                id: `${p.data.id}--${n.data.id}`,
+                x1: p.x,
+                y1: p.y + NODE_H / 2,
+                x2: n.x,
+                y2: n.y - NODE_H / 2,
+            }
+        })
 })
 </script>
 
@@ -205,15 +221,42 @@ const allKeys = computed(() => {
                     <span class="dot" style="background: var(--red)"></span>
                     <span>missing provider</span>
                 </div>
-                <div class="tree">
-                    <TreeNode
-                        v-for="rootNode in rootNodes"
-                        :key="rootNode.id"
-                        :node="rootNode"
-                        :selected="selectedNode?.id"
-                        :filter="activeFilter"
-                        @select="selectedNode = $event"
-                    />
+                <div class="canvas-wrap" :style="{ width: canvasW + 'px', height: canvasH + 'px' }">
+                    <svg
+                        class="edges-svg"
+                        :width="canvasW"
+                        :height="canvasH"
+                        :viewBox="`0 0 ${canvasW} ${canvasH}`"
+                    >
+                        <path
+                            v-for="e in edges"
+                            :key="e.id"
+                            :d="`M ${e.x1},${e.y1} C ${e.x1},${(e.y1 + e.y2) / 2} ${e.x2},${(e.y1 + e.y2) / 2} ${e.x2},${e.y2}`"
+                            class="edge"
+                            fill="none"
+                        />
+                    </svg>
+                    <div
+                        v-for="ln in layout"
+                        :key="ln.data.id"
+                        class="graph-node"
+                        :class="{
+                            'is-selected': selectedNode?.id === ln.data.id,
+                            'is-dimmed': !matchesFilter(ln.data, activeFilter),
+                        }"
+                        :style="{
+                            left: ln.x - NODE_W / 2 + 'px',
+                            top: ln.y - NODE_H / 2 + 'px',
+                            width: NODE_W + 'px',
+                            '--node-color': nodeColor(ln.data),
+                        }"
+                        @click="selectedNode = ln.data"
+                    >
+                        <span class="node-dot" :style="{ background: nodeColor(ln.data) }"></span>
+                        <span class="mono node-label">{{ ln.data.label }}</span>
+                        <span v-if="ln.data.provides.length" class="badge badge-ok badge-xs">+{{ ln.data.provides.length }}</span>
+                        <span v-if="ln.data.injects.some((i) => !i.ok)" class="badge badge-err badge-xs">!</span>
+                    </div>
                 </div>
             </div>
 
@@ -306,44 +349,51 @@ const allKeys = computed(() => {
     margin-right: 2px;
 }
 
-.tree {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.canvas-wrap {
+    position: relative;
 }
 
-.tree-node-wrap {
-    display: flex;
-    flex-direction: column;
+.edges-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
 }
 
-.tree-node {
+.edge {
+    stroke: var(--border);
+    stroke-width: 1.5;
+}
+
+.graph-node {
+    position: absolute;
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 6px 10px;
+    padding: 0 10px;
+    height: 32px;
     border-radius: var(--radius);
     border: 0.5px solid var(--border);
+    background: var(--bg3);
     cursor: pointer;
-    transition: border-color 0.12s;
+    transition: border-color 0.12s, background 0.12s;
+    overflow: hidden;
+    box-sizing: border-box;
+    white-space: nowrap;
 }
 
-.tree-node:hover {
+.graph-node:hover {
     border-color: var(--text3);
 }
 
-.tree-node.selected {
-    outline: none;
+.graph-node.is-selected {
+    border-color: var(--node-color);
+    background: color-mix(in srgb, var(--node-color) 8%, transparent);
 }
 
-.tree-children {
-    margin-left: 18px;
-    border-left: 1.5px solid var(--border);
-    padding-left: 10px;
-    margin-top: 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.graph-node.is-dimmed {
+    opacity: 0.2;
+    pointer-events: none;
 }
 
 .node-dot {
@@ -351,6 +401,18 @@ const allKeys = computed(() => {
     height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
+}
+
+.node-label {
+    font-size: 11px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.badge-xs {
+    font-size: 9px;
+    padding: 1px 4px;
 }
 
 .detail-panel {
