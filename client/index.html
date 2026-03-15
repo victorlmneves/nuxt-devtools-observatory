@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Observatory DevTools</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --bg: #f8f7f4;
+      --bg2: #eeecea;
+      --bg3: #ffffff;
+      --border: rgba(0,0,0,0.1);
+      --text: #1a1a18;
+      --text2: #5f5e5a;
+      --text3: #888780;
+      --purple: #7f77dd;
+      --teal: #1d9e75;
+      --amber: #ef9f27;
+      --red: #e24b4a;
+      --blue: #378add;
+      --radius: 8px;
+      --radius-lg: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a18;
+        --bg2: #242422;
+        --bg3: #2c2c2a;
+        --border: rgba(255,255,255,0.1);
+        --text: #e8e6e0;
+        --text2: #b4b2a9;
+        --text3: #888780;
+      }
+    }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 13px; }
+    #app { height: 100vh; display: flex; flex-direction: column; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

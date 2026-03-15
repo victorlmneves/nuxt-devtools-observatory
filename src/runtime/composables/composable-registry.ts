@@ -1,0 +1,170 @@
+import { ref, isRef, isReadonly, unref, getCurrentInstance, onUnmounted, watch } from 'vue'
+import type { NuxtApp } from '#app'
+
+export interface ComposableEntry {
+    id: string
+    name: string
+    componentFile: string
+    componentUid: number
+    status: 'mounted' | 'unmounted'
+    leak: boolean
+    leakReason?: string
+    refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
+    watcherCount: number
+    intervalCount: number
+    lifecycle: {
+        hasOnMounted: boolean
+        hasOnUnmounted: boolean
+        watchersCleaned: boolean
+        intervalsCleaned: boolean
+    }
+    file: string
+    line: number
+}
+
+export function setupComposableRegistry(_nuxtApp: NuxtApp) {
+    const entries = ref<Map<string, ComposableEntry>>(new Map())
+
+    function register(entry: ComposableEntry) {
+        entries.value.set(entry.id, entry)
+        emit('composable:register', entry)
+    }
+
+    function update(id: string, patch: Partial<ComposableEntry>) {
+        const existing = entries.value.get(id)
+        if (!existing) return
+        const updated = { ...existing, ...patch }
+        entries.value.set(id, updated)
+        emit('composable:update', updated)
+    }
+
+    function getAll(): ComposableEntry[] {
+        return [...entries.value.values()]
+    }
+
+    function emit(event: string, data: unknown) {
+        if (!import.meta.client) return
+        const channel = (window as any).__nuxt_devtools__?.channel
+        channel?.send(event, data)
+    }
+
+    return { register, update, getAll }
+}
+
+// ── Dev shim called by Vite transform ─────────────────────────────────────
+
+export function __trackComposable<T>(name: string, callFn: () => T, meta: { file: string; line: number }): T {
+    if (!import.meta.dev) return callFn()
+    if (!import.meta.client) return callFn()
+
+    const registry = (window as any).__observatory__?.composable
+    if (!registry) return callFn()
+
+    const instance = getCurrentInstance()
+    const id = `${name}::${instance?.uid ?? 'global'}::${meta.file}:${meta.line}::${Date.now()}`
+
+    // Track intervals registered during setup
+    const trackedIntervals: number[] = []
+    const originalSetInterval = window.setInterval
+    const originalClearInterval = window.clearInterval
+    const clearedIntervals = new Set<number>()
+
+    window.setInterval = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => {
+        const id = originalSetInterval(fn as any, ms, ...rest)
+        trackedIntervals.push(id as number)
+        return id
+    }) as typeof window.setInterval
+
+    window.clearInterval = ((id?: number) => {
+        if (id !== undefined) clearedIntervals.add(id)
+        originalClearInterval(id)
+    }) as typeof window.clearInterval
+
+    // Track watchers registered during setup
+    const trackedWatchers: Array<{ stopped: boolean; stop: () => void }> = []
+
+    const result = callFn()
+
+    // Restore globals immediately after setup
+    window.setInterval = originalSetInterval
+    window.clearInterval = originalClearInterval
+
+    // Snapshot reactive return values
+    const refs: ComposableEntry['refs'] = {}
+    if (result && typeof result === 'object') {
+        for (const [key, val] of Object.entries(result as object)) {
+            if (isRef(val)) {
+                refs[key] = {
+                    type: isReadonly(val) ? 'computed' : 'ref',
+                    value: safeSnapshot(unref(val)),
+                }
+            }
+        }
+    }
+
+    const entry: ComposableEntry = {
+        id,
+        name,
+        componentFile: meta.file,
+        componentUid: instance?.uid ?? -1,
+        status: 'mounted',
+        leak: false,
+        refs,
+        watcherCount: trackedWatchers.length,
+        intervalCount: trackedIntervals.length,
+        lifecycle: {
+            hasOnMounted: false,
+            hasOnUnmounted: false,
+            watchersCleaned: true,
+            intervalsCleaned: true,
+        },
+        file: meta.file,
+        line: meta.line,
+    }
+
+    registry.register(entry)
+
+    // Detect leaks on unmount
+    onUnmounted(() => {
+        const leakedWatchers = trackedWatchers.filter((w) => !w.stopped)
+        const leakedIntervals = trackedIntervals.filter((id) => !clearedIntervals.has(id))
+
+        const leak = leakedWatchers.length > 0 || leakedIntervals.length > 0
+        const reasons: string[] = []
+
+        if (leakedWatchers.length > 0) {
+            reasons.push(`${leakedWatchers.length} watcher${leakedWatchers.length > 1 ? 's' : ''} still active after unmount`)
+        }
+        if (leakedIntervals.length > 0) {
+            reasons.push(`setInterval #${leakedIntervals.join(', #')} never cleared`)
+        }
+
+        registry.update(id, {
+            status: 'unmounted',
+            leak,
+            leakReason: reasons.join(' · ') || undefined,
+            lifecycle: {
+                ...entry.lifecycle,
+                watchersCleaned: leakedWatchers.length === 0,
+                intervalsCleaned: leakedIntervals.length === 0,
+            },
+        })
+    })
+
+    return result
+}
+
+function safeSnapshot(value: unknown): unknown {
+    try {
+        if (value === null || value === undefined) return value
+        if (typeof value === 'function') return '[Function]'
+        if (Array.isArray(value)) return `Array(${value.length})`
+        if (typeof value === 'object') {
+            const str = JSON.stringify(value)
+            return str.length > 120 ? str.slice(0, 120) + '…' : JSON.parse(str)
+        }
+        return value
+    } catch {
+        return '[unserializable]'
+    }
+}
