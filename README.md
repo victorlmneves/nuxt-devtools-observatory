@@ -43,6 +43,8 @@ entirely — zero runtime overhead.
 
 ### useFetch Dashboard
 
+![useFetch Dashboard](docs/screenshots/fetch-dashboard.png)
+
 A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim that records:
 
 - Key, URL, status, origin (SSR/CSR)
@@ -54,12 +56,16 @@ client over the HMR WebSocket.
 
 ### provide/inject Graph
 
+![provide/inject Graph](docs/screenshots/provide-inject-graph.png)
+
 A Vite plugin wraps `provide()` and `inject()` calls with annotated versions that
 carry file and line metadata. At runtime, a `findProvider()` function walks
 `instance.parent` chains to identify which ancestor provided each key.
 Any `inject()` that resolves to `undefined` is flagged immediately.
 
 ### Composable Tracker
+
+![Composable Tracker](docs/screenshots/composable-tracker.png)
 
 A Vite plugin detects all `useXxx()` calls matching Vue's naming convention and
 wraps them with a tracking proxy that:
@@ -71,6 +77,8 @@ wraps them with a tracking proxy that:
 4. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
 
 ### Render Heatmap
+
+![Render Heatmap](docs/screenshots/render-heatmap.png)
 
 Uses Vue's built-in `renderTriggered` mixin hook and `app.config.performance = true`.
 A `PerformanceObserver` reads Vue's native `vue-component-render-start/end` marks for
