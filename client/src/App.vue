@@ -4,12 +4,14 @@ import FetchDashboard from './views/FetchDashboard.vue'
 import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
 import RenderHeatmap from './views/RenderHeatmap.vue'
+import TransitionTimeline from './views/TransitionTimeline.vue'
 
 const pathMap: Record<string, string> = {
     fetch: 'fetch',
     provide: 'provide',
     composables: 'composable',
     heatmap: 'heatmap',
+    transitions: 'transitions',
 }
 
 const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
@@ -20,6 +22,7 @@ const tabs = [
     { id: 'provide', label: 'provide/inject', icon: '⬡' },
     { id: 'composable', label: 'Composables', icon: '⬡' },
     { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
+    { id: 'transitions', label: 'Transitions', icon: '⬡' },
 ]
 </script>
 
@@ -38,6 +41,7 @@ const tabs = [
             <ProvideInjectGraph v-else-if="activeTab === 'provide'" />
             <ComposableTracker v-else-if="activeTab === 'composable'" />
             <RenderHeatmap v-else-if="activeTab === 'heatmap'" />
+            <TransitionTimeline v-else-if="activeTab === 'transitions'" />
         </main>
     </div>
 </template>

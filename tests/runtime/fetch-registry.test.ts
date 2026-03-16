@@ -139,7 +139,12 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
+        __devFetch(
+            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
+            '/api/users',
+            {},
+            { key: 'users', file: 'P.ts', line: 1 }
+        )
 
         const mockResponse = {
             ok: true,
@@ -166,7 +171,12 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>, '/api/product', {}, { key: 'product', file: 'P.ts', line: 5 })
+        __devFetch(
+            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
+            '/api/product',
+            {},
+            { key: 'product', file: 'P.ts', line: 5 }
+        )
 
         const mockResponse = {
             ok: true,
@@ -188,7 +198,12 @@ describe('__devFetch', () => {
             return Promise.reject(new Error('500'))
         })
 
-        __devFetch(mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>, '/api/broken', {}, { key: 'broken', file: 'P.ts', line: 2 })
+        __devFetch(
+            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
+            '/api/broken',
+            {},
+            { key: 'broken', file: 'P.ts', line: 2 }
+        )
 
         const mockResponse = { ok: false, headers: { get: () => null } }
         ;(capturedOpts.onResponseError as (ctx: unknown) => void)({ response: mockResponse })
@@ -209,7 +224,12 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>, '/api/users', { onResponse: originalOnResponse }, { key: 'users', file: 'P.ts', line: 1 })
+        __devFetch(
+            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
+            '/api/users',
+            { onResponse: originalOnResponse },
+            { key: 'users', file: 'P.ts', line: 1 }
+        )
 
         const ctx = { response: { ok: true, headers: { get: () => null } } }
         ;(capturedOpts.onResponse as (ctx: unknown) => void)(ctx)

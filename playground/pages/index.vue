@@ -66,6 +66,22 @@ async function triggerError() {
                 <HeavyList :items="items" />
                 <button @click="shuffleItems">shuffle items (triggers many renders)</button>
             </section>
+
+            <!-- Transition tracker section -->
+            <section>
+                <h2>Transition Tracker</h2>
+                <p style="font-size: 13px; color: #555; margin-bottom: 14px">
+                    Three scenarios — open the
+                    <strong>Transitions</strong>
+                    devtools tab to inspect each one.
+                </p>
+                <!-- 1. All transitions complete normally -->
+                <TransitionsFadeBox />
+                <!-- 2. JS-mode hook reads a DOM element that doesn't exist → done() never called -->
+                <TransitionsBrokenTransition />
+                <!-- 3. A slow leave interrupted mid-flight → leave-cancelled -->
+                <TransitionsCancelledTransition />
+            </section>
         </main>
     </div>
 </template>

@@ -6,6 +6,7 @@ export default defineNuxtConfig({
         provideInjectGraph: true,
         composableTracker: true,
         renderHeatmap: true,
+        transitionTracker: true,
         heatmapThreshold: 5,
     },
 

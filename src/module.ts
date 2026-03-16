@@ -2,6 +2,7 @@ import { defineNuxtModule, addPlugin, createResolver, addVitePlugin } from '@nux
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { composableTrackerPlugin } from './transforms/composable-transform'
+import { transitionTrackerPlugin } from './transforms/transition-transform'
 
 export interface ModuleOptions {
     /**
@@ -29,6 +30,12 @@ export interface ModuleOptions {
     renderHeatmap?: boolean
 
     /**
+     * Enable the transition tracker tab
+     * @default true
+     */
+    transitionTracker?: boolean
+
+    /**
      * Minimum render count / ms threshold to highlight in the heatmap
      * @default 5
      */
@@ -47,6 +54,7 @@ export default defineNuxtModule<ModuleOptions>({
         provideInjectGraph: true,
         composableTracker: true,
         renderHeatmap: true,
+        transitionTracker: true,
         heatmapThreshold: 5,
     },
 
@@ -81,6 +89,10 @@ export default defineNuxtModule<ModuleOptions>({
 
         if (options.composableTracker) {
             addVitePlugin(composableTrackerPlugin())
+        }
+
+        if (options.transitionTracker) {
+            addVitePlugin(transitionTrackerPlugin())
         }
 
         // ── Runtime plugins ───────────────────────────────────────────────────
@@ -120,6 +132,8 @@ export default defineNuxtModule<ModuleOptions>({
         })
 
         // ── Devtools integration ──────────────────────────────────────────────
+        // SPA runs at localhost:4949, cross-origin from :3000.
+        // Data is bridged via postMessage (see plugin.ts + stores/observatory.ts).
         const base = `http://localhost:${CLIENT_PORT}`
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -157,6 +171,15 @@ export default defineNuxtModule<ModuleOptions>({
                     title: 'Heatmap',
                     icon: 'carbon:heat-map',
                     view: { type: 'iframe', src: `${base}/heatmap` },
+                })
+            }
+
+            if (options.transitionTracker) {
+                tabs.push({
+                    name: 'observatory-transitions',
+                    title: 'Transitions',
+                    icon: 'carbon:movement',
+                    view: { type: 'iframe', src: `${base}/transitions` },
                 })
             }
         })

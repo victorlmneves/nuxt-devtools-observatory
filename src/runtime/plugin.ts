@@ -3,6 +3,7 @@ import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
 import { setupComposableRegistry } from './composables/composable-registry'
 import { setupRenderRegistry } from './composables/render-registry'
+import { setupTransitionRegistry } from './composables/transition-registry'
 
 interface ObservatoryWindow extends Window {
     __observatory__?: Record<string, unknown>
@@ -25,6 +26,7 @@ export default defineNuxtPlugin(() => {
     const provideInjectRegistry = setupProvideInjectRegistry()
     const composableRegistry = setupComposableRegistry()
     const renderRegistry = setupRenderRegistry(nuxtApp, config.heatmapThreshold)
+    const transitionRegistry = setupTransitionRegistry()
 
     // Expose registries globally so Vite transform shims can reach them
     if (import.meta.client) {
@@ -33,7 +35,29 @@ export default defineNuxtPlugin(() => {
             provideInject: provideInjectRegistry,
             composable: composableRegistry,
             render: renderRegistry,
+            transition: transitionRegistry,
         }
+
+        // postMessage bridge — the Observatory SPA runs at localhost:4949 (cross-
+        // origin). It cannot read window.top properties, but CAN send messages.
+        // We register this listener immediately (not in app:mounted) so requests
+        // arriving before hydration completes are handled correctly.
+        window.addEventListener('message', (event: MessageEvent) => {
+            if (event.data?.type !== 'observatory:request') {
+                return
+            }
+
+            const source = event.source as Window | null
+            source?.postMessage(
+                {
+                    type: 'observatory:snapshot',
+                    data: {
+                        transitions: transitionRegistry.getAll(),
+                    },
+                },
+                '*'
+            )
+        })
     }
 
     // Broadcast all registry data when devtools tab connects
@@ -57,6 +81,7 @@ export default defineNuxtPlugin(() => {
             provideInject: provideInjectRegistry.getAll(),
             composables: composableRegistry.getAll(),
             renders: renderRegistry.getAll(),
+            transitions: transitionRegistry.getAll(),
         })
     }
 
