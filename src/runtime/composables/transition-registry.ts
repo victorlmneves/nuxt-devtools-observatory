@@ -1,4 +1,4 @@
-import { ref, h, defineComponent, getCurrentInstance, Transition as VueTransition } from 'vue'
+import { ref, h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
 import type { Slots } from 'vue'
 
 export interface TransitionEntry {
@@ -6,7 +6,7 @@ export interface TransitionEntry {
     transitionName: string
     parentComponent: string
     direction: 'enter' | 'leave'
-    phase: 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled'
+    phase: 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled' | 'interrupted'
     startTime: number
     endTime?: number
     durationMs?: number
@@ -81,6 +81,18 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
             let enterEntryId: string | null = null
             let leaveEntryId: string | null = null
 
+            onUnmounted(() => {
+                if (enterEntryId) {
+                    registry.update(enterEntryId, { phase: 'interrupted', endTime: performance.now() })
+                    enterEntryId = null
+                }
+
+                if (leaveEntryId) {
+                    registry.update(leaveEntryId, { phase: 'interrupted', endTime: performance.now() })
+                    leaveEntryId = null
+                }
+            })
+
             return () => {
                 const transitionName = String(attrs.name ?? 'default')
                 const isAppear = Boolean(attrs.appear)
@@ -109,12 +121,14 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
                     onAfterEnter: mergeHook(attrs.onAfterEnter as ElementHook, () => {
                         if (enterEntryId) {
                             registry.update(enterEntryId, { phase: 'entered', endTime: performance.now() })
+                            enterEntryId = null
                         }
                     }),
 
                     onEnterCancelled: mergeHook(attrs.onEnterCancelled as ElementHook, () => {
                         if (enterEntryId) {
                             registry.update(enterEntryId, { phase: 'enter-cancelled', cancelled: true, endTime: performance.now() })
+                            enterEntryId = null
                         }
                     }),
 
@@ -138,12 +152,14 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
                     onAfterLeave: mergeHook(attrs.onAfterLeave as ElementHook, () => {
                         if (leaveEntryId) {
                             registry.update(leaveEntryId, { phase: 'left', endTime: performance.now() })
+                            leaveEntryId = null
                         }
                     }),
 
                     onLeaveCancelled: mergeHook(attrs.onLeaveCancelled as ElementHook, () => {
                         if (leaveEntryId) {
                             registry.update(leaveEntryId, { phase: 'leave-cancelled', cancelled: true, endTime: performance.now() })
+                            leaveEntryId = null
                         }
                     }),
                 }

@@ -21,7 +21,7 @@ export interface TransitionEntry {
     transitionName: string
     parentComponent: string
     direction: 'enter' | 'leave'
-    phase: 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled'
+    phase: 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled' | 'interrupted'
     startTime: number
     endTime?: number
     durationMs?: number

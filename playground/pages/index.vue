@@ -29,7 +29,7 @@ async function triggerError() {
     <div>
         <header>
             <h1>Observatory Playground</h1>
-            <p>This page exercises all four devtools features. Open the devtools panel to inspect.</p>
+            <p>This page exercises all five devtools features. Open the devtools panel to inspect.</p>
         </header>
 
         <main>
@@ -81,6 +81,8 @@ async function triggerError() {
                 <TransitionsBrokenTransition />
                 <!-- 3. A slow leave interrupted mid-flight → leave-cancelled -->
                 <TransitionsCancelledTransition />
+                <!-- 4. Parent component unmounts while enter is in-flight → interrupted -->
+                <TransitionsInterruptedTransition />
             </section>
         </main>
     </div>

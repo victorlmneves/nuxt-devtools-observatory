@@ -18,7 +18,7 @@ const filtered = computed(() => {
     }
 
     if (filter.value === 'cancelled') {
-        list = list.filter((e) => e.cancelled)
+        list = list.filter((e) => e.cancelled || e.phase === 'interrupted')
     } else if (filter.value === 'active') {
         list = list.filter((e) => e.phase === 'entering' || e.phase === 'leaving')
     } else if (filter.value === 'completed') {
@@ -31,7 +31,7 @@ const filtered = computed(() => {
 const stats = computed(() => ({
     total: entries.value.length,
     active: entries.value.filter((e) => e.phase === 'entering' || e.phase === 'leaving').length,
-    cancelled: entries.value.filter((e) => e.cancelled).length,
+    cancelled: entries.value.filter((e) => e.cancelled || e.phase === 'interrupted').length,
     avgMs: (() => {
         const completed = entries.value.filter((e) => e.durationMs !== undefined)
 
@@ -78,6 +78,10 @@ function phaseColor(phase: TransitionEntry['phase'], direction: TransitionEntry[
         return '#e24b4a'
     }
 
+    if (phase === 'interrupted') {
+        return '#e09a3a'
+    }
+
     return '#888'
 }
 
@@ -92,6 +96,10 @@ function phaseBadgeClass(phase: TransitionEntry['phase']): string {
 
     if (phase.includes('cancelled')) {
         return 'badge-err'
+    }
+
+    if (phase === 'interrupted') {
+        return 'badge-warn'
     }
 
     return 'badge-gray'
@@ -259,7 +267,7 @@ function directionColor(e: TransitionEntry): string {
                         <div class="panel-row">
                             <span class="panel-key">Duration</span>
                             <span class="panel-val mono" style="font-weight: 500">
-                                {{ selected.durationMs !== undefined ? selected.durationMs + 'ms' : 'in progress' }}
+                                {{ selected.durationMs !== undefined ? selected.durationMs + 'ms' : selected.phase === 'interrupted' ? 'interrupted' : 'in progress' }}
                             </span>
                         </div>
                     </div>

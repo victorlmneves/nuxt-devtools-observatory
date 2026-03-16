@@ -32,6 +32,7 @@ import {
   defineComponent as _obsDefineComponent,
   h as _obsH,
   getCurrentInstance as _obsGetCurrentInstance,
+  onUnmounted as _obsOnUnmounted,
   Transition as _ObsRealTransition
 } from 'vue'
 
@@ -53,6 +54,12 @@ const _ObservedTransition = _obsDefineComponent({
     const parentComponent = (par && par.type && (par.type.__name || par.type.name)) || 'unknown'
     let enterEntryId = null
     let leaveEntryId = null
+    _obsOnUnmounted(function() {
+      const r = _obsRegistry()
+      if (!r) return
+      if (enterEntryId) { r.update(enterEntryId, { phase: 'interrupted', endTime: performance.now() }); enterEntryId = null }
+      if (leaveEntryId) { r.update(leaveEntryId, { phase: 'interrupted', endTime: performance.now() }); leaveEntryId = null }
+    })
     return function() {
       const attrs = ctx.attrs
       const slots = ctx.slots
@@ -69,10 +76,10 @@ const _ObservedTransition = _obsDefineComponent({
           r.register({ id, transitionName, parentComponent, direction: 'enter', phase: 'entering', startTime: t, cancelled: false, appear: isAppear, mode })
         }),
         onAfterEnter: _obsMergeHook(attrs.onAfterEnter, function() {
-          if (enterEntryId) r.update(enterEntryId, { phase: 'entered', endTime: performance.now() })
+          if (enterEntryId) { r.update(enterEntryId, { phase: 'entered', endTime: performance.now() }); enterEntryId = null }
         }),
         onEnterCancelled: _obsMergeHook(attrs.onEnterCancelled, function() {
-          if (enterEntryId) r.update(enterEntryId, { phase: 'enter-cancelled', cancelled: true, endTime: performance.now() })
+          if (enterEntryId) { r.update(enterEntryId, { phase: 'enter-cancelled', cancelled: true, endTime: performance.now() }); enterEntryId = null }
         }),
         onBeforeLeave: _obsMergeHook(attrs.onBeforeLeave, function() {
           const t = performance.now()
@@ -81,10 +88,10 @@ const _ObservedTransition = _obsDefineComponent({
           r.register({ id, transitionName, parentComponent, direction: 'leave', phase: 'leaving', startTime: t, cancelled: false, appear: false, mode })
         }),
         onAfterLeave: _obsMergeHook(attrs.onAfterLeave, function() {
-          if (leaveEntryId) r.update(leaveEntryId, { phase: 'left', endTime: performance.now() })
+          if (leaveEntryId) { r.update(leaveEntryId, { phase: 'left', endTime: performance.now() }); leaveEntryId = null }
         }),
         onLeaveCancelled: _obsMergeHook(attrs.onLeaveCancelled, function() {
-          if (leaveEntryId) r.update(leaveEntryId, { phase: 'leave-cancelled', cancelled: true, endTime: performance.now() })
+          if (leaveEntryId) { r.update(leaveEntryId, { phase: 'leave-cancelled', cancelled: true, endTime: performance.now() }); leaveEntryId = null }
         }),
       })
       return _obsH(_ObsRealTransition, hookedAttrs, slots)
