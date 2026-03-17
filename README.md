@@ -1,6 +1,6 @@
 # nuxt-devtools-observatory
 
-Vue/Nuxt DevTools extension providing five missing observability features:
+Nuxt DevTools extension providing five missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology with missing-provider detection
