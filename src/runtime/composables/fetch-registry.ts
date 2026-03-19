@@ -42,8 +42,48 @@ export function setupFetchRegistry() {
         emit('fetch:update', updated)
     }
 
+    function safeValue(val: unknown): unknown {
+        // Try to JSON.stringify, fallback to string or undefined
+        if (val === undefined || val === null) {
+            return val
+        }
+
+        if (typeof val === 'function') {
+            return undefined
+        }
+
+        if (typeof val === 'object') {
+            try {
+                return JSON.parse(JSON.stringify(val))
+            } catch {
+                return String(val)
+            }
+        }
+
+        return val
+    }
+
+    function sanitize(entry: FetchEntry): FetchEntry {
+        return {
+            id: entry.id,
+            key: entry.key,
+            url: entry.url,
+            status: entry.status,
+            origin: entry.origin,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+            ms: entry.ms,
+            size: entry.size,
+            cached: entry.cached,
+            payload: safeValue(entry.payload),
+            error: safeValue(entry.error),
+            file: entry.file,
+            line: entry.line,
+        }
+    }
+
     function getAll(): FetchEntry[] {
-        return [...entries.value.values()]
+        return [...entries.value.values()].map(sanitize)
     }
 
     function clear() {

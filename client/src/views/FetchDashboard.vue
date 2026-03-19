@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useObservatoryData } from '../stores/observatory'
 
 interface FetchEntry {
     id: string
@@ -16,126 +17,21 @@ interface FetchEntry {
     startOffset?: number
 }
 
-// Mock data — in production this comes from the WS registry
-const entries = ref<FetchEntry[]>([
-    {
-        id: '1',
-        key: 'product-detail',
-        url: '/api/products/42',
-        status: 'ok',
-        origin: 'ssr',
-        ms: 48,
-        size: 3276,
-        cached: false,
-        startOffset: 0,
-        file: 'pages/products/[id].vue',
-        line: 8,
-    },
-    {
-        id: '2',
-        key: 'related-products',
-        url: '/api/products?related=42',
-        status: 'ok',
-        origin: 'ssr',
-        ms: 112,
-        size: 19148,
-        cached: false,
-        startOffset: 10,
-        file: 'pages/products/[id].vue',
-        line: 14,
-    },
-    {
-        id: '3',
-        key: 'user-session',
-        url: '/api/auth/session',
-        status: 'cached',
-        origin: 'csr',
-        ms: 0,
-        size: 819,
-        cached: true,
-        startOffset: 0,
-        file: 'layouts/default.vue',
-        line: 5,
-    },
-    {
-        id: '4',
-        key: 'cart-summary',
-        url: '/api/cart',
-        status: 'ok',
-        origin: 'csr',
-        ms: 67,
-        size: 2150,
-        cached: false,
-        startOffset: 5,
-        file: 'components/CartDrawer.vue',
-        line: 3,
-    },
-    {
-        id: '5',
-        key: 'product-reviews',
-        url: '/api/products/42/reviews',
-        status: 'pending',
-        origin: 'csr',
-        ms: undefined,
-        size: undefined,
-        cached: false,
-        startOffset: 120,
-        file: 'components/ReviewList.vue',
-        line: 6,
-    },
-    {
-        id: '6',
-        key: 'recommendations',
-        url: '/api/recommend?u=u_9x3k',
-        status: 'ok',
-        origin: 'csr',
-        ms: 201,
-        size: 9626,
-        cached: false,
-        startOffset: 30,
-        file: 'components/Recommendations.vue',
-        line: 4,
-    },
-    {
-        id: '7',
-        key: 'inventory-check',
-        url: '/api/inventory/42',
-        status: 'error',
-        origin: 'csr',
-        ms: 503,
-        size: undefined,
-        cached: false,
-        startOffset: 55,
-        file: 'components/StockBadge.vue',
-        line: 7,
-    },
-    {
-        id: '8',
-        key: 'nav-links',
-        url: '/api/nav',
-        status: 'cached',
-        origin: 'ssr',
-        ms: 0,
-        size: 1126,
-        cached: true,
-        startOffset: 0,
-        file: 'layouts/default.vue',
-        line: 9,
-    },
-])
+// Use live fetch data from the Nuxt registry bridge
+const { fetches: entries } = useObservatoryData()
 
 const filter = ref<string>('all')
 const search = ref('')
 const selected = ref<FetchEntry | null>(null)
 
 const counts = computed(() => ({
-    ok: entries.value.filter((e) => e.status === 'ok').length,
-    pending: entries.value.filter((e) => e.status === 'pending').length,
-    error: entries.value.filter((e) => e.status === 'error').length,
+    ok: entries.value?.filter((e) => e.status === 'ok').length ?? 0,
+    pending: entries.value?.filter((e) => e.status === 'pending').length ?? 0,
+    error: entries.value?.filter((e) => e.status === 'error').length ?? 0,
 }))
 
 const filtered = computed(() => {
-    return entries.value.filter((e) => {
+    return (entries.value ?? []).filter((e) => {
         if (filter.value !== 'all' && e.status !== filter.value) return false
         const q = search.value.toLowerCase()
         if (q && !e.key.includes(q) && !e.url.includes(q)) return false
@@ -176,16 +72,16 @@ function barColor(s: string) {
 }
 
 function barWidth(e: FetchEntry) {
-    const maxMs = Math.max(...entries.value.filter((x) => x.ms).map((x) => x.ms!), 1)
+    const maxMs = Math.max(...(entries.value ?? []).filter((x) => x.ms).map((x) => x.ms!), 1)
     return e.ms != null ? Math.max(4, Math.round((e.ms / maxMs) * 100)) : 4
 }
 
 function wfLeft(e: FetchEntry) {
-    const maxEnd = Math.max(...entries.value.map((x) => (x.startOffset ?? 0) + (x.ms ?? 0)), 1)
+    const maxEnd = Math.max(...(entries.value ?? []).map((x) => (x.startOffset ?? 0) + (x.ms ?? 0)), 1)
     return Math.round(((e.startOffset ?? 0) / maxEnd) * 100)
 }
 function wfWidth(e: FetchEntry) {
-    const maxEnd = Math.max(...entries.value.map((x) => (x.startOffset ?? 0) + (x.ms ?? 0)), 1)
+    const maxEnd = Math.max(...(entries.value ?? []).map((x) => (x.startOffset ?? 0) + (x.ms ?? 0)), 1)
     return e.ms != null ? Math.round((e.ms / maxEnd) * 100) : 2
 }
 
@@ -195,18 +91,12 @@ function formatSize(bytes: number) {
 }
 
 function replayFetch() {
-    if (!selected.value) return
-    const e = selected.value
-    e.status = 'pending'
-    e.ms = undefined
-    setTimeout(() => {
-        e.status = 'ok'
-        e.ms = Math.floor(Math.random() * 150 + 20)
-    }, 700)
+    // No-op: cannot replay fetch from devtools UI (see Nuxt docs)
+    // You should call the original refresh() from useFetch in-app, not here
 }
 
 function clearAll() {
-    entries.value = []
+    // No-op: cannot clear live registry from client
     selected.value = null
 }
 </script>

@@ -99,8 +99,31 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, thre
         }
     }
 
+    function sanitize(entry: RenderEntry): RenderEntry {
+        return {
+            uid: entry.uid,
+            name: entry.name,
+            file: entry.file,
+            renders: entry.renders,
+            totalMs: entry.totalMs,
+            avgMs: entry.avgMs,
+            triggers: entry.triggers,
+            rect: entry.rect
+                ? {
+                      x: entry.rect.x,
+                      y: entry.rect.y,
+                      width: entry.rect.width,
+                      height: entry.rect.height,
+                      top: entry.rect.top,
+                      left: entry.rect.left,
+                  }
+                : undefined,
+            children: entry.children,
+            parentUid: entry.parentUid,
+        }
+    }
     function getAll(): RenderEntry[] {
-        return [...entries.value.values()].filter((e) => e.renders >= threshold)
+        return [...entries.value.values()].filter((e) => e.renders >= threshold).map(sanitize)
     }
 
     function snapshot(): RenderEntry[] {

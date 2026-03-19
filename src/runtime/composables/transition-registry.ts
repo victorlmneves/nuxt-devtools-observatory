@@ -40,8 +40,21 @@ export function setupTransitionRegistry() {
         emit('transition:update', updated)
     }
 
+    function sanitize(entry: TransitionEntry): TransitionEntry {
+        const clone = { ...entry }
+
+        // Remove any function properties
+        for (const key in clone) {
+            if (typeof clone[key] === 'function') {
+                delete clone[key]
+            }
+        }
+
+        return clone
+    }
+
     function getAll(): TransitionEntry[] {
-        return [...entries.value.values()].map((e) => ({ ...e }))
+        return [...entries.value.values()].map(sanitize)
     }
 
     function emit(event: string, data: unknown) {
@@ -58,7 +71,6 @@ export function setupTransitionRegistry() {
 }
 
 // ── Tracked <Transition> wrapper ─────────────────────────────────────────
-
 type ElementHook = ((el: Element) => void) | undefined
 
 function mergeHook(original: ElementHook, ours: (el: Element) => void): (el: Element) => void {

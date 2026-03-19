@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useObservatoryData } from '../stores/observatory'
 
 interface TreeNodeData {
     id: string
@@ -31,15 +32,30 @@ const V_GAP = 72
 const H_GAP = 18
 
 function nodeColor(n: TreeNodeData): string {
-    if (n.injects.some((i) => !i.ok)) return 'var(--red)'
-    if (n.type === 'both') return 'var(--blue)'
-    if (n.type === 'provider') return 'var(--teal)'
+    if (n.injects.some((i) => !i.ok)) {
+        return 'var(--red)'
+    }
+
+    if (n.type === 'both') {
+        return 'var(--blue)'
+    }
+
+    if (n.type === 'provider') {
+        return 'var(--teal)'
+    }
+
     return 'var(--text3)'
 }
 
 function matchesFilter(n: TreeNodeData, filter: string): boolean {
-    if (filter === 'all') return true
-    if (filter === 'warn') return n.injects.some((i) => !i.ok)
+    if (filter === 'all') {
+        return true
+    }
+
+    if (filter === 'warn') {
+        return n.injects.some((i) => !i.ok)
+    }
+
     return n.provides.some((p) => p.key === filter) || n.injects.some((i) => i.key === filter)
 }
 
@@ -47,79 +63,8 @@ function countLeaves(n: TreeNodeData): number {
     return n.children.length === 0 ? 1 : n.children.reduce((s, c) => s + countLeaves(c), 0)
 }
 
-const nodes = ref<TreeNodeData[]>([
-    {
-        id: 'App',
-        label: 'App.vue',
-        type: 'provider',
-        provides: [
-            { key: 'authContext', val: '{ user, logout }', reactive: true },
-            { key: 'theme', val: '"dark"', reactive: false },
-        ],
-        injects: [],
-        children: [
-            {
-                id: 'Layout',
-                label: 'Layout.vue',
-                type: 'both',
-                provides: [{ key: 'routerState', val: 'useRoute()', reactive: true }],
-                injects: [{ key: 'theme', from: 'App.vue', ok: true }],
-                children: [
-                    {
-                        id: 'Sidebar',
-                        label: 'Sidebar.vue',
-                        type: 'consumer',
-                        provides: [],
-                        injects: [
-                            { key: 'authContext', from: 'App.vue', ok: true },
-                            { key: 'theme', from: 'App.vue', ok: true },
-                        ],
-                        children: [],
-                    },
-                    {
-                        id: 'NavBar',
-                        label: 'NavBar.vue',
-                        type: 'consumer',
-                        provides: [],
-                        injects: [
-                            { key: 'authContext', from: 'App.vue', ok: true },
-                            { key: 'routerState', from: 'Layout.vue', ok: true },
-                        ],
-                        children: [],
-                    },
-                    {
-                        id: 'ProductList',
-                        label: 'ProductList.vue',
-                        type: 'error',
-                        provides: [],
-                        injects: [
-                            { key: 'cartContext', from: null, ok: false },
-                            { key: 'theme', from: 'App.vue', ok: true },
-                        ],
-                        children: [
-                            {
-                                id: 'ProductCard',
-                                label: 'ProductCard.vue',
-                                type: 'error',
-                                provides: [],
-                                injects: [{ key: 'cartContext', from: null, ok: false }],
-                                children: [],
-                            },
-                        ],
-                    },
-                    {
-                        id: 'UserMenu',
-                        label: 'UserMenu.vue',
-                        type: 'consumer',
-                        provides: [],
-                        injects: [{ key: 'authContext', from: 'App.vue', ok: true }],
-                        children: [],
-                    },
-                ],
-            },
-        ],
-    },
-])
+const { provideInject } = useObservatoryData()
+const nodes = provideInject
 
 const activeFilter = ref('all')
 const selectedNode = ref<TreeNodeData | null>(null)
@@ -147,13 +92,16 @@ const layout = computed<LayoutNode[]>(() => {
     function place(node: TreeNodeData, depth: number, slotLeft: number, parentId: string | null) {
         const leaves = countLeaves(node)
         const slotW = leaves * (NODE_W + H_GAP) - H_GAP
+
         flat.push({
             data: node,
             parentId,
             x: Math.round(slotLeft + slotW / 2),
             y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
         })
+
         let childLeft = slotLeft
+
         for (const child of node.children) {
             const cl = countLeaves(child)
             place(child, depth + 1, childLeft, node.id)
@@ -162,6 +110,7 @@ const layout = computed<LayoutNode[]>(() => {
     }
 
     let left = pad
+
     for (const root of nodes.value) {
         const leaves = countLeaves(root)
         place(root, 0, left, null)
@@ -177,6 +126,7 @@ const canvasH = computed(() => layout.value.reduce((m, n) => Math.max(m, n.y + N
 
 const edges = computed<Edge[]>(() => {
     const byId = new Map(layout.value.map((n) => [n.data.id, n]))
+
     return layout.value
         .filter((n) => n.parentId !== null)
         .map((n) => {

@@ -49,8 +49,53 @@ export function setupComposableRegistry() {
         emit('composable:update', updated)
     }
 
+    function safeValue(val: unknown): unknown {
+        if (val === undefined || val === null) {
+            return val
+        }
+
+        if (typeof val === 'function') {
+            return undefined
+        }
+
+        if (typeof val === 'object') {
+            try {
+                return JSON.parse(JSON.stringify(val))
+            } catch {
+                return String(val)
+            }
+        }
+
+        return val
+    }
+
+    function sanitize(entry: ComposableEntry): ComposableEntry {
+        return {
+            id: entry.id,
+            name: entry.name,
+            componentFile: entry.componentFile,
+            componentUid: entry.componentUid,
+            status: entry.status,
+            leak: entry.leak,
+            leakReason: entry.leakReason,
+            refs: Object.fromEntries(
+                Object.entries(entry.refs).map(([k, v]) => [
+                    k,
+                    {
+                        type: v.type,
+                        value: safeValue(typeof v.value === 'object' && v.value !== null && 'value' in v.value ? v.value.value : v.value),
+                    },
+                ])
+            ),
+            watcherCount: entry.watcherCount,
+            intervalCount: entry.intervalCount,
+            lifecycle: entry.lifecycle,
+            file: entry.file,
+            line: entry.line,
+        }
+    }
     function getAll(): ComposableEntry[] {
-        return [...entries.value.values()]
+        return [...entries.value.values()].map(sanitize)
     }
 
     function emit(event: string, data: unknown) {

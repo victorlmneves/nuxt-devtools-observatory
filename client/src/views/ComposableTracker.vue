@@ -1,133 +1,57 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, type Ref } from 'vue'
+import { useObservatoryData } from '../stores/observatory'
 
-interface RefEntry {
-    key: string
-    type: string
-    val: string
-}
 interface ComposableEntry {
     id: string
     name: string
     component: string
     instances: number
-    status: 'mounted' | 'unmounted'
+    status: string
     leak: boolean
     leakReason?: string
-    refs: RefEntry[]
+    refs: Array<{ key: string; type: string; val: string }>
     watchers: number
     intervals: number
-    lifecycle: { onMounted: boolean; onUnmounted: boolean; watchersCleaned: boolean; intervalsCleaned: boolean }
+    lifecycle: {
+        onMounted: boolean
+        onUnmounted: boolean
+        watchersCleaned: boolean
+        intervalsCleaned: boolean
+    }
 }
 
-const entries = ref<ComposableEntry[]>([
-    {
-        id: '1',
-        name: 'useAuth',
-        component: 'App.vue',
-        instances: 1,
-        status: 'mounted',
-        leak: false,
-        refs: [
-            { key: 'user', type: 'ref', val: '{ id: "u_9x3k", role: "admin" }' },
-            { key: 'isLoggedIn', type: 'computed', val: 'true' },
-        ],
-        watchers: 1,
-        intervals: 0,
-        lifecycle: { onMounted: true, onUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
-    },
-    {
-        id: '2',
-        name: 'useWebSocket',
-        component: 'Dashboard.vue',
-        instances: 1,
-        status: 'unmounted',
-        leak: true,
-        leakReason: 'socket.close() never called — 2 watchers still running after unmount',
-        refs: [
-            { key: 'socket', type: 'ref', val: 'WebSocket { readyState: 1 }' },
-            { key: 'messages', type: 'ref', val: 'Array(47)' },
-        ],
-        watchers: 2,
-        intervals: 0,
-        lifecycle: { onMounted: true, onUnmounted: false, watchersCleaned: false, intervalsCleaned: true },
-    },
-    {
-        id: '3',
-        name: 'usePoller',
-        component: 'StockTicker.vue',
-        instances: 2,
-        status: 'unmounted',
-        leak: true,
-        leakReason: 'setInterval #37 never cleared — still firing every 2000ms',
-        refs: [
-            { key: 'data', type: 'ref', val: '{ price: 142.5 }' },
-            { key: 'intervalId', type: 'ref', val: '37' },
-        ],
-        watchers: 0,
-        intervals: 1,
-        lifecycle: { onMounted: true, onUnmounted: false, watchersCleaned: true, intervalsCleaned: false },
-    },
-    {
-        id: '4',
-        name: 'useCart',
-        component: 'CartDrawer.vue',
-        instances: 1,
-        status: 'mounted',
-        leak: false,
-        refs: [
-            { key: 'items', type: 'ref', val: 'Array(3)' },
-            { key: 'total', type: 'computed', val: '248.50' },
-        ],
-        watchers: 0,
-        intervals: 0,
-        lifecycle: { onMounted: false, onUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
-    },
-    {
-        id: '5',
-        name: 'useBreakpoint',
-        component: 'Layout.vue',
-        instances: 1,
-        status: 'mounted',
-        leak: false,
-        refs: [
-            { key: 'isMobile', type: 'computed', val: 'false' },
-            { key: 'width', type: 'ref', val: '1280' },
-        ],
-        watchers: 0,
-        intervals: 0,
-        lifecycle: { onMounted: true, onUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
-    },
-    {
-        id: '6',
-        name: 'useIntersectionObserver',
-        component: 'LazyImage.vue',
-        instances: 4,
-        status: 'mounted',
-        leak: false,
-        refs: [{ key: 'isVisible', type: 'ref', val: 'true' }],
-        watchers: 0,
-        intervals: 0,
-        lifecycle: { onMounted: true, onUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
-    },
-])
+const { composables } = useObservatoryData()
+const entries = composables as Ref<ComposableEntry[]>
 
 const filter = ref('all')
 const search = ref('')
 const expanded = ref<string | null>(null)
 
-const counts = computed(() => ({
-    mounted: entries.value.filter((e) => e.status === 'mounted').length,
-    leaks: entries.value.filter((e) => e.leak).length,
-}))
+const counts = computed<{ mounted: number; leaks: number }>(() => {
+    return {
+        mounted: entries.value.filter((e) => e.status === 'mounted').length,
+        leaks: entries.value.filter((e) => e.leak).length,
+    }
+})
 
-const filtered = computed(() => {
+const filtered = computed<ComposableEntry[]>(() => {
     return entries.value.filter((e) => {
-        if (filter.value === 'leak' && !e.leak) return false
-        if (filter.value === 'unmounted' && e.status !== 'unmounted') return false
-        const q = search.value.toLowerCase()
-        if (q && !e.name.toLowerCase().includes(q) && !e.component.toLowerCase().includes(q)) return false
-        return true
+        if (filter.value === 'leak' && !e.leak) {
+            return false
+        } else {
+            if (filter.value === 'unmounted' && e.status !== 'unmounted') {
+                return false
+            } else {
+                const q = search.value.toLowerCase()
+
+                if (q && !e.name.toLowerCase().includes(q) && !e.component.toLowerCase().includes(q)) {
+                    return false
+                } else {
+                    return true
+                }
+            }
+        }
     })
 })
 

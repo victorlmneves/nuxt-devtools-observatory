@@ -191,19 +191,20 @@ export function fetchInstrumentPlugin(): Plugin {
                     return null
                 }
 
-                // Inject the shim import at the top of the file
+                // Inject the shim import at the top of the file, avoid duplicates
                 const importStatement = hasImport ? '' : `import { __devFetch } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
-
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
-                if (isVue) {
-                    const newCode = code.slice(0, scriptStart) + importStatement + output.code + code.slice(scriptStart + scriptCode.length)
+                let finalCode: string
 
-                    return { code: newCode }
+                if (isVue) {
+                    finalCode = code.slice(0, scriptStart) + importStatement + output.code + code.slice(scriptStart + scriptCode.length)
+                } else {
+                    finalCode = importStatement + output.code
                 }
 
                 return {
-                    code: importStatement + output.code,
+                    code: finalCode,
                     map: output.map,
                 }
             } catch (err) {

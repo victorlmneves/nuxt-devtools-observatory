@@ -126,13 +126,20 @@ export function provideInjectPlugin(): Plugin {
                 const importLine = `import { __devProvide, __devInject } from 'nuxt-devtools-observatory/runtime/provide-inject-registry';\n`
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
-                if (isVue) {
-                    const newCode = code.slice(0, scriptStart) + importLine + output.code + code.slice(scriptStart + scriptCode.length)
+                // Avoid duplicate imports
+                let finalCode: string
 
-                    return { code: newCode }
+                if (isVue) {
+                    finalCode =
+                        code.slice(0, scriptStart) +
+                        (scriptCode.includes('__devProvide') ? '' : importLine) +
+                        output.code +
+                        code.slice(scriptStart + scriptCode.length)
+                } else {
+                    finalCode = (scriptCode.includes('__devProvide') ? '' : importLine) + output.code
                 }
 
-                return { code: importLine + output.code, map: output.map }
+                return { code: finalCode, map: output.map }
             } catch (err) {
                 console.warn('[observatory] provide/inject transform error:', err)
 
