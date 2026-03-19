@@ -1,3 +1,5 @@
+
+import { defineNitroPlugin } from '#imports'
 // Nitro plugin: captures server-side $fetch calls and annotates
 // responses with cache status headers for the client to detect.
 
