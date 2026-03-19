@@ -46,7 +46,7 @@ export default defineNuxtModule<ModuleOptions>({
     meta: {
         name: 'nuxt-devtools-observatory',
         configKey: 'observatory',
-        compatibility: { nuxt: '^3.0.0' },
+        compatibility: { nuxt: '^3.0.0 || ^4.0.0' },
     },
 
     defaults: {
