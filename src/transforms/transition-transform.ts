@@ -108,7 +108,7 @@ export function transitionTrackerPlugin(): Plugin {
         name: 'observatory:transition-tracker',
         enforce: 'pre',
 
-        resolveId(id, importer) {
+        async resolveId(id, importer) {
             if (id !== 'vue') {
                 return
             }
@@ -117,15 +117,15 @@ export function transitionTrackerPlugin(): Plugin {
                 return
             }
 
-            // Skip node_modules — Vue itself, Nuxt internals, etc.
-            if (importer.includes('node_modules')) {
-                return
+            // Skip the proxy module itself — prevents the proxy's own `from 'vue'` imports
+            // from looping back here. In Vite 7+ we must explicitly resolve 'vue' to its
+            // real path so the virtual module can import it correctly.
+            if (importer.includes('obs:vue-proxy')) {
+                return this.resolve('vue', importer, { skipSelf: true })
             }
 
-            // Skip the proxy module itself — prevents the proxy's own `from 'vue'` imports
-            // from looping back here. vite-node may strip the \0 prefix and pass the importer
-            // as 'obs:vue-proxy' rather than '\0obs:vue-proxy', so we check with includes().
-            if (importer.includes('obs:vue-proxy')) {
+            // Skip node_modules — Vue itself, Nuxt internals, etc.
+            if (importer.includes('node_modules')) {
                 return
             }
 
