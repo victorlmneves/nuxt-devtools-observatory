@@ -41,13 +41,8 @@ export function fetchInstrumentPlugin(): Plugin {
                 return
             }
 
-            // Skip the observatory's own runtime files to prevent infinite recursion
-            if (
-                id.includes('node_modules') ||
-                id.includes('composable-registry') ||
-                id.includes('provide-inject-registry') ||
-                id.includes('fetch-registry')
-            ) {
+            // Only skip files in node_modules to avoid double-transforming dependencies
+            if (id.includes('node_modules')) {
                 return
             }
 
