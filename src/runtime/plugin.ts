@@ -30,6 +30,8 @@ export default defineNuxtPlugin(() => {
 
     // Expose registries globally so Vite transform shims can reach them
     if (import.meta.client) {
+        // Always clear any previous registry to avoid cross-project state
+        delete (window as ObservatoryWindow).__observatory__
         ;(window as ObservatoryWindow).__observatory__ = {
             fetch: fetchRegistry,
             provideInject: provideInjectRegistry,
@@ -48,15 +50,30 @@ export default defineNuxtPlugin(() => {
             }
 
             const source = event.source as Window | null
-            source?.postMessage(
-                {
-                    type: 'observatory:snapshot',
-                    data: {
-                        transitions: transitionRegistry.getAll(),
+
+            try {
+                const snapshot = {
+                    fetch: fetchRegistry.getAll(),
+                    provideInject: provideInjectRegistry.getAll(),
+                    composables: composableRegistry.getAll(),
+                    renders: renderRegistry.getAll(),
+                    transitions: transitionRegistry.getAll(),
+                }
+
+                // Serialize snapshot to guarantee structured clone compliance
+                const payload = JSON.stringify(snapshot)
+
+                source?.postMessage(
+                    {
+                        type: 'observatory:snapshot',
+                        data: payload,
                     },
-                },
-                '*'
-            )
+                    '*'
+                )
+            } catch (err) {
+                // Optionally log serialization errors
+                console.warn('Observatory snapshot serialization failed:', err)
+            }
         })
     }
 
@@ -64,6 +81,13 @@ export default defineNuxtPlugin(() => {
     nuxtApp.hook('app:mounted', () => {
         broadcastAll()
     })
+
+    // Broadcast on every route change (client-side navigation)
+    if (import.meta.client && nuxtApp.vueApp.config.globalProperties.$router) {
+        nuxtApp.vueApp.config.globalProperties.$router.afterEach(() => {
+            broadcastAll()
+        })
+    }
 
     function broadcastAll() {
         if (!import.meta.client) {

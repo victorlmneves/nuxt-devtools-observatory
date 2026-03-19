@@ -36,17 +36,13 @@ export function fetchInstrumentPlugin(): Plugin {
 
         transform(code, id) {
             const isVue = id.endsWith('.vue')
+
             if (!isVue && !id.endsWith('.ts') && !id.endsWith('.js')) {
                 return
             }
 
-            // Skip the observatory's own runtime files to prevent infinite recursion
-            if (
-                id.includes('node_modules') ||
-                id.includes('composable-registry') ||
-                id.includes('provide-inject-registry') ||
-                id.includes('fetch-registry')
-            ) {
+            // Only skip files in node_modules to avoid double-transforming dependencies
+            if (id.includes('node_modules')) {
                 return
             }
 
@@ -104,26 +100,41 @@ export function fetchInstrumentPlugin(): Plugin {
 
                         const originalName = callee.name
                         const args = path.node.arguments
-                        const urlArg = args[0] ?? t.stringLiteral('')
-                        const optsArg = args[1] ?? t.objectExpression([])
 
-                        // Extract or generate a key
+                        // Detect useAsyncData signature: (handler) or (key, handler, opts)
+                        let keyArg: t.Expression | undefined = undefined
+                        let handlerArg: t.Expression | undefined = undefined
+                        let optsArg: t.Expression | undefined = undefined
+
+                        // Helper to check if node is Expression
+                        function getExpr(node: t.Node | null | undefined): t.Expression | undefined {
+                            return t.isExpression(node) ? node : undefined
+                        }
+
+                        if (originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') {
+                            if (args.length === 1 && getExpr(args[0])) {
+                                // useAsyncData(handler)
+                                handlerArg = getExpr(args[0])
+                            } else if (args.length >= 2 && getExpr(args[0]) && getExpr(args[1])) {
+                                // useAsyncData(key, handler, opts?)
+                                keyArg = getExpr(args[0])
+                                handlerArg = getExpr(args[1])
+                                optsArg = getExpr(args[2]) ?? t.objectExpression([])
+                            } else {
+                                // If arguments are not valid Expressions, skip transform
+                                return
+                            }
+                        } else {
+                            // useFetch(url, opts?)
+                            keyArg = getExpr(args[0]) ?? t.stringLiteral('')
+                            optsArg = getExpr(args[1]) ?? t.objectExpression([])
+                        }
+
+                        // Extract or generate a key for meta
                         let key = originalName
 
-                        if (t.isObjectExpression(optsArg)) {
-                            const keyProp = optsArg.properties.find(
-                                (p: t.ObjectMethod | t.ObjectProperty | t.SpreadElement) =>
-                                    t.isObjectProperty(p) && t.isIdentifier(p.key) && (p.key as t.Identifier).name === 'key'
-                            ) as t.ObjectProperty | undefined
-
-                            if (keyProp && t.isStringLiteral(keyProp.value)) {
-                                key = keyProp.value.value
-                            } else {
-                                // Derive key from URL if it's a string literal
-                                if (t.isStringLiteral(urlArg)) {
-                                    key = urlArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
-                                }
-                            }
+                        if (keyArg && t.isStringLiteral(keyArg)) {
+                            key = keyArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
                         }
 
                         const loc = path.node.loc
@@ -134,10 +145,45 @@ export function fetchInstrumentPlugin(): Plugin {
                             t.objectProperty(t.identifier('originalFn'), t.stringLiteral(originalName)),
                         ])
 
-                        // Replace: useFetch(url, opts) → __devFetch(useFetch, url, opts, meta)
-                        path.replaceWith(t.callExpression(t.identifier('__devFetch'), [t.identifier(originalName), urlArg, optsArg, meta]))
+                        // Replace with correct signature
+                        if (originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') {
+                            if (handlerArg) {
+                                // Wrap only the handler argument
+                                const wrappedHandler = t.callExpression(t.identifier('__devFetch'), [
+                                    handlerArg,
+                                    keyArg ?? t.stringLiteral(key),
+                                    meta,
+                                ])
 
-                        modified = true
+                                if (keyArg) {
+                                    // useAsyncData(key, handler, opts?)
+                                    path.replaceWith(
+                                        t.callExpression(t.identifier(originalName), [
+                                            keyArg,
+                                            wrappedHandler,
+                                            optsArg ?? t.objectExpression([]),
+                                        ])
+                                    )
+                                } else {
+                                    // useAsyncData(handler)
+                                    path.replaceWith(t.callExpression(t.identifier(originalName), [wrappedHandler]))
+                                }
+
+                                modified = true
+                            }
+                        } else {
+                            // useFetch(url, opts?)
+                            path.replaceWith(
+                                t.callExpression(t.identifier('__devFetch'), [
+                                    t.identifier(originalName),
+                                    keyArg ?? t.stringLiteral(''),
+                                    optsArg ?? t.objectExpression([]),
+                                    meta,
+                                ])
+                            )
+
+                            modified = true
+                        }
                     },
                 })
 
@@ -145,19 +191,20 @@ export function fetchInstrumentPlugin(): Plugin {
                     return null
                 }
 
-                // Inject the shim import at the top of the file
+                // Inject the shim import at the top of the file, avoid duplicates
                 const importStatement = hasImport ? '' : `import { __devFetch } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
-
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
-                if (isVue) {
-                    const newCode = code.slice(0, scriptStart) + importStatement + output.code + code.slice(scriptStart + scriptCode.length)
+                let finalCode: string
 
-                    return { code: newCode }
+                if (isVue) {
+                    finalCode = code.slice(0, scriptStart) + importStatement + output.code + code.slice(scriptStart + scriptCode.length)
+                } else {
+                    finalCode = importStatement + output.code
                 }
 
                 return {
-                    code: importStatement + output.code,
+                    code: finalCode,
                     map: output.map,
                 }
             } catch (err) {

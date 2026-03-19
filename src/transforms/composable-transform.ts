@@ -171,13 +171,20 @@ export function composableTrackerPlugin(): Plugin {
                 const importLine = `import { __trackComposable } from 'nuxt-devtools-observatory/runtime/composable-registry';\n`
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
-                if (isVue) {
-                    const newCode = code.slice(0, scriptStart) + importLine + output.code + code.slice(scriptStart + scriptCode.length)
+                // Avoid duplicate imports
+                let finalCode: string
 
-                    return { code: newCode }
+                if (isVue) {
+                    finalCode =
+                        code.slice(0, scriptStart) +
+                        (scriptCode.includes('__trackComposable') ? '' : importLine) +
+                        output.code +
+                        code.slice(scriptStart + scriptCode.length)
+                } else {
+                    finalCode = (scriptCode.includes('__trackComposable') ? '' : importLine) + output.code
                 }
 
-                return { code: importLine + output.code, map: output.map }
+                return { code: finalCode, map: output.map }
             } catch (err) {
                 console.warn('[observatory] composable transform error:', err)
 

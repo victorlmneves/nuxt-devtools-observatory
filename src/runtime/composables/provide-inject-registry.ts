@@ -40,8 +40,56 @@ export function setupProvideInjectRegistry() {
         emit('inject:register', entry)
     }
 
+    function safeValue(val: unknown): unknown {
+        if (val === undefined || val === null) {
+            return val
+        }
+
+        if (typeof val === 'function') {
+            return undefined
+        }
+
+        if (typeof val === 'object') {
+            try {
+                return JSON.parse(JSON.stringify(val))
+            } catch {
+                return String(val)
+            }
+        }
+
+        return val
+    }
+
+    function sanitizeProvide(entry: ProvideEntry): ProvideEntry {
+        return {
+            key: entry.key,
+            componentName: entry.componentName,
+            componentFile: entry.componentFile,
+            componentUid: entry.componentUid,
+            isReactive: entry.isReactive,
+            valueSnapshot: safeValue(entry.valueSnapshot),
+            line: entry.line,
+        }
+    }
+
+    function sanitizeInject(entry: InjectEntry): InjectEntry {
+        return {
+            key: entry.key,
+            componentName: entry.componentName,
+            componentFile: entry.componentFile,
+            componentUid: entry.componentUid,
+            resolved: entry.resolved,
+            resolvedFromFile: entry.resolvedFromFile,
+            resolvedFromUid: entry.resolvedFromUid,
+            line: entry.line,
+        }
+    }
+
     function getAll() {
-        return { provides: provides.value, injects: injects.value }
+        return {
+            provides: provides.value.map(sanitizeProvide),
+            injects: injects.value.map(sanitizeInject),
+        }
     }
 
     function emit(event: string, data: unknown) {
@@ -58,7 +106,6 @@ export function setupProvideInjectRegistry() {
 }
 
 // ── Dev shims called by Vite transform ────────────────────────────────────
-
 export function __devProvide(key: string | symbol, value: unknown, meta: { file: string; line: number }) {
     provide(key, value)
 

@@ -61,7 +61,7 @@ const timelineGeometry = computed(() => {
     }))
 })
 
-function phaseColor(phase: TransitionEntry['phase'], direction: TransitionEntry['direction']): string {
+function phaseColor(phase: TransitionEntry['phase']): string {
     if (phase === 'entering' || phase === 'leaving') {
         return '#7f77dd'
     }
@@ -204,7 +204,7 @@ function directionColor(e: TransitionEntry): string {
                                         :style="{
                                             left: timelineGeometry[i]?.left + '%',
                                             width: Math.max(timelineGeometry[i]?.width ?? 1, 1) + '%',
-                                            background: phaseColor(entry.phase, entry.direction),
+                                            background: phaseColor(entry.phase),
                                             opacity: entry.phase === 'entering' || entry.phase === 'leaving' ? '0.55' : '1',
                                         }"
                                     />
@@ -267,7 +267,13 @@ function directionColor(e: TransitionEntry): string {
                         <div class="panel-row">
                             <span class="panel-key">Duration</span>
                             <span class="panel-val mono" style="font-weight: 500">
-                                {{ selected.durationMs !== undefined ? selected.durationMs + 'ms' : selected.phase === 'interrupted' ? 'interrupted' : 'in progress' }}
+                                {{
+                                    selected.durationMs !== undefined
+                                        ? selected.durationMs + 'ms'
+                                        : selected.phase === 'interrupted'
+                                          ? 'interrupted'
+                                          : 'in progress'
+                                }}
                             </span>
                         </div>
                     </div>

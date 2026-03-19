@@ -1,7 +1,7 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.5",
-    "description": "Vue/Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
+    "version": "0.1.6",
+    "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "type": "module",
     "main": "./dist/module.mjs",
     "module": "./dist/module.mjs",

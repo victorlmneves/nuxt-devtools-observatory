@@ -66,7 +66,9 @@ async function startAndInterrupt() {
 
 <style scoped>
 .slow-enter-enter-active {
-    transition: opacity 1.5s ease, transform 1.5s ease;
+    transition:
+        opacity 1.5s ease,
+        transform 1.5s ease;
 }
 
 .slow-enter-enter-from {

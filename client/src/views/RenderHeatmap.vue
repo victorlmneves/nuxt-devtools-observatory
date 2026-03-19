@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, defineComponent, h, onUnmounted, type VNode } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
+import ComponentBlock from './ComponentBlock.vue'
+import { useObservatoryData } from '../stores/observatory'
 
 interface ComponentNode {
     id: string
@@ -11,212 +13,16 @@ interface ComponentNode {
     children: ComponentNode[]
 }
 
-// ComponentBlock — recursive inline component
-const ComponentBlock = defineComponent({
-    name: 'ComponentBlock',
-    props: {
-        node: Object as () => ComponentNode,
-        mode: String,
-        threshold: Number,
-        hotOnly: Boolean,
-        selected: String,
-    },
-    emits: ['select'],
-    setup(props, { emit }): () => VNode | null {
-        function getVal(n: ComponentNode) {
-            return props.mode === 'count' ? n.renders : n.avgMs
-        }
+const { renders } = useObservatoryData()
+const baseNodes = renders
 
-        function getMax(): number {
-            let max = 1
-
-            function walk(ns: ComponentNode[]) {
-                ns.forEach((n) => {
-                    const v = getVal(n)
-
-                    if (v > max) {
-                        max = v
-                    }
-
-                    walk(n.children)
-                })
-            }
-
-            walk([props.node!])
-
-            return Math.max(max, props.mode === 'count' ? 40 : 20)
-        }
-        function heatColor(val: number, max: number) {
-            const r = Math.min(val / max, 1)
-
-            if (r < 0.25) {
-                return { bg: '#EAF3DE', text: '#27500A', border: '#97C459' }
-            }
-
-            if (r < 0.55) {
-                return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
-            }
-
-            if (r < 0.8) {
-                return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
-            }
-
-            return { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' }
-        }
-        function isHot(n: ComponentNode) {
-            return (props.mode === 'count' ? n.renders : n.avgMs) >= props.threshold!
-        }
-
-        return () => {
-            const n = props.node!
-
-            if (props.hotOnly && !isHot(n) && !n.children.some((c) => (props.mode === 'count' ? c.renders : c.avgMs) >= props.threshold!)) {
-                return null
-            }
-
-            const max = getMax()
-            const val = getVal(n)
-            const col = heatColor(val, max)
-            const isSel = props.selected === n.id
-            const unit = props.mode === 'count' ? 'renders' : 'ms avg'
-            const valStr = props.mode === 'count' ? String(val) : val.toFixed(1) + 'ms'
-
-            return h(
-                'div',
-                {
-                    style: {
-                        background: col.bg,
-                        border: isSel ? `2px solid ${col.border}` : `1px solid ${col.border}`,
-                        borderRadius: '6px',
-                        padding: '6px 9px',
-                        marginBottom: '5px',
-                        cursor: 'pointer',
-                    },
-                    onClick: () => emit('select', n),
-                },
-                [
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
-                        h('span', { style: { fontFamily: 'var(--mono)', fontSize: '11px', fontWeight: '500', color: col.text } }, n.label),
-                        h(
-                            'span',
-                            { style: { fontFamily: 'var(--mono)', fontSize: '10px', color: col.text, opacity: '0.7', marginLeft: 'auto' } },
-                            `${valStr} ${unit}`
-                        ),
-                    ]),
-                    n.children.length
-                        ? h(
-                              'div',
-                              {
-                                  style: {
-                                      marginLeft: '10px',
-                                      borderLeft: `1.5px solid ${col.border}40`,
-                                      paddingLeft: '8px',
-                                      marginTop: '5px',
-                                  },
-                              },
-                              n.children.map((child) =>
-                                  h(ComponentBlock, {
-                                      node: child,
-                                      mode: props.mode,
-                                      threshold: props.threshold,
-                                      hotOnly: props.hotOnly,
-                                      selected: props.selected,
-                                      onSelect: (v: ComponentNode) => emit('select', v),
-                                  })
-                              )
-                          )
-                        : null,
-                ]
-            )
-        }
-    },
-})
-
-// Mock data
-const baseNodes = ref<ComponentNode[]>([
-    {
-        id: 'NavBar',
-        label: 'NavBar.vue',
-        file: 'components/NavBar.vue',
-        renders: 3,
-        avgMs: 1.2,
-        triggers: ['props.user changed'],
-        children: [],
-    },
-    {
-        id: 'Sidebar',
-        label: 'Sidebar.vue',
-        file: 'components/Sidebar.vue',
-        renders: 2,
-        avgMs: 0.8,
-        triggers: ['parent re-render'],
-        children: [],
-    },
-    {
-        id: 'ProductGrid',
-        label: 'ProductGrid.vue',
-        file: 'components/ProductGrid.vue',
-        renders: 18,
-        avgMs: 14.3,
-        triggers: ['store: products updated', 'props.filter changed', 'parent re-render (×16)'],
-        children: [
-            {
-                id: 'ProductCard',
-                label: 'ProductCard.vue ×12',
-                file: 'components/ProductCard.vue',
-                renders: 24,
-                avgMs: 3.1,
-                triggers: ['parent re-render (×24)'],
-                children: [],
-            },
-            {
-                id: 'PriceTag',
-                label: 'PriceTag.vue ×12',
-                file: 'components/PriceTag.vue',
-                renders: 36,
-                avgMs: 0.4,
-                triggers: ['props.price changed (×36)'],
-                children: [],
-            },
-        ],
-    },
-    {
-        id: 'CartSummary',
-        label: 'CartSummary.vue',
-        file: 'components/CartSummary.vue',
-        renders: 9,
-        avgMs: 5.7,
-        triggers: ['store: cart updated (×9)'],
-        children: [
-            {
-                id: 'CartItem',
-                label: 'CartItem.vue ×3',
-                file: 'components/CartItem.vue',
-                renders: 12,
-                avgMs: 1.8,
-                triggers: ['parent re-render (×12)'],
-                children: [],
-            },
-        ],
-    },
-    {
-        id: 'FilterBar',
-        label: 'FilterBar.vue',
-        file: 'components/FilterBar.vue',
-        renders: 7,
-        avgMs: 2.1,
-        triggers: ['store: filters changed (×7)'],
-        children: [],
-    },
-    { id: 'Footer', label: 'Footer.vue', file: 'components/Footer.vue', renders: 1, avgMs: 0.3, triggers: ['initial mount'], children: [] },
-])
+let liveInterval: ReturnType<typeof setInterval> | undefined
 
 const activeMode = ref<'count' | 'time'>('count')
 const activeThreshold = ref(5)
 const activeHotOnly = ref(false)
 const frozen = ref(false)
 const activeSelected = ref<ComponentNode | null>(null)
-let liveInterval: ReturnType<typeof setInterval> | null = null
 
 const rootNodes = computed(() => baseNodes.value)
 
@@ -251,6 +57,10 @@ function isHot(n: ComponentNode) {
     return (activeMode.value === 'count' ? n.renders : n.avgMs) >= activeThreshold.value
 }
 
+function toggleFreeze() {
+    frozen.value = !frozen.value
+}
+
 function startLive() {
     liveInterval = setInterval(() => {
         if (frozen.value) {
@@ -263,13 +73,11 @@ function startLive() {
     }, 1800)
 }
 
-function toggleFreeze() {
-    frozen.value = !frozen.value
-}
-
 startLive()
 onUnmounted(() => {
-    if (liveInterval) clearInterval(liveInterval)
+    if (liveInterval) {
+        clearInterval(liveInterval)
+    }
 })
 </script>
 
