@@ -226,6 +226,7 @@ function lifecycleRows(entry: ComposableViewEntry) {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-height: 0;
 }
 
 .comp-card {
@@ -234,6 +235,7 @@ function lifecycleRows(entry: ComposableViewEntry) {
     border-radius: var(--radius-lg);
     overflow: hidden;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .comp-card:hover {
@@ -254,6 +256,7 @@ function lifecycleRows(entry: ComposableViewEntry) {
     align-items: center;
     gap: 8px;
     padding: 9px 13px;
+    min-height: 44px;
 }
 
 .comp-meta {
