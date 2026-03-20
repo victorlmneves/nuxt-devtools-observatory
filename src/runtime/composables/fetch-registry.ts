@@ -34,6 +34,12 @@ interface FetchOptions {
     [key: string]: unknown
 }
 
+interface FetchMeta {
+    key: string
+    file: string
+    line: number
+}
+
 /**
  * Sets up the fetch registry, which tracks all fetch requests and their
  * associated metadata (e.g. duration, size, origin).
@@ -80,14 +86,70 @@ export function setupFetchRegistry() {
     return { register, update, getAll, clear, entries: readonly(entries) }
 }
 
-// ── Dev shim called by the Vite transform ─────────────────────────────────
-// This function is injected at call sites: __devFetch(url, opts, meta)
-export function __devFetch(
+// ── Dev shims called by the Vite transform ────────────────────────────────
+export function __devFetchHandler(
+    handler: (...args: unknown[]) => unknown,
+    key: unknown,
+    meta: FetchMeta
+): (...args: unknown[]) => Promise<unknown> {
+    if (!import.meta.dev || !import.meta.client) {
+        return (...args: unknown[]) => Promise.resolve(handler(...args))
+    }
+
+    const registry = (window as ObservatoryWindow).__observatory__?.fetch
+
+    if (!registry) {
+        return (...args: unknown[]) => Promise.resolve(handler(...args))
+    }
+
+    const normalizedKey = typeof key === 'string' ? key : 'useAsyncData'
+
+    return (...args: unknown[]) => {
+        const id = `${normalizedKey}::${Date.now()}`
+        const startTime = performance.now()
+
+        registry.register({
+            id,
+            key: normalizedKey,
+            url: normalizedKey,
+            status: 'pending',
+            origin: 'csr',
+            startTime,
+            cached: false,
+            file: meta.file,
+            line: meta.line,
+        })
+
+        return Promise.resolve(handler(...args))
+            .then((result) => {
+                registry.update(id, {
+                    status: 'ok',
+                    endTime: performance.now(),
+                    ms: Math.round(performance.now() - startTime),
+                    payload: result,
+                })
+
+                return result
+            })
+            .catch((error: unknown) => {
+                registry.update(id, {
+                    status: 'error',
+                    endTime: performance.now(),
+                    ms: Math.round(performance.now() - startTime),
+                    error,
+                })
+
+                throw error
+            })
+    }
+}
+
+export function __devFetchCall(
     originalFn: (url: string, opts: FetchOptions) => Promise<unknown>,
     url: string,
     opts: FetchOptions,
-    meta: { key: string; file: string; line: number }
-) {
+    meta: FetchMeta
+): Promise<unknown> {
     if (!import.meta.dev || !import.meta.client) {
         return originalFn(url, opts)
     }

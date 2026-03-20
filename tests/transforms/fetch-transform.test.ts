@@ -13,29 +13,40 @@ describe('fetchInstrumentPlugin', () => {
             const result = transform(`const { data } = useFetch('/api/users')`)
 
             expect(result).not.toBeNull()
-            expect(result!.code).toContain('__devFetch(useFetch,')
+            expect(result!.code).toContain('__devFetchCall(useFetch,')
             expect(result!.code).toContain("'/api/users'")
         })
 
         it('transforms all four target functions', () => {
-            for (const fn of ['useFetch', 'useAsyncData', 'useLazyFetch', 'useLazyAsyncData']) {
-                const result = transform(`${fn}('/api/test')`)
+            const fetchResult = transform(`useFetch('/api/test')`)
+            const lazyFetchResult = transform(`useLazyFetch('/api/test')`)
+            const asyncDataResult = transform(`useAsyncData('/api/test')`)
+            const lazyAsyncDataResult = transform(`useLazyAsyncData('/api/test')`)
 
-                expect(result).not.toBeNull()
-                expect(result!.code).toContain(`__devFetch(${fn},`)
-            }
+            expect(fetchResult).not.toBeNull()
+            expect(fetchResult!.code).toContain('__devFetchCall(useFetch,')
+            expect(lazyFetchResult!.code).toContain('__devFetchCall(useLazyFetch,')
+            expect(asyncDataResult!.code).toContain('__devFetchCall(useAsyncData,')
+            expect(lazyAsyncDataResult!.code).toContain('__devFetchCall(useLazyAsyncData,')
         })
 
-        it('injects the __devFetch import statement', () => {
+        it('injects only the fetch-call helper import for useFetch', () => {
             const result = transform(`useFetch('/api/test')`)
 
-            expect(result!.code).toContain("import { __devFetch } from 'nuxt-devtools-observatory/runtime/fetch-registry'")
+            expect(result!.code).toContain("import { __devFetchCall } from 'nuxt-devtools-observatory/runtime/fetch-registry'")
+            expect(result!.code).not.toContain('__devFetchHandler')
         })
 
-        it('does not duplicate the import when __devFetch is already present in the source', () => {
-            const code = `import { __devFetch } from 'nuxt-devtools-observatory/runtime/fetch-registry';\nuseFetch('/api/test')`
+        it('injects the handler helper import for wrapped async-data handlers', () => {
+            const result = transform(`useAsyncData(() => $fetch('/api/test'))`)
+
+            expect(result!.code).toContain("import { __devFetchHandler } from 'nuxt-devtools-observatory/runtime/fetch-registry'")
+        })
+
+        it('does not duplicate the import when both helpers are already present in the source', () => {
+            const code = `import { __devFetchCall, __devFetchHandler } from 'nuxt-devtools-observatory/runtime/fetch-registry';\nuseFetch('/api/test')`
             const result = transform(code)
-            const count = (result!.code.match(/import.*__devFetch/g) ?? []).length
+            const count = (result!.code.match(/import.*__devFetch(Call|Handler)/g) ?? []).length
 
             expect(count).toBe(1)
         })
@@ -92,13 +103,13 @@ describe('fetchInstrumentPlugin', () => {
     describe('idempotency guard', () => {
         it('does not double-wrap a useFetch call that is already an arg inside __devFetch', () => {
             // Simulate an edge case where useFetch('/api') appears as a child call inside __devFetch
-            const code = `__devFetch(useFetch('/api/test'), {}, meta)`
+            const code = `__devFetchCall(useFetch('/api/test'), {}, meta)`
             const result = transform(code)
             // Transformation should return null (nothing modified) since the only
-            // useFetch call is inside __devFetch's arguments and the parent guard fires
+            // useFetch call is inside a helper's arguments and the parent guard fires
             const finalCode = result?.code ?? code
 
-            expect(finalCode).not.toMatch(/__devFetch\(.*__devFetch/)
+            expect(finalCode).not.toMatch(/__devFetch(Call|Handler)\(.*__devFetch(Call|Handler)/)
         })
 
         it('is idempotent — running the transform twice produces no double-wrapping', () => {
@@ -111,7 +122,7 @@ describe('fetchInstrumentPlugin', () => {
             const second = transform(first!.code)
 
             // No useFetch(...) call expression exists after the first pass, so nothing new to wrap
-            expect(second?.code ?? first!.code).not.toMatch(/__devFetch\(.*__devFetch/)
+            expect(second?.code ?? first!.code).not.toMatch(/__devFetch(Call|Handler)\(.*__devFetch(Call|Handler)/)
         })
     })
 
@@ -157,7 +168,7 @@ describe('fetchInstrumentPlugin', () => {
             const result = transform(sfc, '/project/src/pages/Index.vue')
 
             expect(result).not.toBeNull()
-            expect(result!.code).toContain('__devFetch(useFetch,')
+            expect(result!.code).toContain('__devFetchCall(useFetch,')
         })
 
         it('preserves the <template> block content unchanged', () => {
@@ -187,7 +198,7 @@ describe('fetchInstrumentPlugin', () => {
             const result = transform(sfc, '/project/src/Page.vue')
 
             expect(result).not.toBeNull()
-            expect(result!.code).toContain('__devFetch(useFetch,')
+            expect(result!.code).toContain('__devFetchCall(useFetch,')
         })
     })
 })

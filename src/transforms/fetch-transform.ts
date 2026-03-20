@@ -11,6 +11,12 @@ const generate = (_generate as typeof _generate & { default?: typeof _generate }
 
 const FETCH_FNS = new Set(['useFetch', 'useAsyncData', 'useLazyFetch', 'useLazyAsyncData'])
 
+type ObservableCallExpression = t.CallExpression & { __observatoryTransformed?: boolean }
+
+function isHandlerExpression(node: t.Expression | undefined): node is t.Expression {
+    return Boolean(node && (t.isIdentifier(node) || t.isArrowFunctionExpression(node) || t.isFunctionExpression(node)))
+}
+
 export function fetchInstrumentPlugin(): Plugin {
     return {
         name: 'vite-plugin-observatory-fetch',
@@ -23,8 +29,13 @@ export function fetchInstrumentPlugin(): Plugin {
                 return
             }
 
-            // Only skip files in node_modules to avoid double-transforming dependencies
-            if (id.includes('node_modules')) {
+            // Skip the observatory's own runtime files to prevent infinite recursion
+            if (
+                id.includes('node_modules') ||
+                id.includes('composable-registry') ||
+                id.includes('provide-inject-registry') ||
+                id.includes('fetch-registry')
+            ) {
                 return
             }
 
@@ -55,11 +66,19 @@ export function fetchInstrumentPlugin(): Plugin {
                 })
 
                 let modified = false
-                // Inject import at top if not present
-                const hasImport = scriptCode.includes('__devFetch')
+                let needsFetchCallHelper = false
+                let needsFetchHandlerHelper = false
+
+                // Inject imports at top if not present
+                const hasFetchCallImport = scriptCode.includes('__devFetchCall')
+                const hasFetchHandlerImport = scriptCode.includes('__devFetchHandler')
 
                 traverse(ast, {
                     CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
+                        if ((path.node as ObservableCallExpression).__observatoryTransformed) {
+                            return
+                        }
+
                         const callee = path.node.callee
 
                         if (!t.isIdentifier(callee)) {
@@ -75,7 +94,7 @@ export function fetchInstrumentPlugin(): Plugin {
                             path.parent &&
                             t.isCallExpression(path.parent) &&
                             t.isIdentifier(path.parent.callee) &&
-                            path.parent.callee.name === '__devFetch'
+                            ['__devFetchCall', '__devFetchHandler'].includes(path.parent.callee.name)
                         ) {
                             return
                         }
@@ -94,17 +113,19 @@ export function fetchInstrumentPlugin(): Plugin {
                         }
 
                         if (originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') {
-                            if (args.length === 1 && getExpr(args[0])) {
+                            if (args.length === 1 && isHandlerExpression(getExpr(args[0]))) {
                                 // useAsyncData(handler)
                                 handlerArg = getExpr(args[0])
-                            } else if (args.length >= 2 && getExpr(args[0]) && getExpr(args[1])) {
+                            } else if (args.length >= 2 && getExpr(args[0]) && isHandlerExpression(getExpr(args[1]))) {
                                 // useAsyncData(key, handler, opts?)
                                 keyArg = getExpr(args[0])
                                 handlerArg = getExpr(args[1])
                                 optsArg = getExpr(args[2]) ?? t.objectExpression([])
                             } else {
-                                // If arguments are not valid Expressions, skip transform
-                                return
+                                // Fallback for non-standard or invalid call shapes.
+                                keyArg = getExpr(args[0]) ?? t.stringLiteral('')
+                                optsArg = getExpr(args[1]) ?? t.objectExpression([])
+                                handlerArg = undefined
                             }
                         } else {
                             // useFetch(url, opts?)
@@ -112,11 +133,26 @@ export function fetchInstrumentPlugin(): Plugin {
                             optsArg = getExpr(args[1]) ?? t.objectExpression([])
                         }
 
-                        // Extract or generate a key for meta
                         let key = originalName
 
-                        if (keyArg && t.isStringLiteral(keyArg)) {
-                            key = keyArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
+                        if (originalName === 'useFetch' || originalName === 'useLazyFetch') {
+                            if (optsArg && t.isObjectExpression(optsArg)) {
+                                const keyProp = optsArg.properties.find(
+                                    (property): property is t.ObjectProperty =>
+                                        t.isObjectProperty(property) &&
+                                        t.isIdentifier(property.key) &&
+                                        property.key.name === 'key' &&
+                                        t.isStringLiteral(property.value)
+                                )
+
+                                if (keyProp && t.isStringLiteral(keyProp.value)) {
+                                    key = keyProp.value.value
+                                } else if (keyArg && t.isStringLiteral(keyArg)) {
+                                    key = keyArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
+                                }
+                            } else if (keyArg && t.isStringLiteral(keyArg)) {
+                                key = keyArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
+                            }
                         }
 
                         const loc = path.node.loc
@@ -128,41 +164,55 @@ export function fetchInstrumentPlugin(): Plugin {
                         ])
 
                         // Replace with correct signature
-                        if (originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') {
+                        if ((originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') && handlerArg) {
                             if (handlerArg) {
-                                // Wrap only the handler argument
-                                const wrappedHandler = t.callExpression(t.identifier('__devFetch'), [
-                                    handlerArg,
-                                    keyArg ?? t.stringLiteral(key),
-                                    meta,
-                                ])
+                                const wrappedHandler = t.arrowFunctionExpression(
+                                    [t.restElement(t.identifier('args'))],
+                                    t.conditionalExpression(
+                                        t.logicalExpression(
+                                            '&&',
+                                            t.memberExpression(t.identifier('process'), t.identifier('dev')),
+                                            t.memberExpression(t.identifier('process'), t.identifier('client'))
+                                        ),
+                                        t.callExpression(
+                                            t.callExpression(t.identifier('__devFetchHandler'), [handlerArg, keyArg ?? t.stringLiteral(key), meta]),
+                                            [t.spreadElement(t.identifier('args'))]
+                                        ),
+                                        t.callExpression(handlerArg, [t.spreadElement(t.identifier('args'))])
+                                    )
+                                )
+                                ;(wrappedHandler as t.ArrowFunctionExpression & { __observatoryTransformed?: boolean }).__observatoryTransformed = true
+                                needsFetchHandlerHelper = true
 
                                 if (keyArg) {
                                     // useAsyncData(key, handler, opts?)
-                                    path.replaceWith(
-                                        t.callExpression(t.identifier(originalName), [
-                                            keyArg,
-                                            wrappedHandler,
-                                            optsArg ?? t.objectExpression([]),
-                                        ])
-                                    )
+                                    const newCall = t.callExpression(t.identifier(originalName), [
+                                        keyArg,
+                                        wrappedHandler,
+                                        optsArg ?? t.objectExpression([]),
+                                    ]) as ObservableCallExpression
+                                    newCall.__observatoryTransformed = true
+                                    path.replaceWith(newCall)
                                 } else {
                                     // useAsyncData(handler)
-                                    path.replaceWith(t.callExpression(t.identifier(originalName), [wrappedHandler]))
+                                    const newCall = t.callExpression(t.identifier(originalName), [wrappedHandler]) as ObservableCallExpression
+                                    newCall.__observatoryTransformed = true
+                                    path.replaceWith(newCall)
                                 }
 
                                 modified = true
                             }
                         } else {
-                            // useFetch(url, opts?)
-                            path.replaceWith(
-                                t.callExpression(t.identifier('__devFetch'), [
-                                    t.identifier(originalName),
-                                    keyArg ?? t.stringLiteral(''),
-                                    optsArg ?? t.objectExpression([]),
-                                    meta,
-                                ])
-                            )
+                            // useFetch(url, opts?) and async-data fallbacks
+                            const newCall = t.callExpression(t.identifier('__devFetchCall'), [
+                                t.identifier(originalName),
+                                keyArg ?? t.stringLiteral(''),
+                                optsArg ?? t.objectExpression([]),
+                                meta,
+                            ]) as ObservableCallExpression
+                            newCall.__observatoryTransformed = true
+                            needsFetchCallHelper = true
+                            path.replaceWith(newCall)
 
                             modified = true
                         }
@@ -174,7 +224,13 @@ export function fetchInstrumentPlugin(): Plugin {
                 }
 
                 // Inject the shim import at the top of the file, avoid duplicates
-                const importStatement = hasImport ? '' : `import { __devFetch } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
+                const importNames = [
+                    needsFetchCallHelper && !hasFetchCallImport ? '__devFetchCall' : '',
+                    needsFetchHandlerHelper && !hasFetchHandlerImport ? '__devFetchHandler' : '',
+                ].filter(Boolean)
+                const importStatement = importNames.length
+                    ? `import { ${importNames.join(', ')} } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
+                    : ''
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
                 let finalCode: string

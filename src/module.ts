@@ -1,4 +1,4 @@
-import { defineNuxtModule, addPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
+import { defineNuxtModule, addPlugin, addServerPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { composableTrackerPlugin } from './transforms/composable-transform'
@@ -100,10 +100,7 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Nitro plugin for SSR fetch capture ────────────────────────────────
         if (options.fetchDashboard) {
-            nuxt.hook('nitro:config', (nitroConfig) => {
-                nitroConfig.plugins = nitroConfig.plugins || []
-                nitroConfig.plugins.push(resolver.resolve('./nitro/fetch-capture'))
-            })
+            addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
         }
 
         // ── Serve the client SPA on its own Vite dev server ──────────────────

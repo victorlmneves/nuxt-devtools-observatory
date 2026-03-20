@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { setupFetchRegistry, __devFetch } from '../../src/runtime/composables/fetch-registry'
+import { setupFetchRegistry, __devFetchCall, __devFetchHandler } from '../../src/runtime/composables/fetch-registry'
 
 type ObservatoryWindow = Window & { __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> } }
 
@@ -105,13 +105,13 @@ describe('setupFetchRegistry', () => {
     })
 })
 
-describe('__devFetch', () => {
+describe('__devFetchCall', () => {
     it('registers a pending entry immediately when called', () => {
         const registry = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: registry }
 
         const mockFn = vi.fn<(url: string, opts: Record<string, unknown>) => Promise<unknown>>().mockResolvedValue({})
-        __devFetch(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
+        __devFetchCall(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const entries = registry.getAll()
 
@@ -124,7 +124,7 @@ describe('__devFetch', () => {
 
     it('passes through to originalFn when __observatory__ is not set', () => {
         const mockFn = vi.fn().mockResolvedValue('result') as (url: string, opts: Record<string, unknown>) => Promise<unknown>
-        const result = __devFetch(mockFn, '/api/test', {}, { key: 'test', file: 'F.ts', line: 1 })
+        const result = __devFetchCall(mockFn, '/api/test', {}, { key: 'test', file: 'F.ts', line: 1 })
 
         expect(mockFn).toHaveBeenCalledWith('/api/test', expect.any(Object))
         expect(result).toBeDefined()
@@ -141,7 +141,7 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(
+        __devFetchCall(
             mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
             '/api/users',
             {},
@@ -172,7 +172,7 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(
+        __devFetchCall(
             mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
             '/api/users',
             {},
@@ -198,7 +198,7 @@ describe('__devFetch', () => {
         }
 
         const mockFn = vi.fn().mockResolvedValue({})
-        __devFetch(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
+        __devFetchCall(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const [entry] = registry.getAll()
         expect(entry.status).toBe('cached')
@@ -218,7 +218,7 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(
+        __devFetchCall(
             mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
             '/api/product',
             {},
@@ -245,7 +245,7 @@ describe('__devFetch', () => {
             return Promise.reject(new Error('500'))
         })
 
-        __devFetch(
+        __devFetchCall(
             mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
             '/api/broken',
             {},
@@ -271,7 +271,7 @@ describe('__devFetch', () => {
             return Promise.resolve({})
         })
 
-        __devFetch(
+        __devFetchCall(
             mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
             '/api/users',
             { onResponse: originalOnResponse },
@@ -282,5 +282,28 @@ describe('__devFetch', () => {
         ;(capturedOpts.onResponse as (ctx: unknown) => void)(ctx)
 
         expect(originalOnResponse).toHaveBeenCalledWith(ctx)
+    })
+})
+
+describe('__devFetchHandler', () => {
+    it('wraps an async-data handler and records the resolved payload', async () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+        const wrapped = __devFetchHandler(() => ({ ok: true }), 'users', { key: 'users', file: 'Page.ts', line: 3 })
+
+        await expect(wrapped()).resolves.toEqual({ ok: true })
+
+        const [entry] = registry.getAll()
+        expect(entry.key).toBe('users')
+        expect(entry.status).toBe('ok')
+        expect(entry.payload).toEqual({ ok: true })
+    })
+
+    it('passes through without registry in client dev mode', async () => {
+        const handler = vi.fn().mockResolvedValue('value')
+        const wrapped = __devFetchHandler(handler, 'users', { key: 'users', file: 'Page.ts', line: 3 })
+
+        await expect(wrapped('arg')).resolves.toBe('value')
+        expect(handler).toHaveBeenCalledWith('arg')
     })
 })

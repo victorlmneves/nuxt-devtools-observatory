@@ -8,23 +8,17 @@ vi.mock('h3', () => ({
     setResponseHeader,
 }))
 
-// defineNitroPlugin must be on globalThis before the module is imported,
-// so we use a dynamic import inside beforeAll.
 beforeAll(async () => {
-    ;(globalThis as Record<string, unknown>).defineNitroPlugin = (
-        fn: (app: { hooks: { hook: (name: string, handler: unknown) => void } }) => void
-    ) => {
-        fn({
-            hooks: {
-                hook(name: string, handler: unknown) {
-                    if (name === 'request') requestHook = handler as typeof requestHook
-                    if (name === 'afterResponse') afterResponseHook = handler as typeof afterResponseHook
-                },
-            },
-        })
-    }
+    const mod = await import('../../src/runtime/nitro/fetch-capture')
 
-    await import('../../src/nitro/fetch-capture')
+    mod.default({
+        hooks: {
+            hook(name: string, handler: unknown) {
+                if (name === 'request') requestHook = handler as typeof requestHook
+                if (name === 'afterResponse') afterResponseHook = handler as typeof afterResponseHook
+            },
+        },
+    })
 })
 
 describe('fetch-capture nitro plugin', () => {
