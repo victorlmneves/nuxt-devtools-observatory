@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { createApp, defineComponent, h, ref } from 'vue'
+import { createApp, defineComponent, h, ref, watch } from 'vue'
 import { setupComposableRegistry, __trackComposable } from '../../src/runtime/composables/composable-registry'
 
 type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
@@ -303,5 +303,35 @@ describe('__trackComposable', () => {
         app.unmount()
 
         expect(reg.getAll()[0].intervalCount).toBe(2)
+    })
+
+    it('tracks watchers created during setup and marks them cleaned on unmount', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable(
+                    'useWatched',
+                    () => {
+                        const count = ref(0)
+                        watch(count, () => {})
+                        return { count }
+                    },
+                    { file: 'Watch.ts', line: 1 }
+                )
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()[0].watcherCount).toBe(1)
+
+        app.unmount()
+
+        expect(reg.getAll()[0].lifecycle.watchersCleaned).toBe(true)
+        expect(reg.getAll()[0].leak).toBe(false)
     })
 })

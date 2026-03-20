@@ -28,7 +28,7 @@ function slowLeave(_el: Element, done: () => void) {
     }, 1200)
 }
 
-function onLeaveCancelled(_el: Element) {
+function onLeaveCancelled() {
     // Clean up the pending timer so we don't call done() on a dead transition
     if (leaveTimer !== null) {
         clearTimeout(leaveTimer)

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData } from '../stores/observatory'
+import { useObservatoryData, type InjectEntry, type ProvideEntry } from '../stores/observatory'
 
 interface TreeNodeData {
     id: string
@@ -31,40 +31,112 @@ const NODE_H = 32
 const V_GAP = 72
 const H_GAP = 18
 
-function nodeColor(n: TreeNodeData): string {
-    if (n.injects.some((i) => !i.ok)) {
-        return 'var(--red)'
-    }
+const { provideInject, connected } = useObservatoryData()
 
-    if (n.type === 'both') {
-        return 'var(--blue)'
-    }
-
-    if (n.type === 'provider') {
-        return 'var(--teal)'
-    }
-
+function nodeColor(node: TreeNodeData): string {
+    if (node.injects.some((entry) => !entry.ok)) return 'var(--red)'
+    if (node.type === 'both') return 'var(--blue)'
+    if (node.type === 'provider') return 'var(--teal)'
     return 'var(--text3)'
 }
 
-function matchesFilter(n: TreeNodeData, filter: string): boolean {
-    if (filter === 'all') {
-        return true
-    }
-
-    if (filter === 'warn') {
-        return n.injects.some((i) => !i.ok)
-    }
-
-    return n.provides.some((p) => p.key === filter) || n.injects.some((i) => i.key === filter)
+function matchesFilter(node: TreeNodeData, filter: string): boolean {
+    if (filter === 'all') return true
+    if (filter === 'warn') return node.injects.some((entry) => !entry.ok)
+    return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
 }
 
-function countLeaves(n: TreeNodeData): number {
-    return n.children.length === 0 ? 1 : n.children.reduce((s, c) => s + countLeaves(c), 0)
+function countLeaves(node: TreeNodeData): number {
+    return node.children.length === 0 ? 1 : node.children.reduce((sum, child) => sum + countLeaves(child), 0)
 }
 
-const { provideInject } = useObservatoryData()
-const nodes = provideInject
+function stringifyValue(value: unknown) {
+    if (typeof value === 'string') {
+        return value
+    }
+
+    try {
+        return JSON.stringify(value)
+    } catch {
+        return String(value)
+    }
+}
+
+function componentId(entry: ProvideEntry | InjectEntry) {
+    return String(entry.componentUid)
+}
+
+const nodes = computed<TreeNodeData[]>(() => {
+    const nodeMap = new Map<string, TreeNodeData>()
+    const parentMap = new Map<string, string | null>()
+
+    function ensureNode(entry: ProvideEntry | InjectEntry) {
+        const id = componentId(entry)
+        const existing = nodeMap.get(id)
+
+        if (existing) {
+            return existing
+        }
+
+        const created: TreeNodeData = {
+            id,
+            label: entry.componentFile,
+            type: 'consumer',
+            provides: [],
+            injects: [],
+            children: [],
+        }
+
+        nodeMap.set(id, created)
+        parentMap.set(id, entry.parentUid !== undefined ? String(entry.parentUid) : null)
+        return created
+    }
+
+    for (const entry of provideInject.value.provides) {
+        const node = ensureNode(entry)
+        node.provides.push({
+            key: entry.key,
+            val: stringifyValue(entry.valueSnapshot),
+            reactive: entry.isReactive,
+        })
+    }
+
+    for (const entry of provideInject.value.injects) {
+        const node = ensureNode(entry)
+        node.injects.push({
+            key: entry.key,
+            from: entry.resolvedFromFile ?? null,
+            ok: entry.resolved,
+        })
+    }
+
+    for (const node of nodeMap.values()) {
+        if (node.injects.some((entry) => !entry.ok)) {
+            node.type = 'error'
+        } else if (node.provides.length && node.injects.length) {
+            node.type = 'both'
+        } else if (node.provides.length) {
+            node.type = 'provider'
+        } else {
+            node.type = 'consumer'
+        }
+    }
+
+    const roots: TreeNodeData[] = []
+
+    for (const [id, node] of nodeMap.entries()) {
+        const parentId = parentMap.get(id)
+        const parent = parentId ? nodeMap.get(parentId) : undefined
+
+        if (parent) {
+            parent.children.push(node)
+        } else {
+            roots.push(node)
+        }
+    }
+
+    return roots
+})
 
 const activeFilter = ref('all')
 const selectedNode = ref<TreeNodeData | null>(null)
@@ -72,11 +144,11 @@ const selectedNode = ref<TreeNodeData | null>(null)
 const allKeys = computed(() => {
     const keys = new Set<string>()
 
-    function collect(ns: TreeNodeData[]) {
-        ns.forEach((n) => {
-            n.provides.forEach((p) => keys.add(p.key))
-            n.injects.forEach((i) => keys.add(i.key))
-            collect(n.children)
+    function collect(nodesToVisit: TreeNodeData[]) {
+        nodesToVisit.forEach((node) => {
+            node.provides.forEach((entry) => keys.add(entry.key))
+            node.injects.forEach((entry) => keys.add(entry.key))
+            collect(node.children)
         })
     }
 
@@ -91,21 +163,21 @@ const layout = computed<LayoutNode[]>(() => {
 
     function place(node: TreeNodeData, depth: number, slotLeft: number, parentId: string | null) {
         const leaves = countLeaves(node)
-        const slotW = leaves * (NODE_W + H_GAP) - H_GAP
+        const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
 
         flat.push({
             data: node,
             parentId,
-            x: Math.round(slotLeft + slotW / 2),
+            x: Math.round(slotLeft + slotWidth / 2),
             y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
         })
 
         let childLeft = slotLeft
 
         for (const child of node.children) {
-            const cl = countLeaves(child)
+            const childLeaves = countLeaves(child)
             place(child, depth + 1, childLeft, node.id)
-            childLeft += cl * (NODE_W + H_GAP)
+            childLeft += childLeaves * (NODE_W + H_GAP)
         }
     }
 
@@ -120,23 +192,22 @@ const layout = computed<LayoutNode[]>(() => {
     return flat
 })
 
-const canvasW = computed(() => layout.value.reduce((m, n) => Math.max(m, n.x + NODE_W / 2 + 20), 400))
-
-const canvasH = computed(() => layout.value.reduce((m, n) => Math.max(m, n.y + NODE_H / 2 + 20), 200))
+const canvasW = computed(() => layout.value.reduce((max, node) => Math.max(max, node.x + NODE_W / 2 + 20), 400))
+const canvasH = computed(() => layout.value.reduce((max, node) => Math.max(max, node.y + NODE_H / 2 + 20), 200))
 
 const edges = computed<Edge[]>(() => {
-    const byId = new Map(layout.value.map((n) => [n.data.id, n]))
+    const byId = new Map(layout.value.map((node) => [node.data.id, node]))
 
     return layout.value
-        .filter((n) => n.parentId !== null)
-        .map((n) => {
-            const p = byId.get(n.parentId!)!
+        .filter((node) => node.parentId !== null)
+        .map((node) => {
+            const parent = byId.get(node.parentId!)!
             return {
-                id: `${p.data.id}--${n.data.id}`,
-                x1: p.x,
-                y1: p.y + NODE_H / 2,
-                x2: n.x,
-                y2: n.y - NODE_H / 2,
+                id: `${parent.data.id}--${node.data.id}`,
+                x1: parent.x,
+                y1: parent.y + NODE_H / 2,
+                x2: node.x,
+                y2: node.y - NODE_H / 2,
             }
         })
 })
@@ -147,13 +218,13 @@ const edges = computed<Edge[]>(() => {
         <div class="toolbar">
             <button :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">all keys</button>
             <button
-                v-for="k in allKeys"
-                :key="k"
+                v-for="key in allKeys"
+                :key="key"
                 style="font-family: var(--mono)"
-                :class="{ active: activeFilter === k }"
-                @click="activeFilter = k"
+                :class="{ active: activeFilter === key }"
+                @click="activeFilter = key"
             >
-                {{ k }}
+                {{ key }}
             </button>
             <button style="margin-left: auto" :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = 'warn'">
                 warnings only
@@ -161,7 +232,6 @@ const edges = computed<Edge[]>(() => {
         </div>
 
         <div class="split">
-            <!-- Graph -->
             <div class="graph-area">
                 <div class="legend">
                     <span class="dot" style="background: var(--teal)"></span>
@@ -173,41 +243,40 @@ const edges = computed<Edge[]>(() => {
                     <span class="dot" style="background: var(--red)"></span>
                     <span>missing provider</span>
                 </div>
-                <div class="canvas-wrap" :style="{ width: canvasW + 'px', height: canvasH + 'px' }">
+                <div class="canvas-wrap" :style="{ width: `${canvasW}px`, height: `${canvasH}px` }">
                     <svg class="edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
                         <path
-                            v-for="e in edges"
-                            :key="e.id"
-                            :d="`M ${e.x1},${e.y1} C ${e.x1},${(e.y1 + e.y2) / 2} ${e.x2},${(e.y1 + e.y2) / 2} ${e.x2},${e.y2}`"
+                            v-for="edge in edges"
+                            :key="edge.id"
+                            :d="`M ${edge.x1},${edge.y1} C ${edge.x1},${(edge.y1 + edge.y2) / 2} ${edge.x2},${(edge.y1 + edge.y2) / 2} ${edge.x2},${edge.y2}`"
                             class="edge"
                             fill="none"
                         />
                     </svg>
                     <div
-                        v-for="ln in layout"
-                        :key="ln.data.id"
+                        v-for="layoutNode in layout"
+                        :key="layoutNode.data.id"
                         class="graph-node"
                         :class="{
-                            'is-selected': selectedNode?.id === ln.data.id,
-                            'is-dimmed': !matchesFilter(ln.data, activeFilter),
+                            'is-selected': selectedNode?.id === layoutNode.data.id,
+                            'is-dimmed': !matchesFilter(layoutNode.data, activeFilter),
                         }"
                         :style="{
-                            left: ln.x - NODE_W / 2 + 'px',
-                            top: ln.y - NODE_H / 2 + 'px',
-                            width: NODE_W + 'px',
-                            '--node-color': nodeColor(ln.data),
+                            left: `${layoutNode.x - NODE_W / 2}px`,
+                            top: `${layoutNode.y - NODE_H / 2}px`,
+                            width: `${NODE_W}px`,
+                            '--node-color': nodeColor(layoutNode.data),
                         }"
-                        @click="selectedNode = ln.data"
+                        @click="selectedNode = layoutNode.data"
                     >
-                        <span class="node-dot" :style="{ background: nodeColor(ln.data) }"></span>
-                        <span class="mono node-label">{{ ln.data.label }}</span>
-                        <span v-if="ln.data.provides.length" class="badge badge-ok badge-xs">+{{ ln.data.provides.length }}</span>
-                        <span v-if="ln.data.injects.some((i) => !i.ok)" class="badge badge-err badge-xs">!</span>
+                        <span class="node-dot" :style="{ background: nodeColor(layoutNode.data) }"></span>
+                        <span class="mono node-label">{{ layoutNode.data.label }}</span>
+                        <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">+{{ layoutNode.data.provides.length }}</span>
+                        <span v-if="layoutNode.data.injects.some((entry) => !entry.ok)" class="badge badge-err badge-xs">!</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Detail -->
             <div v-if="selectedNode" class="detail-panel">
                 <div class="detail-header">
                     <span class="mono bold" style="font-size: 12px">{{ selectedNode.label }}</span>
@@ -216,22 +285,24 @@ const edges = computed<Edge[]>(() => {
 
                 <div v-if="selectedNode.provides.length">
                     <div class="section-label">provides ({{ selectedNode.provides.length }})</div>
-                    <div v-for="p in selectedNode.provides" :key="p.key" class="provide-row">
-                        <span class="mono text-sm" style="min-width: 100px; color: var(--text2)">{{ p.key }}</span>
+                    <div v-for="entry in selectedNode.provides" :key="entry.key" class="provide-row">
+                        <span class="mono text-sm" style="min-width: 100px; color: var(--text2)">{{ entry.key }}</span>
                         <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                            {{ p.val }}
+                            {{ entry.val }}
                         </span>
-                        <span class="badge" :class="p.reactive ? 'badge-ok' : 'badge-gray'">{{ p.reactive ? 'reactive' : 'static' }}</span>
+                        <span class="badge" :class="entry.reactive ? 'badge-ok' : 'badge-gray'">
+                            {{ entry.reactive ? 'reactive' : 'static' }}
+                        </span>
                     </div>
                 </div>
 
                 <div v-if="selectedNode.injects.length" :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }">
                     <div class="section-label">injects ({{ selectedNode.injects.length }})</div>
-                    <div v-for="inj in selectedNode.injects" :key="inj.key" class="inject-row" :class="{ 'inject-miss': !inj.ok }">
-                        <span class="mono text-sm" style="min-width: 100px">{{ inj.key }}</span>
-                        <span v-if="inj.ok" class="badge badge-ok">resolved</span>
+                    <div v-for="entry in selectedNode.injects" :key="entry.key" class="inject-row" :class="{ 'inject-miss': !entry.ok }">
+                        <span class="mono text-sm" style="min-width: 100px">{{ entry.key }}</span>
+                        <span v-if="entry.ok" class="badge badge-ok">resolved</span>
                         <span v-else class="badge badge-err">no provider</span>
-                        <span class="mono muted text-sm" style="margin-left: auto">{{ inj.from ?? 'undefined' }}</span>
+                        <span class="mono muted text-sm" style="margin-left: auto">{{ entry.from ?? 'undefined' }}</span>
                     </div>
                 </div>
 
@@ -239,7 +310,9 @@ const edges = computed<Edge[]>(() => {
                     no provide/inject in this component
                 </div>
             </div>
-            <div v-else class="detail-empty">click a node to inspect</div>
+            <div v-else class="detail-empty">
+                {{ connected ? 'Click a node to inspect.' : 'Waiting for connection to the Nuxt app…' }}
+            </div>
         </div>
     </div>
 </template>

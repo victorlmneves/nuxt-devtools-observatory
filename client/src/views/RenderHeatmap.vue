@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
-import ComponentBlock from './ComponentBlock.vue'
-import { useObservatoryData } from '../stores/observatory'
+import { ref, computed, defineComponent, h, type VNode } from 'vue'
+import { useObservatoryData, type RenderEntry } from '../stores/observatory'
 
 interface ComponentNode {
     id: string
@@ -13,77 +12,226 @@ interface ComponentNode {
     children: ComponentNode[]
 }
 
-const { renders } = useObservatoryData()
-const baseNodes = renders
+const ComponentBlock = defineComponent({
+    name: 'ComponentBlock',
+    props: {
+        node: Object as () => ComponentNode,
+        mode: String,
+        threshold: Number,
+        hotOnly: Boolean,
+        selected: String,
+    },
+    emits: ['select'],
+    setup(props, { emit }): () => VNode | null {
+        function getVal(node: ComponentNode) {
+            return props.mode === 'count' ? node.renders : node.avgMs
+        }
 
-let liveInterval: ReturnType<typeof setInterval> | undefined
+        function getMax(): number {
+            let max = 1
+
+            function walk(nodes: ComponentNode[]) {
+                nodes.forEach((node) => {
+                    const value = getVal(node)
+
+                    if (value > max) {
+                        max = value
+                    }
+
+                    walk(node.children)
+                })
+            }
+
+            walk([props.node!])
+
+            return Math.max(max, props.mode === 'count' ? 40 : 20)
+        }
+
+        function heatColor(value: number, max: number) {
+            const ratio = Math.min(value / max, 1)
+
+            if (ratio < 0.25) {
+                return { bg: '#EAF3DE', text: '#27500A', border: '#97C459' }
+            }
+
+            if (ratio < 0.55) {
+                return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
+            }
+
+            if (ratio < 0.8) {
+                return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
+            }
+
+            return { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' }
+        }
+
+        function isHot(node: ComponentNode) {
+            return (props.mode === 'count' ? node.renders : node.avgMs) >= props.threshold!
+        }
+
+        return () => {
+            const node = props.node!
+
+            if (props.hotOnly && !isHot(node) && !node.children.some((child) => (props.mode === 'count' ? child.renders : child.avgMs) >= props.threshold!)) {
+                return null
+            }
+
+            const max = getMax()
+            const value = getVal(node)
+            const colors = heatColor(value, max)
+            const isSelected = props.selected === node.id
+            const unit = props.mode === 'count' ? 'renders' : 'ms avg'
+            const valueLabel = props.mode === 'count' ? String(value) : `${value.toFixed(1)}ms`
+
+            return h(
+                'div',
+                {
+                    style: {
+                        background: colors.bg,
+                        border: isSelected ? `2px solid ${colors.border}` : `1px solid ${colors.border}`,
+                        borderRadius: '6px',
+                        padding: '6px 9px',
+                        marginBottom: '5px',
+                        cursor: 'pointer',
+                    },
+                    onClick: () => emit('select', node),
+                },
+                [
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+                        h('span', { style: { fontFamily: 'var(--mono)', fontSize: '11px', fontWeight: '500', color: colors.text } }, node.label),
+                        h(
+                            'span',
+                            { style: { fontFamily: 'var(--mono)', fontSize: '10px', color: colors.text, opacity: '0.7', marginLeft: 'auto' } },
+                            `${valueLabel} ${unit}`
+                        ),
+                    ]),
+                    node.children.length
+                        ? h(
+                              'div',
+                              {
+                                  style: {
+                                      marginLeft: '10px',
+                                      borderLeft: `1.5px solid ${colors.border}40`,
+                                      paddingLeft: '8px',
+                                      marginTop: '5px',
+                                  },
+                              },
+                              node.children.map((child) =>
+                                  h(ComponentBlock, {
+                                      node: child,
+                                      mode: props.mode,
+                                      threshold: props.threshold,
+                                      hotOnly: props.hotOnly,
+                                      selected: props.selected,
+                                      onSelect: (value: ComponentNode) => emit('select', value),
+                                  })
+                              )
+                          )
+                        : null,
+                ]
+            )
+        }
+    },
+})
+
+const { renders, connected } = useObservatoryData()
 
 const activeMode = ref<'count' | 'time'>('count')
 const activeThreshold = ref(5)
 const activeHotOnly = ref(false)
 const frozen = ref(false)
-const activeSelected = ref<ComponentNode | null>(null)
+const activeSelectedId = ref<string | null>(null)
+const frozenSnapshot = ref<ComponentNode[]>([])
 
-const rootNodes = computed(() => baseNodes.value)
+function formatTrigger(trigger: RenderEntry['triggers'][number]) {
+    return `${trigger.type}: ${trigger.key}`
+}
+
+function buildNodes(entries: RenderEntry[]) {
+    const byId = new Map<string, ComponentNode>()
+
+    for (const entry of entries) {
+        byId.set(String(entry.uid), {
+            id: String(entry.uid),
+            label: entry.file.split('/').pop() ?? entry.name,
+            file: entry.file,
+            renders: entry.renders,
+            avgMs: entry.avgMs,
+            triggers: entry.triggers.map(formatTrigger),
+            children: [],
+        })
+    }
+
+    const roots: ComponentNode[] = []
+
+    for (const entry of entries) {
+        const node = byId.get(String(entry.uid))
+
+        if (!node) {
+            continue
+        }
+
+        const parent = entry.parentUid !== undefined ? byId.get(String(entry.parentUid)) : undefined
+
+        if (parent) {
+            parent.children.push(node)
+        } else {
+            roots.push(node)
+        }
+    }
+
+    return roots
+}
+
+const liveNodes = computed(() => buildNodes(renders.value))
+const rootNodes = computed(() => (frozen.value ? frozenSnapshot.value : liveNodes.value))
 
 const allComponents = computed(() => {
     const all: ComponentNode[] = []
 
-    function collect(ns: ComponentNode[]) {
-        ns.forEach((n) => {
-            all.push(n)
-            collect(n.children)
+    function collect(nodes: ComponentNode[]) {
+        nodes.forEach((node) => {
+            all.push(node)
+            collect(node.children)
         })
     }
 
-    collect(baseNodes.value)
+    collect(rootNodes.value)
 
     return all
 })
 
-const totalRenders = computed(() => allComponents.value.reduce((a, n) => a + n.renders, 0))
-const hotCount = computed(() => allComponents.value.filter((n) => isHot(n)).length)
+const activeSelected = computed(() => allComponents.value.find((node) => node.id === activeSelectedId.value) ?? null)
+const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.renders, 0))
+const hotCount = computed(() => allComponents.value.filter((node) => isHot(node)).length)
 const avgTime = computed(() => {
-    const comps = allComponents.value.filter((n) => n.avgMs > 0)
+    const components = allComponents.value.filter((node) => node.avgMs > 0)
 
-    if (!comps.length) {
+    if (!components.length) {
         return '0.0'
     }
 
-    return (comps.reduce((a, n) => a + n.avgMs, 0) / comps.length).toFixed(1)
+    return (components.reduce((sum, node) => sum + node.avgMs, 0) / components.length).toFixed(1)
 })
 
-function isHot(n: ComponentNode) {
-    return (activeMode.value === 'count' ? n.renders : n.avgMs) >= activeThreshold.value
+function isHot(node: ComponentNode) {
+    return (activeMode.value === 'count' ? node.renders : node.avgMs) >= activeThreshold.value
 }
 
 function toggleFreeze() {
-    frozen.value = !frozen.value
-}
-
-function startLive() {
-    liveInterval = setInterval(() => {
-        if (frozen.value) {
-            return
-        }
-
-        allComponents.value.forEach((n) => {
-            if (Math.random() < 0.3) n.renders += Math.floor(Math.random() * 3) + 1
-        })
-    }, 1800)
-}
-
-startLive()
-onUnmounted(() => {
-    if (liveInterval) {
-        clearInterval(liveInterval)
+    if (frozen.value) {
+        frozen.value = false
+        frozenSnapshot.value = []
+        return
     }
-})
+
+    frozenSnapshot.value = JSON.parse(JSON.stringify(liveNodes.value)) as ComponentNode[]
+    frozen.value = true
+}
 </script>
 
 <template>
     <div class="view">
-        <!-- Controls -->
         <div class="controls">
             <div class="mode-group">
                 <button :class="{ active: activeMode === 'count' }" @click="activeMode = 'count'">render count</button>
@@ -100,7 +248,6 @@ onUnmounted(() => {
             </button>
         </div>
 
-        <!-- Stats -->
         <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-label">components</div>
@@ -121,7 +268,6 @@ onUnmounted(() => {
         </div>
 
         <div class="split">
-            <!-- Page mockup -->
             <div class="page-frame">
                 <div class="legend">
                     <div class="swatch-row">
@@ -140,16 +286,18 @@ onUnmounted(() => {
                     :threshold="activeThreshold"
                     :hot-only="activeHotOnly"
                     :selected="activeSelected?.id"
-                    @select="activeSelected = $event"
+                    @select="activeSelectedId = $event.id"
                 />
+                <div v-if="!rootNodes.length" class="detail-empty" style="height: 180px; margin-top: 12px">
+                    {{ connected ? 'No render activity recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
+                </div>
             </div>
 
-            <!-- Detail panel -->
             <div class="sidebar">
                 <template v-if="activeSelected">
                     <div class="detail-header">
                         <span class="mono bold" style="font-size: 12px">{{ activeSelected.label }}</span>
-                        <button @click="activeSelected = null">×</button>
+                        <button @click="activeSelectedId = null">×</button>
                     </div>
 
                     <div class="meta-grid">
@@ -166,7 +314,7 @@ onUnmounted(() => {
                     </div>
 
                     <div class="section-label">triggers</div>
-                    <div v-for="t in activeSelected.triggers" :key="t" class="trigger-item mono text-sm">{{ t }}</div>
+                    <div v-for="trigger in activeSelected.triggers" :key="trigger" class="trigger-item mono text-sm">{{ trigger }}</div>
                     <div v-if="!activeSelected.triggers.length" class="muted text-sm">no triggers recorded</div>
                 </template>
                 <div v-else class="detail-empty">click a component to inspect</div>

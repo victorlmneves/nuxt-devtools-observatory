@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 
 let requestHook: (event: Record<string, unknown>) => void
-let afterResponseHook: (event: Record<string, unknown>, response: { headers?: { set: (k: string, v: string) => void } } | null) => void
+let afterResponseHook: (event: Record<string, unknown>) => void
+const setResponseHeader = vi.fn()
+
+vi.mock('h3', () => ({
+    setResponseHeader,
+}))
 
 // defineNitroPlugin must be on globalThis before the module is imported,
 // so we use a dynamic import inside beforeAll.
@@ -33,42 +38,31 @@ describe('fetch-capture nitro plugin', () => {
     })
 
     it('sets the x-observatory-ssr-ms response header after a response', () => {
-        const headers = new Map<string, string>()
         const event: Record<string, unknown> = { __ssrFetchStart: performance.now() - 50 }
-        const response = { headers: { set: (k: string, v: string) => headers.set(k, v) } }
 
-        afterResponseHook(event, response)
+        afterResponseHook(event)
 
-        expect(headers.has('x-observatory-ssr-ms')).toBe(true)
-        expect(Number(headers.get('x-observatory-ssr-ms'))).toBeGreaterThanOrEqual(0)
+        expect(setResponseHeader).toHaveBeenCalledWith(event, 'x-observatory-ssr-ms', expect.any(String))
+        expect(Number(setResponseHeader.mock.calls[0][2])).toBeGreaterThanOrEqual(0)
     })
 
     it('the elapsed ms in the header is a non-negative integer', () => {
-        const headers = new Map<string, string>()
         const event: Record<string, unknown> = { __ssrFetchStart: performance.now() - 100 }
-        const response = { headers: { set: (k: string, v: string) => headers.set(k, v) } }
 
-        afterResponseHook(event, response)
+        afterResponseHook(event)
 
-        const ms = Number(headers.get('x-observatory-ssr-ms'))
+        const ms = Number(setResponseHeader.mock.calls.at(-1)?.[2])
 
         expect(Number.isInteger(ms)).toBe(true)
         expect(ms).toBeGreaterThanOrEqual(0)
     })
 
     it('does NOT set the header when the event has no __ssrFetchStart', () => {
-        const headers = new Map<string, string>()
         const event: Record<string, unknown> = {}
-        const response = { headers: { set: (k: string, v: string) => headers.set(k, v) } }
 
-        afterResponseHook(event, response)
+        const callsBefore = setResponseHeader.mock.calls.length
+        afterResponseHook(event)
 
-        expect(headers.has('x-observatory-ssr-ms')).toBe(false)
-    })
-
-    it('does NOT throw when response is null', () => {
-        const event: Record<string, unknown> = { __ssrFetchStart: performance.now() }
-
-        expect(() => afterResponseHook(event, null)).not.toThrow()
+        expect(setResponseHeader.mock.calls).toHaveLength(callsBefore)
     })
 })

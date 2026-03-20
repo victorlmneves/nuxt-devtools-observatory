@@ -3,29 +3,11 @@ import { parse } from '@babel/parser'
 import _traverse from '@babel/traverse'
 import _generate from '@babel/generator'
 import * as t from '@babel/types'
+import { extractScriptBlock } from './transform-utils'
 
 // CJS/ESM compat shims
 const traverse = (_traverse as typeof _traverse & { default?: typeof _traverse }).default ?? _traverse
 const generate = (_generate as typeof _generate & { default?: typeof _generate }).default ?? _generate
-
-// Extract <script> block from a Vue SFC, returning content and its position
-function extractScriptBlock(code: string): { content: string; start: number; end: number } | null {
-    const openTagRE = /<script(\s[^>]*)?>/i
-    const openMatch = openTagRE.exec(code)
-
-    if (!openMatch) {
-        return null
-    }
-
-    const start = openMatch.index + openMatch[0].length
-    const end = code.indexOf('</script>', start)
-
-    if (end === -1) {
-        return null
-    }
-
-    return { content: code.slice(start, end), start, end }
-}
 
 const FETCH_FNS = new Set(['useFetch', 'useAsyncData', 'useLazyFetch', 'useLazyAsyncData'])
 

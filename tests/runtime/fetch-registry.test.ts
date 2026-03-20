@@ -10,10 +10,12 @@ function getWindow() {
 
 beforeEach(() => {
     delete getWindow().__observatory__
+    delete (getWindow() as Window & { __NUXT__?: unknown }).__NUXT__
 })
 
 afterEach(() => {
     delete getWindow().__observatory__
+    delete (getWindow() as Window & { __NUXT__?: unknown }).__NUXT__
     vi.restoreAllMocks()
 })
 
@@ -158,6 +160,51 @@ describe('__devFetch', () => {
         expect(entry.ms).toBeGreaterThanOrEqual(0)
         expect(entry.size).toBe(1024)
         expect(entry.cached).toBe(false)
+    })
+
+    it('captures the response payload when ofetch exposes response._data', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+
+        let capturedOpts: Record<string, unknown> = {}
+        const mockFn = vi.fn().mockImplementation((_url, opts) => {
+            capturedOpts = opts as Record<string, unknown>
+            return Promise.resolve({})
+        })
+
+        __devFetch(
+            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
+            '/api/users',
+            {},
+            { key: 'users', file: 'P.ts', line: 1 }
+        )
+
+        ;(capturedOpts.onResponse as (ctx: unknown) => void)({
+            response: {
+                ok: true,
+                _data: { user: 'ada' },
+                headers: { get: () => null },
+            },
+        })
+
+        expect(registry.getAll()[0].payload).toEqual({ user: 'ada' })
+    })
+
+    it('marks payload-backed entries as cached SSR entries immediately', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+        ;(getWindow() as Window & { __NUXT__?: { data: Record<string, unknown> } }).__NUXT__ = {
+            data: { users: [{ id: 1 }] },
+        }
+
+        const mockFn = vi.fn().mockResolvedValue({})
+        __devFetch(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
+
+        const [entry] = registry.getAll()
+        expect(entry.status).toBe('cached')
+        expect(entry.origin).toBe('ssr')
+        expect(entry.cached).toBe(true)
+        expect(entry.payload).toEqual([{ id: 1 }])
     })
 
     it('sets cached: true when the x-nuxt-cache response header is HIT', () => {

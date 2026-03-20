@@ -21,6 +21,18 @@ export interface ComposableEntry {
     line: number
 }
 
+interface RuntimeEffect {
+    active: boolean
+    stop?: () => void
+}
+
+interface TrackedInstance {
+    uid?: number
+    scope?: { effects?: RuntimeEffect[] }
+    bm?: unknown[]
+    um?: unknown[]
+}
+
 /**
  * Registers a new composable entry, updates an existing one, or retrieves all entries.
  * @remarks The returned object exposes the following methods:
@@ -129,7 +141,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         return callFn()
     }
 
-    const instance = getCurrentInstance()
+    const instance = getCurrentInstance() as TrackedInstance | null
     const id = `${name}::${instance?.uid ?? 'global'}::${meta.file}:${meta.line}::${Date.now()}`
 
     // Track intervals registered during setup
@@ -153,14 +165,22 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         originalClearInterval(id)
     }) as typeof window.clearInterval
 
-    // Track watchers registered during setup
-    const trackedWatchers: Array<{ stopped: boolean; stop: () => void }> = []
+    const effectsBefore = new Set(instance?.scope?.effects ?? [])
+    const mountedHooksBefore = instance?.bm?.length ?? 0
+    const unmountedHooksBefore = instance?.um?.length ?? 0
 
     const result = callFn()
 
     // Restore globals immediately after setup
     window.setInterval = originalSetInterval
     window.clearInterval = originalClearInterval
+
+    const trackedWatchers = (instance?.scope?.effects ?? [])
+        .filter((effect) => !effectsBefore.has(effect))
+        .map((effect) => ({
+            effect,
+            stop: () => effect.stop?.(),
+        }))
 
     // Snapshot reactive return values
     const refs: ComposableEntry['refs'] = {}
@@ -187,8 +207,8 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         watcherCount: trackedWatchers.length,
         intervalCount: trackedIntervals.length,
         lifecycle: {
-            hasOnMounted: false,
-            hasOnUnmounted: false,
+            hasOnMounted: (instance?.bm?.length ?? 0) > mountedHooksBefore,
+            hasOnUnmounted: (instance?.um?.length ?? 0) > unmountedHooksBefore,
             watchersCleaned: true,
             intervalsCleaned: true,
         },
@@ -200,7 +220,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
 
     // Detect leaks on unmount
     onUnmounted(() => {
-        const leakedWatchers = trackedWatchers.filter((w) => !w.stopped)
+        const leakedWatchers = trackedWatchers.filter((w) => w.effect.active)
         const leakedIntervals = trackedIntervals.filter((id) => !clearedIntervals.has(id))
 
         const leak = leakedWatchers.length > 0 || leakedIntervals.length > 0

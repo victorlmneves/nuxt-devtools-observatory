@@ -7,7 +7,13 @@ function makeNuxtApp(app: ReturnType<typeof createApp>) {
     return { vueApp: app }
 }
 
-/** Build a minimal fake ComponentPublicInstance sufficient for mixin hooks. */
+/**
+ * Build a minimal fake ComponentPublicInstance sufficient for mixin hooks.
+ * @param {number} uid - The component uid
+ * @param {string} [name] - The component display name. Defaults to `TestComp`
+ * @param {string} [file] - The component source file. Defaults to `Test.vue`
+ * @returns {ComponentPublicInstance} A fake component public instance
+ */
 function fakeCPI(uid: number, name = 'TestComp', file = 'Test.vue'): ComponentPublicInstance {
     return {
         $: {

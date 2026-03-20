@@ -1,109 +1,118 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData } from '../stores/observatory'
+import { useObservatoryData, type FetchEntry } from '../stores/observatory'
 
-interface FetchEntry {
-    id: string
-    key: string
-    url: string
-    status: 'pending' | 'ok' | 'error' | 'cached'
-    origin: 'ssr' | 'csr'
-    ms?: number
-    size?: number
-    cached: boolean
-    payload?: unknown
-    file?: string
-    line?: number
-    startOffset?: number
-}
+type FetchViewEntry = FetchEntry & { startOffset: number }
 
-// Use live fetch data from the Nuxt registry bridge
-const { fetches: entries } = useObservatoryData()
+const { fetch, connected } = useObservatoryData()
 
 const filter = ref<string>('all')
 const search = ref('')
-const selected = ref<FetchEntry | null>(null)
+const selectedId = ref<string | null>(null)
+
+const entries = computed<FetchViewEntry[]>(() => {
+    const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
+    const minStart = Math.min(...sorted.map((entry) => entry.startTime), 0)
+
+    return sorted.map((entry) => ({
+        ...entry,
+        startOffset: Math.max(0, Math.round(entry.startTime - minStart)),
+    }))
+})
+
+const selected = computed(() => entries.value.find((entry) => entry.id === selectedId.value) ?? null)
 
 const counts = computed(() => ({
-    ok: entries.value?.filter((e) => e.status === 'ok').length ?? 0,
-    pending: entries.value?.filter((e) => e.status === 'pending').length ?? 0,
-    error: entries.value?.filter((e) => e.status === 'error').length ?? 0,
+    ok: entries.value.filter((entry) => entry.status === 'ok').length,
+    pending: entries.value.filter((entry) => entry.status === 'pending').length,
+    error: entries.value.filter((entry) => entry.status === 'error').length,
 }))
 
 const filtered = computed(() => {
-    return (entries.value ?? []).filter((e) => {
-        if (filter.value !== 'all' && e.status !== filter.value) return false
+    return entries.value.filter((entry) => {
+        if (filter.value !== 'all' && entry.status !== filter.value) {
+            return false
+        }
+
         const q = search.value.toLowerCase()
-        if (q && !e.key.includes(q) && !e.url.includes(q)) return false
+
+        if (q && !entry.key.toLowerCase().includes(q) && !entry.url.toLowerCase().includes(q)) {
+            return false
+        }
+
         return true
     })
 })
 
 const metaRows = computed(() => {
-    if (!selected.value) return []
-    const e = selected.value
+    if (!selected.value) {
+        return []
+    }
+
+    const entry = selected.value
+
     return [
-        ['url', e.url],
-        ['status', e.status],
-        ['origin', e.origin],
-        ['duration', e.ms != null ? e.ms + 'ms' : '—'],
-        ['size', e.size ? formatSize(e.size) : '—'],
-        ['cached', e.cached ? 'yes' : 'no'],
+        ['url', entry.url],
+        ['status', entry.status],
+        ['origin', entry.origin],
+        ['duration', entry.ms != null ? `${entry.ms}ms` : '—'],
+        ['size', entry.size ? formatSize(entry.size) : '—'],
+        ['cached', entry.cached ? 'yes' : 'no'],
     ]
 })
 
 const payloadStr = computed(() => {
-    if (!selected.value) return ''
-    const p = selected.value.payload
-    if (!p) return '(no payload captured yet)'
+    if (!selected.value) {
+        return ''
+    }
+
+    const payload = selected.value.payload
+
+    if (payload === undefined) {
+        return '(no payload captured yet)'
+    }
+
     try {
-        return JSON.stringify(p, null, 2)
+        return JSON.stringify(payload, null, 2)
     } catch {
-        return String(p)
+        return String(payload)
     }
 })
 
-function statusClass(s: string) {
-    return { ok: 'badge-ok', error: 'badge-err', pending: 'badge-warn', cached: 'badge-gray' }[s] ?? 'badge-gray'
+function statusClass(status: string) {
+    return { ok: 'badge-ok', error: 'badge-err', pending: 'badge-warn', cached: 'badge-gray' }[status] ?? 'badge-gray'
 }
 
-function barColor(s: string) {
-    return { ok: 'var(--teal)', error: 'var(--red)', pending: 'var(--amber)', cached: 'var(--border)' }[s] ?? 'var(--border)'
+function barColor(status: string) {
+    return { ok: 'var(--teal)', error: 'var(--red)', pending: 'var(--amber)', cached: 'var(--border)' }[status] ?? 'var(--border)'
 }
 
-function barWidth(e: FetchEntry) {
-    const maxMs = Math.max(...(entries.value ?? []).filter((x) => x.ms).map((x) => x.ms!), 1)
-    return e.ms != null ? Math.max(4, Math.round((e.ms / maxMs) * 100)) : 4
+function barWidth(entry: FetchViewEntry) {
+    const maxMs = Math.max(...entries.value.filter((item) => item.ms).map((item) => item.ms!), 1)
+    return entry.ms != null ? Math.max(4, Math.round((entry.ms / maxMs) * 100)) : 4
 }
 
-function wfLeft(e: FetchEntry) {
-    const maxEnd = Math.max(...(entries.value ?? []).map((x) => (x.startOffset ?? 0) + (x.ms ?? 0)), 1)
-    return Math.round(((e.startOffset ?? 0) / maxEnd) * 100)
+function wfLeft(entry: FetchViewEntry) {
+    const maxEnd = Math.max(...entries.value.map((item) => item.startOffset + (item.ms ?? 0)), 1)
+    return Math.round((entry.startOffset / maxEnd) * 100)
 }
-function wfWidth(e: FetchEntry) {
-    const maxEnd = Math.max(...(entries.value ?? []).map((x) => (x.startOffset ?? 0) + (x.ms ?? 0)), 1)
-    return e.ms != null ? Math.round((e.ms / maxEnd) * 100) : 2
+
+function wfWidth(entry: FetchViewEntry) {
+    const maxEnd = Math.max(...entries.value.map((item) => item.startOffset + (item.ms ?? 0)), 1)
+    return entry.ms != null ? Math.round((entry.ms / maxEnd) * 100) : 2
 }
 
 function formatSize(bytes: number) {
-    if (bytes < 1024) return bytes + 'B'
-    return (bytes / 1024).toFixed(1) + 'KB'
-}
+    if (bytes < 1024) {
+        return `${bytes}B`
+    }
 
-function replayFetch() {
-    // No-op: cannot replay fetch from devtools UI (see Nuxt docs)
-    // You should call the original refresh() from useFetch in-app, not here
-}
-
-function clearAll() {
-    // No-op: cannot clear live registry from client
-    selected.value = null
+    return `${(bytes / 1024).toFixed(1)}KB`
 }
 </script>
 
 <template>
     <div class="view">
-        <!-- Stats row -->
         <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-label">total</div>
@@ -123,19 +132,15 @@ function clearAll() {
             </div>
         </div>
 
-        <!-- Toolbar -->
         <div class="toolbar">
             <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
             <button :class="{ 'danger-active': filter === 'error' }" @click="filter = 'error'">errors</button>
             <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'">pending</button>
             <button :class="{ active: filter === 'cached' }" @click="filter = 'cached'">cached</button>
             <input v-model="search" type="search" placeholder="search key or url…" style="max-width: 240px; margin-left: auto" />
-            <button @click="clearAll">clear</button>
         </div>
 
-        <!-- Split view -->
         <div class="split">
-            <!-- Table -->
             <div class="table-wrap">
                 <table class="data-table">
                     <thead>
@@ -150,9 +155,14 @@ function clearAll() {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="e in filtered" :key="e.id" :class="{ selected: selected?.id === e.id }" @click="selected = e">
+                        <tr
+                            v-for="entry in filtered"
+                            :key="entry.id"
+                            :class="{ selected: selected?.id === entry.id }"
+                            @click="selectedId = entry.id"
+                        >
                             <td>
-                                <span class="mono" style="font-size: 11px; color: var(--text2)">{{ e.key }}</span>
+                                <span class="mono" style="font-size: 11px; color: var(--text2)">{{ entry.key }}</span>
                             </td>
                             <td>
                                 <span
@@ -165,25 +175,25 @@ function clearAll() {
                                         text-overflow: ellipsis;
                                         white-space: nowrap;
                                     "
-                                    :title="e.url"
+                                    :title="entry.url"
                                 >
-                                    {{ e.url }}
+                                    {{ entry.url }}
                                 </span>
                             </td>
                             <td>
-                                <span class="badge" :class="statusClass(e.status)">{{ e.status }}</span>
+                                <span class="badge" :class="statusClass(entry.status)">{{ entry.status }}</span>
                             </td>
                             <td>
-                                <span class="badge" :class="e.origin === 'ssr' ? 'badge-info' : 'badge-gray'">{{ e.origin }}</span>
+                                <span class="badge" :class="entry.origin === 'ssr' ? 'badge-info' : 'badge-gray'">{{ entry.origin }}</span>
                             </td>
-                            <td class="muted text-sm">{{ e.size ? formatSize(e.size) : '—' }}</td>
-                            <td class="mono text-sm">{{ e.ms != null ? e.ms + 'ms' : '—' }}</td>
+                            <td class="muted text-sm">{{ entry.size ? formatSize(entry.size) : '—' }}</td>
+                            <td class="mono text-sm">{{ entry.ms != null ? `${entry.ms}ms` : '—' }}</td>
                             <td>
                                 <div style="height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden">
                                     <div
                                         :style="{
-                                            width: barWidth(e) + '%',
-                                            background: barColor(e.status),
+                                            width: `${barWidth(entry)}%`,
+                                            background: barColor(entry.status),
                                             height: '100%',
                                             borderRadius: '2px',
                                         }"
@@ -191,24 +201,27 @@ function clearAll() {
                                 </div>
                             </td>
                         </tr>
+                        <tr v-if="!filtered.length">
+                            <td colspan="7" style="text-align: center; color: var(--text3); padding: 24px">
+                                {{ connected ? 'No fetches recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
 
-            <!-- Detail panel -->
             <div v-if="selected" class="detail-panel">
                 <div class="detail-header">
                     <span class="mono bold" style="font-size: 12px">{{ selected.key }}</span>
                     <div class="flex gap-2">
-                        <button @click="replayFetch">↺ replay</button>
-                        <button @click="selected = null">×</button>
+                        <button @click="selectedId = null">×</button>
                     </div>
                 </div>
 
                 <div class="meta-grid">
-                    <template v-for="[k, v] in metaRows" :key="k">
-                        <span class="muted text-sm">{{ k }}</span>
-                        <span class="mono text-sm" style="word-break: break-all">{{ v }}</span>
+                    <template v-for="[key, value] in metaRows" :key="key">
+                        <span class="muted text-sm">{{ key }}</span>
+                        <span class="mono text-sm" style="word-break: break-all">{{ value }}</span>
                     </template>
                 </div>
 
@@ -221,28 +234,27 @@ function clearAll() {
             <div v-else class="detail-empty">select a call to inspect</div>
         </div>
 
-        <!-- Waterfall -->
         <div class="waterfall">
             <div class="section-label" style="margin-bottom: 6px">waterfall</div>
-            <div v-for="e in entries" :key="e.id" class="wf-row">
+            <div v-for="entry in entries" :key="entry.id" class="wf-row">
                 <span
                     class="mono muted text-sm"
                     style="width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0"
                 >
-                    {{ e.key }}
+                    {{ entry.key }}
                 </span>
                 <div class="wf-track">
                     <div
                         class="wf-bar"
                         :style="{
-                            left: wfLeft(e) + '%',
-                            width: Math.max(2, wfWidth(e)) + '%',
-                            background: barColor(e.status),
+                            left: `${wfLeft(entry)}%`,
+                            width: `${Math.max(2, wfWidth(entry))}%`,
+                            background: barColor(entry.status),
                         }"
                     ></div>
                 </div>
                 <span class="mono muted text-sm" style="width: 44px; text-align: right; flex-shrink: 0">
-                    {{ e.ms != null ? e.ms + 'ms' : '—' }}
+                    {{ entry.ms != null ? `${entry.ms}ms` : '—' }}
                 </span>
             </div>
         </div>

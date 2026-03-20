@@ -10,13 +10,58 @@ interface ObservatoryWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
+function toSerializable(value: unknown, seen = new WeakSet<object>()): unknown {
+    if (value === null || value === undefined) {
+        return value
+    }
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return value
+    }
+
+    if (typeof value === 'bigint') {
+        return value.toString()
+    }
+
+    if (typeof value === 'function' || typeof value === 'symbol') {
+        return `[${typeof value}]`
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((entry) => toSerializable(entry, seen))
+    }
+
+    if (typeof value === 'object') {
+        if (seen.has(value)) {
+            return '[circular]'
+        }
+
+        seen.add(value)
+
+        if (value instanceof Date) {
+            return value.toISOString()
+        }
+
+        const plain: Record<string, unknown> = {}
+
+        for (const [key, entry] of Object.entries(value)) {
+            plain[key] = toSerializable(entry, seen)
+        }
+
+        seen.delete(value)
+        return plain
+    }
+
+    return String(value)
+}
+
 export default defineNuxtPlugin(() => {
     if (!import.meta.dev) {
         return
     }
 
     const nuxtApp = useNuxtApp()
-    const config = useRuntimeConfig().public.observatory as { heatmapThreshold: number }
+    const config = useRuntimeConfig().public.observatory as { heatmapThreshold: number; clientOrigin?: string }
 
     // Enable Vue performance API for render heatmap
     nuxtApp.vueApp.config.performance = true
@@ -49,31 +94,19 @@ export default defineNuxtPlugin(() => {
                 return
             }
 
-            const source = event.source as Window | null
-
-            try {
-                const snapshot = {
-                    fetch: fetchRegistry.getAll(),
-                    provideInject: provideInjectRegistry.getAll(),
-                    composables: composableRegistry.getAll(),
-                    renders: renderRegistry.getAll(),
-                    transitions: transitionRegistry.getAll(),
-                }
-
-                // Serialize snapshot to guarantee structured clone compliance
-                const payload = JSON.stringify(snapshot)
-
-                source?.postMessage(
-                    {
-                        type: 'observatory:snapshot',
-                        data: payload,
-                    },
-                    '*'
-                )
-            } catch (err) {
-                // Optionally log serialization errors
-                console.warn('Observatory snapshot serialization failed:', err)
+            if (config.clientOrigin && event.origin !== config.clientOrigin) {
+                return
             }
+
+            const source = event.source as Window | null
+            const snapshot = buildSnapshot()
+            source?.postMessage(
+                {
+                    type: 'observatory:snapshot',
+                    data: snapshot,
+                },
+                event.origin
+            )
         })
     }
 
@@ -100,7 +133,11 @@ export default defineNuxtPlugin(() => {
             return
         }
 
-        channel.send('observatory:snapshot', {
+        channel.send('observatory:snapshot', buildSnapshot())
+    }
+
+    function buildSnapshot() {
+        return toSerializable({
             fetch: fetchRegistry.getAll(),
             provideInject: provideInjectRegistry.getAll(),
             composables: composableRegistry.getAll(),

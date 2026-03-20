@@ -1,18 +1,87 @@
-/**
- * useObservatoryData — live bridge between the Nuxt app and the client SPA.
- *
- * The client SPA runs at localhost:4949 (cross-origin from the Nuxt app at
- * localhost:3000). Direct window.top property access is blocked by the browser.
- * However postMessage IS allowed cross-origin:
- *
- *   iframe (4949)  →  window.top.postMessage({ type: 'observatory:request' })  →  Nuxt page (3000)
- *   Nuxt plugin.ts →  event.source.postMessage({ type: 'observatory:snapshot', data })  →  iframe
- *
- * The plugin.ts listener is registered immediately on plugin init (not deferred
- * to app:mounted) so requests sent before full hydration are answered correctly.
- */
+import { onUnmounted, ref } from 'vue'
 
-import { ref, onUnmounted } from 'vue'
+const POLL_MS = 500
+
+export interface FetchEntry {
+    id: string
+    key: string
+    url: string
+    status: 'pending' | 'ok' | 'error' | 'cached'
+    origin: 'ssr' | 'csr'
+    startTime: number
+    endTime?: number
+    ms?: number
+    size?: number
+    cached: boolean
+    payload?: unknown
+    error?: unknown
+    file?: string
+    line?: number
+}
+
+export interface ProvideEntry {
+    key: string
+    componentName: string
+    componentFile: string
+    componentUid: number
+    parentUid?: number
+    parentFile?: string
+    isReactive: boolean
+    valueSnapshot: unknown
+    line: number
+}
+
+export interface InjectEntry {
+    key: string
+    componentName: string
+    componentFile: string
+    componentUid: number
+    parentUid?: number
+    parentFile?: string
+    resolved: boolean
+    resolvedFromFile?: string
+    resolvedFromUid?: number
+    line: number
+}
+
+export interface ProvideInjectSnapshot {
+    provides: ProvideEntry[]
+    injects: InjectEntry[]
+}
+
+export interface ComposableEntry {
+    id: string
+    name: string
+    componentFile: string
+    componentUid: number
+    status: 'mounted' | 'unmounted'
+    leak: boolean
+    leakReason?: string
+    refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
+    watcherCount: number
+    intervalCount: number
+    lifecycle: {
+        hasOnMounted: boolean
+        hasOnUnmounted: boolean
+        watchersCleaned: boolean
+        intervalsCleaned: boolean
+    }
+    file: string
+    line: number
+}
+
+export interface RenderEntry {
+    uid: number
+    name: string
+    file: string
+    renders: number
+    totalMs: number
+    avgMs: number
+    triggers: Array<{ key: string; type: string; timestamp: number }>
+    rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
+    children: number[]
+    parentUid?: number
+}
 
 export interface TransitionEntry {
     id: string
@@ -77,6 +146,10 @@ interface RenderNode {
 }
 
 interface ObservatorySnapshot {
+    fetch?: FetchEntry[]
+    provideInject?: ProvideInjectSnapshot
+    composables?: ComposableEntry[]
+    renders?: RenderEntry[]
     transitions?: TransitionEntry[]
     fetch?: FetchEntry[]
     composables?: ComposableEntry[]
@@ -84,80 +157,101 @@ interface ObservatorySnapshot {
     renders?: RenderNode[]
 }
 
-const POLL_MS = 500
+const fetchEntries = ref<FetchEntry[]>([])
+const provideInject = ref<ProvideInjectSnapshot>({ provides: [], injects: [] })
+const composables = ref<ComposableEntry[]>([])
+const renders = ref<RenderEntry[]>([])
+const transitions = ref<TransitionEntry[]>([])
+const connected = ref(false)
+
+let started = false
+let timer: ReturnType<typeof setInterval> | null = null
+let cleanupRegistered = false
+let parentOrigin = '*'
+
+function cloneArray<T>(value: T[] | undefined): T[] {
+    return value ? value.map((item) => ({ ...item })) : []
+}
+
+function getParentOrigin() {
+    if (typeof document === 'undefined' || !document.referrer) {
+        return '*'
+    }
+
+    try {
+        return new URL(document.referrer).origin
+    } catch {
+        return '*'
+    }
+}
+
+function requestSnapshot() {
+    window.top?.postMessage({ type: 'observatory:request' }, parentOrigin)
+}
+
+function onMessage(event: MessageEvent) {
+    if (event.data?.type !== 'observatory:snapshot') {
+        return
+    }
+
+    if (parentOrigin !== '*' && event.origin !== parentOrigin) {
+        return
+    }
+
+    const data = event.data.data as ObservatorySnapshot
+    fetchEntries.value = cloneArray(data.fetch)
+    provideInject.value = data.provideInject
+        ? {
+              provides: cloneArray(data.provideInject.provides),
+              injects: cloneArray(data.provideInject.injects),
+          }
+        : { provides: [], injects: [] }
+    composables.value = cloneArray(data.composables)
+    renders.value = cloneArray(data.renders)
+    transitions.value = cloneArray(data.transitions)
+    connected.value = true
+}
+
+function ensureStarted() {
+    if (started || typeof window === 'undefined') {
+        return
+    }
+
+    started = true
+    parentOrigin = getParentOrigin()
+    window.addEventListener('message', onMessage)
+    timer = window.setInterval(requestSnapshot, POLL_MS)
+    requestSnapshot()
+}
 
 export function useObservatoryData() {
-    const transitions = ref<TransitionEntry[]>([])
-    const fetches = ref<FetchEntry[]>([])
-    const composables = ref<ComposableEntry[]>([])
-    const provideInject = ref<ProvideInjectNode[]>([])
-    const renders = ref<RenderNode[]>([])
-    const connected = ref(false)
+    ensureStarted()
 
-    function request() {
-        window.top?.postMessage({ type: 'observatory:request' }, '*')
-    }
-
-    function onMessage(event: MessageEvent) {
-        if (event.data?.type !== 'observatory:snapshot') {
-            return
-        }
-
-        let data: ObservatorySnapshot | null = null
-
-        if (typeof event.data.data === 'string') {
-            try {
-                data = JSON.parse(event.data.data)
-            } catch (err) {
-                console.warn('Failed to parse observatory snapshot:', err)
-
-                data = null
+    if (!cleanupRegistered) {
+        cleanupRegistered = true
+        onUnmounted(() => {
+            if (!started) {
+                return
             }
-        } else {
-            data = event.data.data as ObservatorySnapshot
-        }
 
-        transitions.value = data?.transitions ?? []
-        fetches.value = data?.fetch ?? []
-        composables.value = data?.composables ?? []
+            window.removeEventListener('message', onMessage)
 
-        // Always guarantee provideInject.value is an array
-        const pi = data?.provideInject
+            if (timer) {
+                clearInterval(timer)
+                timer = null
+            }
 
-        if (Array.isArray(pi)) {
-            provideInject.value = pi
-        } else if (pi && typeof pi === 'object') {
-            // If registry returns { provides, injects }, build a single node
-            provideInject.value = [
-                {
-                    provides: Array.isArray(pi.provides) ? pi.provides : [],
-                    injects: Array.isArray(pi.injects) ? pi.injects : [],
-                    id: 'root',
-                    label: 'Provide/Inject Root',
-                    type: 'both',
-                    children: [],
-                },
-            ]
-        } else {
-            provideInject.value = []
-        }
-
-        if (!Array.isArray(provideInject.value)) {
-            provideInject.value = []
-        }
-
-        renders.value = data?.renders ?? []
-        connected.value = true
+            started = false
+            cleanupRegistered = false
+        })
     }
 
-    window.addEventListener('message', onMessage)
-    const timer = setInterval(request, POLL_MS)
-    request() // immediate first request
-
-    onUnmounted(() => {
-        window.removeEventListener('message', onMessage)
-        clearInterval(timer)
-    })
-
-    return { transitions, fetches, composables, provideInject, renders, connected }
+    return {
+        fetch: fetchEntries,
+        provideInject,
+        composables,
+        renders,
+        transitions,
+        connected,
+    }
 }

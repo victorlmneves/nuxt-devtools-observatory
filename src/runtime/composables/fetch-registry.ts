@@ -17,6 +17,23 @@ export interface FetchEntry {
     line?: number
 }
 
+interface ObservatoryWindow extends Window {
+    __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> }
+    __NUXT__?: { data?: Record<string, unknown> }
+    __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
+}
+
+interface FetchResponse extends Response {
+    _data?: unknown
+}
+
+interface FetchOptions {
+    server?: boolean
+    onResponse?: (ctx: { response: FetchResponse }) => void
+    onResponseError?: (ctx: { response: FetchResponse }) => void
+    [key: string]: unknown
+}
+
 /**
  * Sets up the fetch registry, which tracks all fetch requests and their
  * associated metadata (e.g. duration, size, origin).
@@ -42,48 +59,8 @@ export function setupFetchRegistry() {
         emit('fetch:update', updated)
     }
 
-    function safeValue(val: unknown): unknown {
-        // Try to JSON.stringify, fallback to string or undefined
-        if (val === undefined || val === null) {
-            return val
-        }
-
-        if (typeof val === 'function') {
-            return undefined
-        }
-
-        if (typeof val === 'object') {
-            try {
-                return JSON.parse(JSON.stringify(val))
-            } catch {
-                return String(val)
-            }
-        }
-
-        return val
-    }
-
-    function sanitize(entry: FetchEntry): FetchEntry {
-        return {
-            id: entry.id,
-            key: entry.key,
-            url: entry.url,
-            status: entry.status,
-            origin: entry.origin,
-            startTime: entry.startTime,
-            endTime: entry.endTime,
-            ms: entry.ms,
-            size: entry.size,
-            cached: entry.cached,
-            payload: safeValue(entry.payload),
-            error: safeValue(entry.error),
-            file: entry.file,
-            line: entry.line,
-        }
-    }
-
     function getAll(): FetchEntry[] {
-        return [...entries.value.values()].map(sanitize)
+        return [...entries.value.values()]
     }
 
     function clear() {
@@ -96,8 +73,7 @@ export function setupFetchRegistry() {
             return
         }
 
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
-            .__nuxt_devtools__?.channel
+        const channel = (window as ObservatoryWindow).__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -107,115 +83,73 @@ export function setupFetchRegistry() {
 // ── Dev shim called by the Vite transform ─────────────────────────────────
 // This function is injected at call sites: __devFetch(url, opts, meta)
 export function __devFetch(
-    originalFn: (...args: unknown[]) => unknown,
-    arg1: ((...args: unknown[]) => unknown) | string,
-    arg2: Record<string, unknown>,
+    originalFn: (url: string, opts: FetchOptions) => Promise<unknown>,
+    url: string,
+    opts: FetchOptions,
     meta: { key: string; file: string; line: number }
 ) {
     if (!import.meta.dev || !import.meta.client) {
-        // Pass through for all signatures
-        return typeof arg1 === 'function' ? originalFn(arg1, arg2) : originalFn(arg1, arg2)
+        return originalFn(url, opts)
     }
 
-    const registry = (window as Window & { __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> } }).__observatory__?.fetch
+    const registry = (window as ObservatoryWindow).__observatory__?.fetch
 
     if (!registry) {
-        return typeof arg1 === 'function' ? originalFn(arg1, arg2) : originalFn(arg1, arg2)
+        return originalFn(url, opts)
     }
 
-    // Detect useAsyncData signature: first arg is a function (handler)
-    if (typeof arg1 === 'function') {
-        // useAsyncData(handler, opts, meta)
-        const handler = arg1 as (...args: unknown[]) => unknown
-        // const opts = arg2 || {} // not used in this branch
+    const id = `${meta.key}::${Date.now()}`
+    const startTime = performance.now()
+    const payload = (window as ObservatoryWindow).__NUXT__?.data ?? {}
+    const fromPayload = Object.prototype.hasOwnProperty.call(payload, meta.key)
+    const origin: 'ssr' | 'csr' = fromPayload ? 'ssr' : 'csr'
 
-        return function wrappedHandler(...handlerArgs: unknown[]): Promise<unknown> {
-            const id = `${meta.key}::${Date.now()}`
-            const startTime = performance.now()
-            const origin: 'ssr' | 'csr' = import.meta.server ? 'ssr' : 'csr'
-            registry.register({
-                id,
-                key: meta.key,
-                url: meta.key, // No URL in useAsyncData, use key as identifier
-                status: 'pending',
-                origin,
-                startTime,
-                cached: false,
-                file: meta.file,
-                line: meta.line,
+    registry.register({
+        id,
+        key: meta.key,
+        url: typeof url === 'string' ? url : String(url),
+        status: fromPayload ? 'cached' : 'pending',
+        origin,
+        startTime,
+        cached: fromPayload,
+        payload: fromPayload ? payload[meta.key] : undefined,
+        file: meta.file,
+        line: meta.line,
+    })
+
+    if (fromPayload) {
+        return originalFn(url, opts)
+    }
+
+    return originalFn(url, {
+        ...opts,
+        onResponse({ response }: { response: FetchResponse }) {
+            const ms = Math.round(performance.now() - startTime)
+            const size = Number(response.headers?.get('content-length')) || undefined
+            const cached = response.headers?.get('x-nuxt-cache') === 'HIT'
+            registry.update(id, {
+                status: cached ? 'cached' : response.ok ? 'ok' : 'error',
+                endTime: performance.now(),
+                ms,
+                size,
+                cached,
+                payload: response._data,
             })
 
-            // Call the original handler and track result
-            return Promise.resolve(handler(...handlerArgs))
-                .then((result: unknown) => {
-                    registry.update(id, {
-                        status: 'ok',
-                        endTime: performance.now(),
-                        ms: Math.round(performance.now() - startTime),
-                        payload: result,
-                    })
+            if (typeof opts.onResponse === 'function') {
+                opts.onResponse({ response })
+            }
+        },
+        onResponseError({ response }: { response: FetchResponse }) {
+            registry.update(id, {
+                status: 'error',
+                endTime: performance.now(),
+                ms: Math.round(performance.now() - startTime),
+            })
 
-                    return result
-                })
-                .catch((error: unknown) => {
-                    registry.update(id, {
-                        status: 'error',
-                        endTime: performance.now(),
-                        ms: Math.round(performance.now() - startTime),
-                        error,
-                    })
-
-                    throw error
-                })
-        }
-    } else {
-        // useFetch(url, opts, meta)
-        const url = arg1 as string
-        const opts = arg2 || {}
-        const id = `${meta.key}::${Date.now()}`
-        const startTime = performance.now()
-        const origin: 'ssr' | 'csr' = import.meta.server ? 'ssr' : 'csr'
-        registry.register({
-            id,
-            key: meta.key,
-            url: typeof url === 'string' ? url : String(url),
-            status: 'pending',
-            origin,
-            startTime,
-            cached: false,
-            file: meta.file,
-            line: meta.line,
-        })
-
-        return originalFn(url, {
-            ...opts,
-            onResponse({ response }: { response: Response }) {
-                const ms = Math.round(performance.now() - startTime)
-                const size = Number(response.headers?.get('content-length')) || undefined
-                const cached = response.headers?.get('x-nuxt-cache') === 'HIT'
-                registry.update(id, {
-                    status: response.ok ? 'ok' : 'error',
-                    endTime: performance.now(),
-                    ms,
-                    size,
-                    cached,
-                })
-
-                if (typeof opts.onResponse === 'function') {
-                    opts.onResponse({ response })
-                }
-            },
-            onResponseError({ response }: { response: Response }) {
-                registry.update(id, {
-                    status: 'error',
-                    endTime: performance.now(),
-                    ms: Math.round(performance.now() - startTime),
-                })
-
-                if (typeof opts.onResponseError === 'function') {
-                    opts.onResponseError({ response })
-                }
-            },
-        })
-    }
+            if (typeof opts.onResponseError === 'function') {
+                opts.onResponseError({ response })
+            }
+        },
+    })
 }

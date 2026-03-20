@@ -11,7 +11,11 @@ function getWindow() {
     return window as ObservatoryWindow
 }
 
-/** Mount a component tree and run setup functions, then unmount. Returns the app for cleanup. */
+/**
+ * Mount a component tree and run setup functions, then unmount.
+ * @param {ReturnType<typeof defineComponent>} rootComponent - The root component to mount
+ * @returns {{ app: ReturnType<typeof createApp>, el: HTMLDivElement }} The mounted app and host element
+ */
 function mountApp(rootComponent: ReturnType<typeof defineComponent>) {
     const app = createApp(rootComponent)
     const el = document.createElement('div')
