@@ -1,135 +1,163 @@
 <script setup lang="ts">
-import { ref, computed, defineComponent, h, type VNode } from 'vue'
+import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
 import { useObservatoryData, type RenderEntry } from '../stores/observatory'
 
 interface ComponentNode {
     id: string
     label: string
     file: string
+    element?: string
+    depth: number
+    path: string[]
     renders: number
     avgMs: number
     triggers: string[]
     children: ComponentNode[]
+    parentId?: string
+    parentLabel?: string
 }
 
-const ComponentBlock = defineComponent({
-    name: 'ComponentBlock',
+const TreeNode = defineComponent({
+    name: 'TreeNode',
     props: {
         node: Object as () => ComponentNode,
         mode: String,
         threshold: Number,
         hotOnly: Boolean,
         selected: String,
+        search: String,
+        expandedIds: Object as () => Set<string>,
     },
-    emits: ['select'],
+    emits: ['select', 'toggle'],
     setup(props, { emit }): () => VNode | null {
-        function getVal(node: ComponentNode) {
+        function nodeValue(node: ComponentNode) {
             return props.mode === 'count' ? node.renders : node.avgMs
         }
 
-        function getMax(): number {
-            let max = 1
-
-            function walk(nodes: ComponentNode[]) {
-                nodes.forEach((node) => {
-                    const value = getVal(node)
-
-                    if (value > max) {
-                        max = value
-                    }
-
-                    walk(node.children)
-                })
-            }
-
-            walk([props.node!])
-
-            return Math.max(max, props.mode === 'count' ? 40 : 20)
-        }
-
-        function heatColor(value: number, max: number) {
-            const ratio = Math.min(value / max, 1)
-
-            if (ratio < 0.25) {
-                return { bg: '#EAF3DE', text: '#27500A', border: '#97C459' }
-            }
-
-            if (ratio < 0.55) {
-                return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
-            }
-
-            if (ratio < 0.8) {
-                return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
-            }
-
-            return { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' }
-        }
-
         function isHot(node: ComponentNode) {
-            return (props.mode === 'count' ? node.renders : node.avgMs) >= props.threshold!
+            return nodeValue(node) >= props.threshold!
+        }
+
+        function matchesSearch(node: ComponentNode, search: string): boolean {
+            if (!search) {
+                return true
+            }
+
+            const query = search.toLowerCase()
+
+            return (
+                node.label.toLowerCase().includes(query) ||
+                node.file.toLowerCase().includes(query) ||
+                node.path.some((segment) => segment.toLowerCase().includes(query)) ||
+                node.triggers.some((trigger) => trigger.toLowerCase().includes(query))
+            )
+        }
+
+        function shouldShow(node: ComponentNode, search: string): boolean {
+            const selfMatches = matchesSearch(node, search)
+            const childMatches = node.children.some((child) => shouldShow(child, search))
+            const searchMatches = !search || selfMatches || childMatches
+            const hotMatches = !props.hotOnly || isHot(node) || node.children.some((child) => shouldShow(child, ''))
+
+            return searchMatches && hotMatches
+        }
+
+        function rowClass(node: ComponentNode) {
+            return {
+                selected: props.selected === node.id,
+                hot: isHot(node),
+            }
         }
 
         return () => {
             const node = props.node!
+            const search = props.search?.trim() ?? ''
 
-            if (props.hotOnly && !isHot(node) && !node.children.some((child) => (props.mode === 'count' ? child.renders : child.avgMs) >= props.threshold!)) {
+            if (!shouldShow(node, search)) {
                 return null
             }
 
-            const max = getMax()
-            const value = getVal(node)
-            const colors = heatColor(value, max)
-            const isSelected = props.selected === node.id
-            const unit = props.mode === 'count' ? 'renders' : 'ms avg'
-            const valueLabel = props.mode === 'count' ? String(value) : `${value.toFixed(1)}ms`
+            const expanded = props.expandedIds?.has(node.id) ?? false
+            const visibleChildren = node.children.filter((child) => shouldShow(child, search))
+            const canExpand = visibleChildren.length > 0
+            const metric = props.mode === 'count' ? `${node.renders}` : `${node.avgMs.toFixed(1)}ms`
+            const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
+            const badges = []
+            const normalizedElement = node.element?.toLowerCase()
 
-            return h(
-                'div',
-                {
-                    style: {
-                        background: colors.bg,
-                        border: isSelected ? `2px solid ${colors.border}` : `1px solid ${colors.border}`,
-                        borderRadius: '6px',
-                        padding: '6px 9px',
-                        marginBottom: '5px',
-                        cursor: 'pointer',
+            if (node.element && node.element !== node.label && !['div', 'span', 'p'].includes(normalizedElement ?? '')) {
+                badges.push(node.element)
+            }
+
+            if (node.file !== 'unknown') {
+                const fileBadge = node.file.split('/').pop()?.replace(/\.vue$/i, '') ?? node.file
+
+                if (fileBadge !== node.label && !badges.includes(fileBadge)) {
+                    badges.push(fileBadge)
+                }
+            }
+
+            return h('div', { class: 'tree-node' }, [
+                h(
+                    'div',
+                    {
+                        class: ['tree-row', rowClass(node)],
+                        style: { '--tree-depth': String(node.depth) },
+                        onClick: (event: MouseEvent) => {
+                            event.stopPropagation()
+                            emit('select', node)
+                        },
                     },
-                    onClick: () => emit('select', node),
-                },
-                [
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
-                        h('span', { style: { fontFamily: 'var(--mono)', fontSize: '11px', fontWeight: '500', color: colors.text } }, node.label),
+                    [
                         h(
-                            'span',
-                            { style: { fontFamily: 'var(--mono)', fontSize: '10px', color: colors.text, opacity: '0.7', marginLeft: 'auto' } },
-                            `${valueLabel} ${unit}`
+                            'button',
+                            {
+                                class: 'tree-toggle',
+                                disabled: !canExpand,
+                                onClick: (event: MouseEvent) => {
+                                    event.stopPropagation()
+
+                                    if (canExpand) {
+                                        emit('toggle', node.id)
+                                    }
+                                },
+                            },
+                            canExpand ? (expanded ? '▾' : '▸') : '·'
                         ),
-                    ]),
-                    node.children.length
-                        ? h(
-                              'div',
-                              {
-                                  style: {
-                                      marginLeft: '10px',
-                                      borderLeft: `1.5px solid ${colors.border}40`,
-                                      paddingLeft: '8px',
-                                      marginTop: '5px',
-                                  },
-                              },
-                              node.children.map((child) =>
-                                  h(ComponentBlock, {
-                                      node: child,
-                                      mode: props.mode,
-                                      threshold: props.threshold,
-                                      hotOnly: props.hotOnly,
-                                      selected: props.selected,
-                                      onSelect: (value: ComponentNode) => emit('select', value),
-                                  })
-                              )
+                        h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
+                        h('div', { class: 'tree-copy' }, [
+                            h('span', { class: 'tree-name mono', title: node.label }, node.label),
+                            badges.length
+                                ? h(
+                                      'div',
+                                      { class: 'tree-badges' },
+                                      badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
+                                  )
+                                : null,
+                        ]),
+                        h('div', { class: 'tree-metrics mono' }, h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`)),
+                    ]
+                ),
+                expanded && visibleChildren.length
+                    ? h(
+                          'div',
+                          { class: 'tree-children' },
+                          visibleChildren.map((child) =>
+                              h(TreeNode, {
+                                  node: child,
+                                  mode: props.mode,
+                                  threshold: props.threshold,
+                                  hotOnly: props.hotOnly,
+                                  selected: props.selected,
+                                  search: props.search,
+                                  expandedIds: props.expandedIds,
+                                  onSelect: (value: ComponentNode) => emit('select', value),
+                                  onToggle: (value: string) => emit('toggle', value),
+                              })
                           )
-                        : null,
-                ]
-            )
+                      )
+                    : null,
+            ])
         }
     },
 })
@@ -140,8 +168,34 @@ const activeMode = ref<'count' | 'time'>('count')
 const activeThreshold = ref(5)
 const activeHotOnly = ref(false)
 const frozen = ref(false)
+const search = ref('')
 const activeSelectedId = ref<string | null>(null)
-const frozenSnapshot = ref<ComponentNode[]>([])
+const activeRootId = ref<string | null>(null)
+const expandedIds = ref<Set<string>>(new Set())
+const frozenSnapshot = ref<RenderEntry[]>([])
+const expansionReady = ref(false)
+
+function displayLabel(entry: RenderEntry) {
+    if (entry.name && entry.name !== 'unknown' && !/^Component#\d+$/.test(entry.name)) {
+        return entry.name
+    }
+
+    if (entry.element) {
+        return entry.element
+    }
+
+    const basename = entry.file.split('/').pop()?.replace(/\.vue$/i, '')
+
+    if (basename && basename !== 'unknown') {
+        return basename
+    }
+
+    if (entry.name && entry.name !== 'unknown') {
+        return entry.name
+    }
+
+    return `Component#${entry.uid}`
+}
 
 function formatTrigger(trigger: RenderEntry['triggers'][number]) {
     return `${trigger.type}: ${trigger.key}`
@@ -153,12 +207,16 @@ function buildNodes(entries: RenderEntry[]) {
     for (const entry of entries) {
         byId.set(String(entry.uid), {
             id: String(entry.uid),
-            label: entry.file.split('/').pop() ?? entry.name,
+            label: displayLabel(entry),
             file: entry.file,
+            element: entry.element,
+            depth: 0,
+            path: [],
             renders: entry.renders,
             avgMs: entry.avgMs,
             triggers: entry.triggers.map(formatTrigger),
             children: [],
+            parentId: entry.parentUid !== undefined ? String(entry.parentUid) : undefined,
         })
     }
 
@@ -174,32 +232,162 @@ function buildNodes(entries: RenderEntry[]) {
         const parent = entry.parentUid !== undefined ? byId.get(String(entry.parentUid)) : undefined
 
         if (parent) {
+            node.parentLabel = parent.label
             parent.children.push(node)
         } else {
             roots.push(node)
         }
     }
 
+    function finalize(node: ComponentNode, path: string[] = [], depth = 0) {
+        node.depth = depth
+        node.path = [...path, node.label]
+        node.children.forEach((child) => finalize(child, node.path, depth + 1))
+    }
+
+    roots.forEach((root) => finalize(root))
+
     return roots
 }
 
-const liveNodes = computed(() => buildNodes(renders.value))
-const rootNodes = computed(() => (frozen.value ? frozenSnapshot.value : liveNodes.value))
+function flatten(nodes: ComponentNode[]) {
+    const flat: ComponentNode[] = []
 
-const allComponents = computed(() => {
-    const all: ComponentNode[] = []
-
-    function collect(nodes: ComponentNode[]) {
-        nodes.forEach((node) => {
-            all.push(node)
-            collect(node.children)
-        })
+    function walk(node: ComponentNode) {
+        flat.push(node)
+        node.children.forEach(walk)
     }
 
-    collect(rootNodes.value)
+    nodes.forEach(walk)
 
-    return all
+    return flat
+}
+
+function countSubtree(node: ComponentNode): number {
+    return 1 + node.children.reduce((sum, child) => sum + countSubtree(child), 0)
+}
+
+function collectIds(node: ComponentNode, target = new Set<string>()) {
+    target.add(node.id)
+    node.children.forEach((child) => collectIds(child, target))
+    return target
+}
+
+function pathToNode(node: ComponentNode, targetId: string, trail: string[] = []): string[] | null {
+    const nextTrail = [...trail, node.id]
+
+    if (node.id === targetId) {
+        return nextTrail
+    }
+
+    for (const child of node.children) {
+        const childTrail = pathToNode(child, targetId, nextTrail)
+
+        if (childTrail) {
+            return childTrail
+        }
+    }
+
+    return null
+}
+
+function defaultExpandedIds(root: ComponentNode | null) {
+    if (!root) {
+        return new Set<string>()
+    }
+
+    return new Set([root.id])
+}
+
+function searchExpandedIds(root: ComponentNode | null, term: string) {
+    const expanded = defaultExpandedIds(root)
+
+    if (!root || !term) {
+        return expanded
+    }
+
+    function visit(node: ComponentNode): boolean {
+        const childMatched = node.children.some((child) => visit(child))
+        const selfMatched = matchesSearch(node, term)
+
+        if (childMatched) {
+            expanded.add(node.id)
+        }
+
+        return selfMatched || childMatched
+    }
+
+    visit(root)
+
+    return expanded
+}
+
+function nodeValue(node: ComponentNode) {
+    return activeMode.value === 'count' ? node.renders : node.avgMs
+}
+
+function isHot(node: ComponentNode) {
+    return nodeValue(node) >= activeThreshold.value
+}
+
+function matchesSearch(node: ComponentNode, searchTerm: string): boolean {
+    if (!searchTerm) {
+        return true
+    }
+
+    const query = searchTerm.toLowerCase()
+
+    return (
+        node.label.toLowerCase().includes(query) ||
+        node.file.toLowerCase().includes(query) ||
+        node.path.some((segment) => segment.toLowerCase().includes(query)) ||
+        node.triggers.some((trigger) => trigger.toLowerCase().includes(query))
+    )
+}
+
+function treeMatches(node: ComponentNode, searchTerm: string): boolean {
+    if (!searchTerm) {
+        return true
+    }
+
+    return matchesSearch(node, searchTerm) || node.children.some((child) => treeMatches(child, searchTerm))
+}
+
+const displayEntries = computed(() => (frozen.value ? frozenSnapshot.value : renders.value))
+const rootNodes = computed(() => buildNodes(displayEntries.value))
+const rootMap = computed(() => new Map(rootNodes.value.map((node) => [node.id, node])))
+const allComponents = computed(() => flatten(rootNodes.value))
+
+const filteredRoots = computed(() => {
+    const term = search.value.trim()
+
+    return rootNodes.value.filter((root) => treeMatches(root, term))
 })
+
+const activeRoot = computed(() => {
+    if (activeRootId.value) {
+        return filteredRoots.value.find((node) => node.id === activeRootId.value) ?? rootMap.value.get(activeRootId.value) ?? null
+    }
+
+    return filteredRoots.value[0] ?? rootNodes.value[0] ?? null
+})
+
+const visibleTreeRoots = computed(() => {
+    if (!activeRoot.value) {
+        return []
+    }
+
+    return [activeRoot.value]
+})
+
+const appEntries = computed(() =>
+    filteredRoots.value.map((root, index) => ({
+        id: root.id,
+        label: `App ${index + 1}`,
+        meta: `${countSubtree(root)} nodes`,
+        root,
+    }))
+)
 
 const activeSelected = computed(() => allComponents.value.find((node) => node.id === activeSelectedId.value) ?? null)
 const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.renders, 0))
@@ -214,8 +402,101 @@ const avgTime = computed(() => {
     return (components.reduce((sum, node) => sum + node.avgMs, 0) / components.length).toFixed(1)
 })
 
-function isHot(node: ComponentNode) {
-    return (activeMode.value === 'count' ? node.renders : node.avgMs) >= activeThreshold.value
+watch(
+    rootNodes,
+    (roots) => {
+        if (!roots.length) {
+            activeRootId.value = null
+            activeSelectedId.value = null
+            expandedIds.value = new Set()
+            expansionReady.value = false
+            return
+        }
+
+        const rootIds = new Set(roots.map((root) => root.id))
+
+        if (!activeRootId.value || !rootIds.has(activeRootId.value)) {
+            activeRootId.value = roots[0].id
+        }
+
+        if (activeSelectedId.value && !allComponents.value.some((node) => node.id === activeSelectedId.value)) {
+            activeSelectedId.value = null
+        }
+
+        const validIds = new Set(allComponents.value.map((node) => node.id))
+        const preserved = new Set([...expandedIds.value].filter((id) => validIds.has(id)))
+
+        if (!expansionReady.value) {
+            expandedIds.value = defaultExpandedIds(activeRoot.value)
+            expansionReady.value = true
+            return
+        }
+
+        if (!search.value.trim() && activeSelectedId.value && activeRoot.value) {
+            const selectedPath = pathToNode(activeRoot.value, activeSelectedId.value) ?? []
+
+            selectedPath.forEach((id) => preserved.add(id))
+        }
+
+        expandedIds.value = preserved
+    },
+    { immediate: true }
+)
+
+watch(search, (term) => {
+    if (!activeRoot.value) {
+        return
+    }
+
+    const normalized = term.trim()
+
+    if (normalized) {
+        expandedIds.value = searchExpandedIds(activeRoot.value, normalized)
+        return
+    }
+
+    if (activeSelectedId.value) {
+        const selectedPath = pathToNode(activeRoot.value, activeSelectedId.value)
+
+        expandedIds.value = selectedPath ? new Set(selectedPath) : defaultExpandedIds(activeRoot.value)
+        return
+    }
+
+    expandedIds.value = defaultExpandedIds(activeRoot.value)
+})
+
+function selectNode(node: ComponentNode) {
+    activeSelectedId.value = node.id
+
+    const topLevelRoot = rootNodes.value.find((root) => collectIds(root).has(node.id))
+
+    if (topLevelRoot) {
+        activeRootId.value = topLevelRoot.id
+        expandedIds.value = new Set(pathToNode(topLevelRoot, node.id) ?? [topLevelRoot.id])
+    }
+}
+
+function toggleNode(id: string) {
+    const next = new Set(expandedIds.value)
+
+    if (next.has(id)) {
+        next.delete(id)
+    } else {
+        next.add(id)
+    }
+
+    expandedIds.value = next
+}
+
+function selectRoot(root: ComponentNode) {
+    activeRootId.value = root.id
+    expandedIds.value = defaultExpandedIds(root)
+    expansionReady.value = true
+}
+
+function updateSearch(event: Event) {
+    const target = event.target as HTMLInputElement | null
+    search.value = target?.value ?? ''
 }
 
 function toggleFreeze() {
@@ -225,8 +506,16 @@ function toggleFreeze() {
         return
     }
 
-    frozenSnapshot.value = JSON.parse(JSON.stringify(liveNodes.value)) as ComponentNode[]
+    frozenSnapshot.value = JSON.parse(JSON.stringify(renders.value)) as RenderEntry[]
     frozen.value = true
+}
+
+function basename(file: string) {
+    return file.split('/').pop()?.replace(/\.vue$/i, '') ?? file
+}
+
+function pathLabel(node: ComponentNode) {
+    return node.path.join(' / ')
 }
 </script>
 
@@ -267,50 +556,89 @@ function toggleFreeze() {
             </div>
         </div>
 
-        <div class="split">
-            <div class="page-frame">
-                <div class="legend">
-                    <div class="swatch-row">
-                        <span class="swatch" style="background: #eaf3de"></span>
-                        <span class="swatch" style="background: #97c459"></span>
-                        <span class="swatch" style="background: #ef9f27"></span>
-                        <span class="swatch" style="background: #e24b4a"></span>
+        <div class="inspector">
+            <aside class="roots-panel">
+                <div class="panel-title">apps</div>
+                <button
+                    v-for="entry in appEntries"
+                    :key="entry.id"
+                    class="root-item"
+                    :class="{ active: activeRootId === entry.id }"
+                    @click="selectRoot(entry.root)"
+                >
+                    <div class="root-copy">
+                        <span class="root-label mono">{{ entry.label }}</span>
+                        <span class="root-sub muted mono">{{ entry.root.label }}</span>
                     </div>
-                    <span class="muted text-sm">cool → hot</span>
-                </div>
-                <ComponentBlock
-                    v-for="rootNode in rootNodes"
-                    :key="rootNode.id"
-                    :node="rootNode"
-                    :mode="activeMode"
-                    :threshold="activeThreshold"
-                    :hot-only="activeHotOnly"
-                    :selected="activeSelected?.id"
-                    @select="activeSelectedId = $event.id"
-                />
-                <div v-if="!rootNodes.length" class="detail-empty" style="height: 180px; margin-top: 12px">
-                    {{ connected ? 'No render activity recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
-                </div>
-            </div>
+                    <span class="root-meta mono">{{ entry.meta }}</span>
+                </button>
+                <div v-if="!appEntries.length" class="detail-empty">no apps match</div>
+            </aside>
 
-            <div class="sidebar">
+            <section class="tree-panel">
+                <div class="tree-toolbar">
+                    <input :value="search" class="search-input mono" placeholder="Find components..." @input="updateSearch" />
+                </div>
+
+                <div class="tree-frame">
+                    <div class="tree-canvas">
+                        <TreeNode
+                            v-for="root in visibleTreeRoots"
+                            :key="root.id"
+                            :node="root"
+                            :mode="activeMode"
+                            :threshold="activeThreshold"
+                            :hot-only="activeHotOnly"
+                            :selected="activeSelected?.id"
+                            :search="search"
+                            :expanded-ids="expandedIds"
+                            @select="selectNode"
+                            @toggle="toggleNode"
+                        />
+                    </div>
+                    <div v-if="!visibleTreeRoots.length" class="detail-empty">
+                        {{ connected ? 'No render activity recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
+                    </div>
+                </div>
+            </section>
+
+            <aside class="detail-panel">
                 <template v-if="activeSelected">
                     <div class="detail-header">
                         <span class="mono bold" style="font-size: 12px">{{ activeSelected.label }}</span>
                         <button @click="activeSelectedId = null">×</button>
                     </div>
 
+                    <div class="detail-pill-row">
+                        <span class="detail-pill mono">{{ activeSelected.renders }} renders</span>
+                        <span class="detail-pill mono">{{ activeSelected.avgMs.toFixed(1) }}ms avg</span>
+                        <span class="detail-pill mono" :class="{ hot: isHot(activeSelected) }">{{ isHot(activeSelected) ? 'hot' : 'cool' }}</span>
+                    </div>
+
+                    <div class="section-label">identity</div>
                     <div class="meta-grid">
-                        <span class="muted text-sm">renders</span>
-                        <span class="mono text-sm">{{ activeSelected.renders }}</span>
-                        <span class="muted text-sm">avg time</span>
-                        <span class="mono text-sm">{{ activeSelected.avgMs.toFixed(1) }}ms</span>
-                        <span class="muted text-sm">hot?</span>
-                        <span class="text-sm" :style="{ color: isHot(activeSelected) ? 'var(--red)' : 'var(--teal)' }">
-                            {{ isHot(activeSelected) ? 'yes' : 'no' }}
-                        </span>
+                        <span class="muted text-sm">label</span>
+                        <span class="mono text-sm">{{ activeSelected.label }}</span>
+                        <span class="muted text-sm">path</span>
+                        <span class="mono text-sm">{{ pathLabel(activeSelected) }}</span>
                         <span class="muted text-sm">file</span>
                         <span class="mono text-sm muted">{{ activeSelected.file }}</span>
+                        <span class="muted text-sm">file name</span>
+                        <span class="mono text-sm">{{ basename(activeSelected.file) }}</span>
+                        <span class="muted text-sm">parent</span>
+                        <span class="mono text-sm">{{ activeSelected.parentLabel ?? 'none' }}</span>
+                        <span class="muted text-sm">children</span>
+                        <span class="mono text-sm">{{ activeSelected.children.length }}</span>
+                    </div>
+
+                    <div class="section-label">rendering</div>
+                    <div class="meta-grid">
+                        <span class="muted text-sm">mode value</span>
+                        <span class="mono text-sm">{{ activeMode === 'count' ? activeSelected.renders : `${activeSelected.avgMs.toFixed(1)}ms` }}</span>
+                        <span class="muted text-sm">threshold</span>
+                        <span class="mono text-sm">{{ activeThreshold }}</span>
+                        <span class="muted text-sm">selected mode</span>
+                        <span class="mono text-sm">{{ activeMode === 'count' ? 'render count' : 'render time' }}</span>
                     </div>
 
                     <div class="section-label">triggers</div>
@@ -318,7 +646,7 @@ function toggleFreeze() {
                     <div v-if="!activeSelected.triggers.length" class="muted text-sm">no triggers recorded</div>
                 </template>
                 <div v-else class="detail-empty">click a component to inspect</div>
-            </div>
+            </aside>
         </div>
     </div>
 </template>
@@ -359,52 +687,231 @@ function toggleFreeze() {
     flex-shrink: 0;
 }
 
-.split {
-    display: flex;
+.inspector {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 320px);
     gap: 12px;
     flex: 1;
-    overflow: hidden;
     min-height: 0;
 }
 
-.page-frame {
-    flex: 1;
-    overflow: auto;
+.roots-panel,
+.tree-panel,
+.detail-panel {
     border: 0.5px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 12px;
     background: var(--bg3);
+    min-height: 0;
 }
 
-.legend {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-
-.swatch-row {
-    display: flex;
-    gap: 2px;
-}
-
-.swatch {
-    width: 16px;
-    height: 8px;
-    border-radius: 2px;
-}
-
-.sidebar {
-    width: 260px;
-    flex-shrink: 0;
-    overflow: auto;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 12px;
-    background: var(--bg3);
+.roots-panel,
+.detail-panel {
     display: flex;
     flex-direction: column;
+    overflow: auto;
+    padding: 12px;
+    gap: 8px;
+}
+
+.panel-title {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text3);
+}
+
+.root-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg2);
+    color: var(--text);
+    text-align: left;
+}
+
+.root-item.active {
+    border-color: var(--teal);
+    background: color-mix(in srgb, var(--teal) 16%, var(--bg2));
+}
+
+.root-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.root-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.root-sub {
+    font-size: 11px;
+}
+
+.root-meta {
+    color: var(--text3);
+    font-size: 11px;
+}
+
+.tree-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tree-toolbar {
+    padding: 12px;
+    border-bottom: 0.5px solid var(--border);
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg2);
+    color: var(--text);
+}
+
+.tree-frame {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 12px;
+}
+
+:deep(.tree-canvas) {
+    display: inline-block;
+    min-width: 100%;
+    width: max-content;
+}
+
+:deep(.tree-node) {
+    margin-bottom: 4px;
+}
+
+:deep(.tree-row) {
+    display: grid;
+    grid-template-columns: 18px 8px minmax(0, 1fr) auto;
+    align-items: center;
     gap: 6px;
+    min-width: 0;
+    width: 100%;
+    padding: 4px 8px;
+    padding-left: calc(8px + (var(--tree-depth, 0) * 16px));
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+:deep(.tree-row:hover) {
+    background: var(--bg2);
+}
+
+:deep(.tree-row.selected) {
+    background: color-mix(in srgb, var(--teal) 12%, var(--bg2));
+    border-color: var(--teal);
+}
+
+:deep(.tree-row.hot) {
+    box-shadow: inset 2px 0 0 var(--red);
+}
+
+:deep(.tree-toggle) {
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    padding: 0;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+:deep(.tree-toggle:disabled) {
+    opacity: 0.4;
+    cursor: default;
+}
+
+:deep(.tree-rail) {
+    display: block;
+    width: 2px;
+    height: 14px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+:deep(.tree-copy) {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 6px;
+    overflow: hidden;
+}
+
+:deep(.tree-name) {
+    font-size: 12px;
+    color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+:deep(.tree-badges) {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+:deep(.tree-badge) {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+}
+
+:deep(.tree-metrics) {
+    display: flex;
+    align-items: center;
+    min-width: 92px;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+:deep(.tree-metric-pill) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 78px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg2);
+    font-size: 10px;
+    color: var(--text3);
+}
+
+:deep(.tree-children) {
+    margin-left: 7px;
+    padding-left: 11px;
+    border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 
 .detail-empty {
@@ -428,6 +935,25 @@ function toggleFreeze() {
     gap: 4px 12px;
 }
 
+.detail-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.detail-pill {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: var(--bg2);
+    font-size: 11px;
+}
+
+.detail-pill.hot {
+    border-color: color-mix(in srgb, var(--red) 50%, var(--border));
+    color: var(--red);
+}
+
 .section-label {
     font-size: 10px;
     font-weight: 500;
@@ -444,5 +970,16 @@ function toggleFreeze() {
     padding: 4px 8px;
     margin-bottom: 3px;
     color: var(--text2);
+}
+
+@media (max-width: 1180px) {
+    .inspector {
+        grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    }
+
+    .detail-panel {
+        grid-column: 1 / -1;
+        max-height: 220px;
+    }
 }
 </style>

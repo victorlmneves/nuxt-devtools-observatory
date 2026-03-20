@@ -74,6 +74,7 @@ export interface RenderEntry {
     uid: number
     name: string
     file: string
+    element?: string
     renders: number
     totalMs: number
     avgMs: number

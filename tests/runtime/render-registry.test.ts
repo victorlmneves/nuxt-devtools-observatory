@@ -18,9 +18,12 @@ function fakeCPI(uid: number, name = 'TestComp', file = 'Test.vue'): ComponentPu
     return {
         $: {
             uid,
-            type: { __name: name, __file: file },
+            type: { __name: name, __file: file, name },
         },
         $el: {
+            tagName: 'DIV',
+            id: '',
+            className: 'test-comp',
             getBoundingClientRect: () => ({ x: 0, y: 0, width: 100, height: 50, top: 0, left: 0 }),
         },
         $parent: null,
@@ -122,6 +125,21 @@ describe('setupRenderRegistry', () => {
         expect(entries[0].renders).toBe(1)
     })
 
+    it('removes entries when components unmount', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = fakeCPI(9, 'Transient', 'Transient.vue')
+        ;(mixin.mounted as (this: ComponentPublicInstance) => void).call(instance)
+        expect(getAll()).toHaveLength(1)
+
+        ;(mixin.unmounted as (this: ComponentPublicInstance) => void).call(instance)
+        expect(getAll()).toEqual([])
+    })
+
     it('accumulates renderTriggered trigger entries with key and type', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
@@ -180,5 +198,68 @@ describe('setupRenderRegistry', () => {
 
         expect(entry.name).toBe('ProductCard')
         expect(entry.file).toBe('ProductCard.vue')
+    })
+
+    it('falls back to a DOM element description when component metadata is unavailable', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: {
+                uid: 8,
+                type: {},
+            },
+            $el: {
+                tagName: 'SECTION',
+                id: 'hero',
+                className: 'landing-panel wide',
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 300, height: 120, top: 0, left: 0 }),
+            },
+            $parent: null,
+        } as unknown as ComponentPublicInstance
+
+        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+
+        const entry = getAll()[0]
+
+        expect(entry.name).toBe('section#hero.landing-panel')
+        expect(entry.element).toBe('section#hero.landing-panel')
+    })
+
+    it('infers anonymous labels from the nearest named parent when available', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: {
+                uid: 12,
+                type: {},
+            },
+            $el: {
+                tagName: 'LI',
+                id: '',
+                className: 'min-w-0 truncate',
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 120, height: 30, top: 0, left: 0 }),
+            },
+            $parent: {
+                $: {
+                    uid: 3,
+                    type: { __name: 'NavigationMenuList' },
+                },
+            },
+        } as unknown as ComponentPublicInstance
+
+        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+
+        const entry = getAll()[0]
+
+        expect(entry.name).toBe('NavigationMenuList li.min-w-0')
+        expect(entry.element).toBe('li.min-w-0')
     })
 })

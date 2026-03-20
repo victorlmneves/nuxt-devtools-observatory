@@ -8,6 +8,7 @@ export interface RenderEntry {
     uid: number
     name: string
     file: string
+    element?: string
     renders: number
     totalMs: number
     avgMs: number
@@ -50,6 +51,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
             : undefined
     }
 
+    function removeEntry(instance: ComponentPublicInstance) {
+        const uid = instance.$.uid
+        entries.value.delete(uid)
+    }
+
     // Hook Vue's global mixin for render tracking
     nuxtApp.vueApp.mixin({
         mounted(this: ComponentPublicInstance) {
@@ -74,6 +80,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
             entry.renders++
             syncRect(entry, this)
             emit('render:update', { uid: entry.uid, renders: entry.renders })
+        },
+
+        unmounted(this: ComponentPublicInstance) {
+            removeEntry(this)
+            emit('render:remove', { uid: this.$.uid })
         },
     })
 
@@ -112,6 +123,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
             uid: entry.uid,
             name: entry.name,
             file: entry.file,
+            element: entry.element,
             renders: entry.renders,
             totalMs: entry.totalMs,
             avgMs: entry.avgMs,
@@ -157,13 +169,18 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
  * @returns {RenderEntry} A new RenderEntry object.
  */
 function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry {
+    const type = instance.$.type as { __name?: string; __file?: string; name?: string }
+    const parentType = instance.$parent?.$?.type as { __name?: string; __file?: string; name?: string } | undefined
+    const element = describeElement(instance.$el)
+    const ownLabel = resolveTypeLabel(type)
+    const parentLabel = resolveTypeLabel(parentType)
+    const file = type.__file ?? 'unknown'
+
     return {
         uid,
-        name:
-            (instance.$.type as { __name?: string; __file?: string }).__name ??
-            (instance.$.type as { __file?: string }).__file?.split('/').pop() ??
-            `Component#${uid}`,
-        file: (instance.$.type as { __file?: string }).__file ?? 'unknown',
+        name: ownLabel ?? inferAnonymousLabel(parentLabel, element) ?? `Component#${uid}`,
+        file,
+        element,
         renders: 0,
         totalMs: 0,
         avgMs: 0,
@@ -171,4 +188,44 @@ function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry 
         children: [],
         parentUid: instance.$parent?.$.uid,
     }
+}
+
+function describeElement(el: unknown): string | undefined {
+    if (!el || typeof el !== 'object') {
+        return undefined
+    }
+
+    const element = el as { tagName?: string; id?: string; className?: string | { baseVal?: string } }
+    const tag = element.tagName?.toLowerCase()
+
+    if (!tag) {
+        return undefined
+    }
+
+    const id = typeof element.id === 'string' && element.id ? `#${element.id}` : ''
+    const rawClassName = typeof element.className === 'string' ? element.className : element.className?.baseVal
+    const firstClass = rawClassName?.trim().split(/\s+/).find(Boolean)
+    const classSuffix = firstClass ? `.${firstClass}` : ''
+
+    return `${tag}${id}${classSuffix}`
+}
+
+function resolveTypeLabel(type: { __name?: string; __file?: string; name?: string } | undefined): string | undefined {
+    if (!type) {
+        return undefined
+    }
+
+    return type.__name ?? type.name ?? type.__file?.split('/').pop()?.replace(/\.vue$/i, '')
+}
+
+function inferAnonymousLabel(parentLabel: string | undefined, element: string | undefined): string | undefined {
+    if (parentLabel && element) {
+        return `${parentLabel} ${element}`
+    }
+
+    if (parentLabel) {
+        return `${parentLabel} child`
+    }
+
+    return element
 }
