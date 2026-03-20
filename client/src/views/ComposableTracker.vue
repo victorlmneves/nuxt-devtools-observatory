@@ -2,12 +2,6 @@
 import { ref, computed } from 'vue'
 import { useObservatoryData, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
 
-interface RefEntry {
-    key: string
-    type: string
-    val: string
-}
-
 interface ComposableViewEntry {
     id: string
     name: string

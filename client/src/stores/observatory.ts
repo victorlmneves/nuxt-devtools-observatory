@@ -1,4 +1,4 @@
-import { onUnmounted, ref } from 'vue'
+import { ref } from 'vue'
 
 const POLL_MS = 500
 
@@ -97,64 +97,12 @@ export interface TransitionEntry {
     mode?: string
 }
 
-export interface FetchEntry {
-    id: string
-    key: string
-    url: string
-    status: 'pending' | 'ok' | 'error' | 'cached'
-    origin: 'ssr' | 'csr'
-    ms?: number
-    size?: number
-    cached: boolean
-    payload?: unknown
-    file?: string
-    line?: number
-    startOffset?: number
-}
-
-interface ComposableEntry {
-    id: string
-    name: string
-    component: string
-    instances: number
-    status: 'mounted' | 'unmounted'
-    leak: boolean
-    leakReason?: string
-    refs: Array<{ key: string; type: string; val: string }>
-    watchers: number
-    intervals: number
-    lifecycle: { onMounted: boolean; onUnmounted: boolean; watchersCleaned: boolean; intervalsCleaned: boolean }
-}
-
-interface ProvideInjectNode {
-    id: string
-    label: string
-    type: 'provider' | 'consumer' | 'both' | 'error'
-    provides: Array<{ key: string; val: string; reactive: boolean }>
-    injects: Array<{ key: string; from: string | null; ok: boolean }>
-    children: ProvideInjectNode[]
-}
-
-interface RenderNode {
-    id: string
-    label: string
-    file: string
-    renders: number
-    avgMs: number
-    triggers: string[]
-    children: RenderNode[]
-}
-
 interface ObservatorySnapshot {
     fetch?: FetchEntry[]
     provideInject?: ProvideInjectSnapshot
     composables?: ComposableEntry[]
     renders?: RenderEntry[]
     transitions?: TransitionEntry[]
-    fetch?: FetchEntry[]
-    composables?: ComposableEntry[]
-    provideInject?: ProvideInjectNode[]
-    renders?: RenderNode[]
 }
 
 const fetchEntries = ref<FetchEntry[]>([])
@@ -165,8 +113,6 @@ const transitions = ref<TransitionEntry[]>([])
 const connected = ref(false)
 
 let started = false
-let timer: ReturnType<typeof setInterval> | null = null
-let cleanupRegistered = false
 let parentOrigin = '*'
 
 function cloneArray<T>(value: T[] | undefined): T[] {
@@ -220,31 +166,12 @@ function ensureStarted() {
     started = true
     parentOrigin = getParentOrigin()
     window.addEventListener('message', onMessage)
-    timer = window.setInterval(requestSnapshot, POLL_MS)
+    window.setInterval(requestSnapshot, POLL_MS)
     requestSnapshot()
 }
 
 export function useObservatoryData() {
     ensureStarted()
-
-    if (!cleanupRegistered) {
-        cleanupRegistered = true
-        onUnmounted(() => {
-            if (!started) {
-                return
-            }
-
-            window.removeEventListener('message', onMessage)
-
-            if (timer) {
-                clearInterval(timer)
-                timer = null
-            }
-
-            started = false
-            cleanupRegistered = false
-        })
-    }
 
     return {
         fetch: fetchEntries,
@@ -253,5 +180,6 @@ export function useObservatoryData() {
         renders,
         transitions,
         connected,
+        refresh: requestSnapshot,
     }
 }
