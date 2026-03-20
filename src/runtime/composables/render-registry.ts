@@ -21,22 +21,46 @@ export interface RenderEntry {
  * Sets up a render registry for the given Nuxt app.
  * @param {{ vueApp: import('vue').App }} nuxtApp - The Nuxt app object.
  * @param {object} nuxtApp.vueApp - The Vue app instance.
- * @param {number} threshold - The minimum number of renders required for a component to be tracked.
  * @returns {object} The render registry object.
  */
-export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, threshold: number) {
+export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
+
+    function ensureEntry(instance: ComponentPublicInstance) {
+        const uid: number = instance.$.uid
+
+        if (!entries.value.has(uid)) {
+            entries.value.set(uid, makeEntry(uid, instance))
+        }
+
+        return entries.value.get(uid)!
+    }
+
+    function syncRect(entry: RenderEntry, instance: ComponentPublicInstance) {
+        const rect: DOMRect | undefined = instance.$el?.getBoundingClientRect?.()
+        entry.rect = rect
+            ? {
+                  x: Math.round(rect.x),
+                  y: Math.round(rect.y),
+                  width: Math.round(rect.width),
+                  height: Math.round(rect.height),
+                  top: Math.round(rect.top),
+                  left: Math.round(rect.left),
+              }
+            : undefined
+    }
 
     // Hook Vue's global mixin for render tracking
     nuxtApp.vueApp.mixin({
+        mounted(this: ComponentPublicInstance) {
+            const entry = ensureEntry(this)
+            entry.renders++
+            syncRect(entry, this)
+            emit('render:update', { uid: entry.uid, renders: entry.renders })
+        },
+
         renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
-            const uid: number = this.$.uid
-
-            if (!entries.value.has(uid)) {
-                entries.value.set(uid, makeEntry(uid, this))
-            }
-
-            const entry = entries.value.get(uid)!
+            const entry = ensureEntry(this)
             entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
 
             // Keep last 50 triggers per component
@@ -46,26 +70,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, thre
         },
 
         updated(this: ComponentPublicInstance) {
-            const uid: number = this.$.uid
-
-            if (!entries.value.has(uid)) {
-                entries.value.set(uid, makeEntry(uid, this))
-            }
-
-            const entry = entries.value.get(uid)!
+            const entry = ensureEntry(this)
             entry.renders++
-            const r: DOMRect | undefined = this.$el?.getBoundingClientRect?.()
-            entry.rect = r
-                ? {
-                      x: Math.round(r.x),
-                      y: Math.round(r.y),
-                      width: Math.round(r.width),
-                      height: Math.round(r.height),
-                      top: Math.round(r.top),
-                      left: Math.round(r.left),
-                  }
-                : undefined
-            emit('render:update', { uid, renders: entry.renders })
+            syncRect(entry, this)
+            emit('render:update', { uid: entry.uid, renders: entry.renders })
         },
     })
 
@@ -123,7 +131,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, thre
         }
     }
     function getAll(): RenderEntry[] {
-        return [...entries.value.values()].filter((e) => e.renders >= threshold).map(sanitize)
+        return [...entries.value.values()].map(sanitize)
     }
 
     function snapshot(): RenderEntry[] {

@@ -30,7 +30,7 @@ function fakeCPI(uid: number, name = 'TestComp', file = 'Test.vue'): ComponentPu
 describe('setupRenderRegistry', () => {
     it('returns getAll and snapshot functions', () => {
         const app = createApp({})
-        const { getAll, snapshot } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll, snapshot } = setupRenderRegistry(makeNuxtApp(app))
 
         expect(typeof getAll).toBe('function')
         expect(typeof snapshot).toBe('function')
@@ -38,14 +38,14 @@ describe('setupRenderRegistry', () => {
 
     it('snapshot() is an alias for getAll()', () => {
         const app = createApp({})
-        const { getAll, snapshot } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll, snapshot } = setupRenderRegistry(makeNuxtApp(app))
 
         expect(getAll()).toEqual(snapshot())
     })
 
     it('returns an empty list when no components have rendered', () => {
         const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
         expect(getAll()).toEqual([])
     })
@@ -54,7 +54,7 @@ describe('setupRenderRegistry', () => {
         const app = createApp({})
         const mixinsBefore = (app as unknown as { _context: { mixins: unknown[] } })._context.mixins.length
 
-        setupRenderRegistry(makeNuxtApp(app), 1)
+        setupRenderRegistry(makeNuxtApp(app))
 
         const mixinsAfter = (app as unknown as { _context: { mixins: unknown[] } })._context.mixins.length
 
@@ -63,7 +63,7 @@ describe('setupRenderRegistry', () => {
 
     it('increments the renders counter when the updated hook fires', () => {
         const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
         // Get the mixin we just installed and call its `updated` hook directly
         const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
@@ -80,9 +80,9 @@ describe('setupRenderRegistry', () => {
         expect(entries[0].renders).toBe(2)
     })
 
-    it('getAll() filters out entries whose renders count is below the threshold', () => {
+    it('getAll() returns entries even when they are below the heatmap threshold', () => {
         const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app), 3)
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
         const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
         const mixin = mixins[mixins.length - 1]
@@ -101,13 +101,30 @@ describe('setupRenderRegistry', () => {
 
         const visible = getAll()
 
-        expect(visible).toHaveLength(1)
-        expect(visible[0].uid).toBe(2)
+        expect(visible).toHaveLength(2)
+        expect(visible.map((entry) => entry.uid)).toEqual([1, 2])
+    })
+
+    it('counts the initial mounted render', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = fakeCPI(7, 'MountedOnly')
+        ;(mixin.mounted as (this: ComponentPublicInstance) => void).call(instance)
+
+        const entries = getAll()
+
+        expect(entries).toHaveLength(1)
+        expect(entries[0].uid).toBe(7)
+        expect(entries[0].renders).toBe(1)
     })
 
     it('accumulates renderTriggered trigger entries with key and type', () => {
         const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
         const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
         const mixin = mixins[mixins.length - 1]
@@ -130,7 +147,7 @@ describe('setupRenderRegistry', () => {
 
     it('keeps at most 50 trigger entries per component', () => {
         const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
         const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
         const mixin = mixins[mixins.length - 1]
@@ -151,7 +168,7 @@ describe('setupRenderRegistry', () => {
 
     it('sets the component name from instance.$.type.__name', () => {
         const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app), 1)
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
         const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
         const mixin = mixins[mixins.length - 1]

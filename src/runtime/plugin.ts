@@ -70,7 +70,7 @@ export default defineNuxtPlugin(() => {
     const fetchRegistry = setupFetchRegistry()
     const provideInjectRegistry = setupProvideInjectRegistry()
     const composableRegistry = setupComposableRegistry()
-    const renderRegistry = setupRenderRegistry(nuxtApp, config.heatmapThreshold)
+    const renderRegistry = setupRenderRegistry(nuxtApp)
     const transitionRegistry = setupTransitionRegistry()
 
     // Expose registries globally so Vite transform shims can reach them
