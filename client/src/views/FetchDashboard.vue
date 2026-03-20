@@ -9,6 +9,7 @@ const { fetch, connected } = useObservatoryData()
 const filter = ref<string>('all')
 const search = ref('')
 const selectedId = ref<string | null>(null)
+const waterfallOpen = ref(true)
 
 const entries = computed<FetchViewEntry[]>(() => {
     const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
@@ -235,27 +236,35 @@ function formatSize(bytes: number) {
         </div>
 
         <div class="waterfall">
-            <div class="section-label" style="margin-bottom: 6px">waterfall</div>
-            <div v-for="entry in entries" :key="entry.id" class="wf-row">
-                <span
-                    class="mono muted text-sm"
-                    style="width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0"
-                >
-                    {{ entry.key }}
-                </span>
-                <div class="wf-track">
-                    <div
-                        class="wf-bar"
-                        :style="{
-                            left: `${wfLeft(entry)}%`,
-                            width: `${Math.max(2, wfWidth(entry))}%`,
-                            background: barColor(entry.status),
-                        }"
-                    ></div>
+            <div class="waterfall-header">
+                <div class="section-label" style="margin-top: 0; margin-bottom: 0">waterfall</div>
+                <button :class="{ active: waterfallOpen }" @click="waterfallOpen = !waterfallOpen">
+                    {{ waterfallOpen ? 'hide' : 'show' }}
+                </button>
+            </div>
+
+            <div v-if="waterfallOpen" class="waterfall-body">
+                <div v-for="entry in entries" :key="entry.id" class="wf-row">
+                    <span
+                        class="mono muted text-sm"
+                        style="width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0"
+                    >
+                        {{ entry.key }}
+                    </span>
+                    <div class="wf-track">
+                        <div
+                            class="wf-bar"
+                            :style="{
+                                left: `${wfLeft(entry)}%`,
+                                width: `${Math.max(2, wfWidth(entry))}%`,
+                                background: barColor(entry.status),
+                            }"
+                        ></div>
+                    </div>
+                    <span class="mono muted text-sm" style="width: 44px; text-align: right; flex-shrink: 0">
+                        {{ entry.ms != null ? `${entry.ms}ms` : '—' }}
+                    </span>
                 </div>
-                <span class="mono muted text-sm" style="width: 44px; text-align: right; flex-shrink: 0">
-                    {{ entry.ms != null ? `${entry.ms}ms` : '—' }}
-                </span>
             </div>
         </div>
     </div>
@@ -366,6 +375,17 @@ function formatSize(bytes: number) {
     border: 0.5px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 10px 12px;
+}
+
+.waterfall-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.waterfall-body {
+    margin-top: 6px;
 }
 
 .wf-row {
