@@ -51,6 +51,8 @@ describe('setupProvideInjectRegistry', () => {
             componentName: 'App',
             componentFile: 'App.vue',
             componentUid: 1,
+            parentUid: 0,
+            parentFile: 'Root.vue',
             isReactive: false,
             valueSnapshot: 'dark',
             line: 5,
@@ -68,6 +70,8 @@ describe('setupProvideInjectRegistry', () => {
             componentName: 'Child',
             componentFile: 'Child.vue',
             componentUid: 2,
+            parentUid: 1,
+            parentFile: 'App.vue',
             resolved: true,
             line: 8,
         })
@@ -84,6 +88,41 @@ describe('setupProvideInjectRegistry', () => {
         expect(Array.isArray(result.injects)).toBe(true)
     })
 
+    it('getAll() preserves parent metadata for graph layout', () => {
+        const reg = setupProvideInjectRegistry()
+
+        reg.registerProvide({
+            key: 'theme',
+            componentName: 'App',
+            componentFile: 'App.vue',
+            componentUid: 1,
+            parentUid: 0,
+            parentFile: 'Root.vue',
+            isReactive: false,
+            valueSnapshot: 'dark',
+            line: 5,
+        })
+        reg.registerInject({
+            key: 'theme',
+            componentName: 'Child',
+            componentFile: 'Child.vue',
+            componentUid: 2,
+            parentUid: 1,
+            parentFile: 'App.vue',
+            resolved: true,
+            resolvedFromFile: 'App.vue',
+            resolvedFromUid: 1,
+            line: 8,
+        })
+
+        const result = reg.getAll()
+
+        expect(result.provides[0].parentUid).toBe(0)
+        expect(result.provides[0].parentFile).toBe('Root.vue')
+        expect(result.injects[0].parentUid).toBe(1)
+        expect(result.injects[0].parentFile).toBe('App.vue')
+    })
+
     it('multiple registrations accumulate correctly', () => {
         const reg = setupProvideInjectRegistry()
 
@@ -92,6 +131,8 @@ describe('setupProvideInjectRegistry', () => {
             componentName: 'C',
             componentFile: 'C.vue',
             componentUid: 1,
+            parentUid: 0,
+            parentFile: 'Root.vue',
             isReactive: false,
             valueSnapshot: null,
             line: 1,
@@ -101,11 +142,22 @@ describe('setupProvideInjectRegistry', () => {
             componentName: 'C',
             componentFile: 'C.vue',
             componentUid: 1,
+            parentUid: 0,
+            parentFile: 'Root.vue',
             isReactive: false,
             valueSnapshot: null,
             line: 2,
         })
-        reg.registerInject({ key: 'a', componentName: 'D', componentFile: 'D.vue', componentUid: 2, resolved: true, line: 5 })
+        reg.registerInject({
+            key: 'a',
+            componentName: 'D',
+            componentFile: 'D.vue',
+            componentUid: 2,
+            parentUid: 1,
+            parentFile: 'C.vue',
+            resolved: true,
+            line: 5,
+        })
 
         expect(reg.getAll().provides).toHaveLength(2)
         expect(reg.getAll().injects).toHaveLength(1)
