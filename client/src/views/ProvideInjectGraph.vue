@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useObservatoryData } from '../stores/observatory'
+import { ref, computed, watch } from 'vue'
+import { useObservatoryData, type InjectEntry, type ProvideEntry } from '../stores/observatory'
 
 interface TreeNodeData {
     id: string
     label: string
     type: 'provider' | 'consumer' | 'both' | 'error'
-    provides: Array<{ key: string; val: string; reactive: boolean }>
+    provides: Array<{ key: string; val: string; raw: unknown; reactive: boolean; complex: boolean }>
     injects: Array<{ key: string; from: string | null; ok: boolean }>
     children: TreeNodeData[]
 }
@@ -31,52 +31,184 @@ const NODE_H = 32
 const V_GAP = 72
 const H_GAP = 18
 
-function nodeColor(n: TreeNodeData): string {
-    if (n.injects.some((i) => !i.ok)) {
-        return 'var(--red)'
-    }
+const { provideInject, connected } = useObservatoryData()
 
-    if (n.type === 'both') {
-        return 'var(--blue)'
-    }
-
-    if (n.type === 'provider') {
-        return 'var(--teal)'
-    }
-
+function nodeColor(node: TreeNodeData): string {
+    if (node.injects.some((entry) => !entry.ok)) return 'var(--red)'
+    if (node.type === 'both') return 'var(--blue)'
+    if (node.type === 'provider') return 'var(--teal)'
     return 'var(--text3)'
 }
 
-function matchesFilter(n: TreeNodeData, filter: string): boolean {
-    if (filter === 'all') {
-        return true
-    }
-
-    if (filter === 'warn') {
-        return n.injects.some((i) => !i.ok)
-    }
-
-    return n.provides.some((p) => p.key === filter) || n.injects.some((i) => i.key === filter)
+function matchesFilter(node: TreeNodeData, filter: string): boolean {
+    if (filter === 'all') return true
+    if (filter === 'warn') return node.injects.some((entry) => !entry.ok)
+    return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
 }
 
-function countLeaves(n: TreeNodeData): number {
-    return n.children.length === 0 ? 1 : n.children.reduce((s, c) => s + countLeaves(c), 0)
+function countLeaves(node: TreeNodeData): number {
+    return node.children.length === 0 ? 1 : node.children.reduce((sum, child) => sum + countLeaves(child), 0)
 }
 
-const { provideInject } = useObservatoryData()
-const nodes = provideInject
+function stringifyValue(value: unknown) {
+    if (typeof value === 'string') {
+        return value
+    }
+
+    try {
+        return JSON.stringify(value)
+    } catch {
+        return String(value)
+    }
+}
+
+function isComplexValue(value: unknown) {
+    return typeof value === 'object' && value !== null
+}
+
+function formatValuePreview(value: unknown) {
+    if (value === null) {
+        return 'null'
+    }
+
+    if (Array.isArray(value)) {
+        return `Array(${value.length})`
+    }
+
+    if (typeof value === 'object') {
+        const keys = Object.keys(value as Record<string, unknown>)
+        return keys.length ? `{ ${keys.join(', ')} }` : '{}'
+    }
+
+    return stringifyValue(value)
+}
+
+function formatValueDetail(value: unknown) {
+    if (!isComplexValue(value)) {
+        return stringifyValue(value)
+    }
+
+    try {
+        return JSON.stringify(value, null, 2)
+    } catch {
+        return stringifyValue(value)
+    }
+}
+
+function provideValueId(nodeId: string, key: string, index: number) {
+    return `${nodeId}:${key}:${index}`
+}
+
+function basename(file: string) {
+    return file.split('/').pop() ?? file
+}
+
+function componentId(entry: ProvideEntry | InjectEntry) {
+    return String(entry.componentUid)
+}
+
+const nodes = computed<TreeNodeData[]>(() => {
+    const nodeMap = new Map<string, TreeNodeData>()
+    const parentMap = new Map<string, string | null>()
+
+    function ensureNode(entry: ProvideEntry | InjectEntry) {
+        const id = componentId(entry)
+        const existing = nodeMap.get(id)
+
+        if (existing) {
+            return existing
+        }
+
+        const created: TreeNodeData = {
+            id,
+            label: basename(entry.componentFile),
+            type: 'consumer',
+            provides: [],
+            injects: [],
+            children: [],
+        }
+
+        nodeMap.set(id, created)
+        parentMap.set(id, entry.parentUid !== undefined ? String(entry.parentUid) : null)
+        return created
+    }
+
+    for (const entry of provideInject.value.provides) {
+        const node = ensureNode(entry)
+        node.provides.push({
+            key: entry.key,
+            val: formatValuePreview(entry.valueSnapshot),
+            raw: entry.valueSnapshot,
+            reactive: entry.isReactive,
+            complex: isComplexValue(entry.valueSnapshot),
+        })
+    }
+
+    for (const entry of provideInject.value.injects) {
+        const node = ensureNode(entry)
+        node.injects.push({
+            key: entry.key,
+            from: entry.resolvedFromFile ?? null,
+            ok: entry.resolved,
+        })
+    }
+
+    for (const node of nodeMap.values()) {
+        if (node.injects.some((entry) => !entry.ok)) {
+            node.type = 'error'
+        } else if (node.provides.length && node.injects.length) {
+            node.type = 'both'
+        } else if (node.provides.length) {
+            node.type = 'provider'
+        } else {
+            node.type = 'consumer'
+        }
+    }
+
+    const roots: TreeNodeData[] = []
+
+    for (const [id, node] of nodeMap.entries()) {
+        const parentId = parentMap.get(id)
+        const parent = parentId ? nodeMap.get(parentId) : undefined
+
+        if (parent) {
+            parent.children.push(node)
+        } else {
+            roots.push(node)
+        }
+    }
+
+    return roots
+})
 
 const activeFilter = ref('all')
 const selectedNode = ref<TreeNodeData | null>(null)
+const expandedProvideValues = ref<Set<string>>(new Set())
+
+watch(selectedNode, () => {
+    expandedProvideValues.value = new Set()
+})
+
+function toggleProvideValue(id: string) {
+    const next = new Set(expandedProvideValues.value)
+
+    if (next.has(id)) {
+        next.delete(id)
+    } else {
+        next.add(id)
+    }
+
+    expandedProvideValues.value = next
+}
 
 const allKeys = computed(() => {
     const keys = new Set<string>()
 
-    function collect(ns: TreeNodeData[]) {
-        ns.forEach((n) => {
-            n.provides.forEach((p) => keys.add(p.key))
-            n.injects.forEach((i) => keys.add(i.key))
-            collect(n.children)
+    function collect(nodesToVisit: TreeNodeData[]) {
+        nodesToVisit.forEach((node) => {
+            node.provides.forEach((entry) => keys.add(entry.key))
+            node.injects.forEach((entry) => keys.add(entry.key))
+            collect(node.children)
         })
     }
 
@@ -85,33 +217,72 @@ const allKeys = computed(() => {
     return [...keys]
 })
 
+const visibleNodes = computed<TreeNodeData[]>(() => {
+    function prune(node: TreeNodeData): TreeNodeData | null {
+        const visibleChildren = node.children.map(prune).filter(Boolean) as TreeNodeData[]
+        const selfMatches = matchesFilter(node, activeFilter.value)
+
+        if (!selfMatches && !visibleChildren.length) {
+            return null
+        }
+
+        return {
+            ...node,
+            children: visibleChildren,
+        }
+    }
+
+    return nodes.value.map(prune).filter(Boolean) as TreeNodeData[]
+})
+
+watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
+    if (!currentSelected) {
+        return
+    }
+
+    const ids = new Set<string>()
+
+    function collect(nodesToVisit: TreeNodeData[]) {
+        nodesToVisit.forEach((node) => {
+            ids.add(node.id)
+            collect(node.children)
+        })
+    }
+
+    collect(currentNodes)
+
+    if (!ids.has(currentSelected.id)) {
+        selectedNode.value = null
+    }
+})
+
 const layout = computed<LayoutNode[]>(() => {
     const flat: LayoutNode[] = []
     const pad = H_GAP
 
     function place(node: TreeNodeData, depth: number, slotLeft: number, parentId: string | null) {
         const leaves = countLeaves(node)
-        const slotW = leaves * (NODE_W + H_GAP) - H_GAP
+        const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
 
         flat.push({
             data: node,
             parentId,
-            x: Math.round(slotLeft + slotW / 2),
+            x: Math.round(slotLeft + slotWidth / 2),
             y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
         })
 
         let childLeft = slotLeft
 
         for (const child of node.children) {
-            const cl = countLeaves(child)
+            const childLeaves = countLeaves(child)
             place(child, depth + 1, childLeft, node.id)
-            childLeft += cl * (NODE_W + H_GAP)
+            childLeft += childLeaves * (NODE_W + H_GAP)
         }
     }
 
     let left = pad
 
-    for (const root of nodes.value) {
+    for (const root of visibleNodes.value) {
         const leaves = countLeaves(root)
         place(root, 0, left, null)
         left += leaves * (NODE_W + H_GAP) + H_GAP * 2
@@ -120,23 +291,22 @@ const layout = computed<LayoutNode[]>(() => {
     return flat
 })
 
-const canvasW = computed(() => layout.value.reduce((m, n) => Math.max(m, n.x + NODE_W / 2 + 20), 400))
-
-const canvasH = computed(() => layout.value.reduce((m, n) => Math.max(m, n.y + NODE_H / 2 + 20), 200))
+const canvasW = computed(() => layout.value.reduce((max, node) => Math.max(max, node.x + NODE_W / 2 + 20), 520))
+const canvasH = computed(() => layout.value.reduce((max, node) => Math.max(max, node.y + NODE_H / 2 + 20), 200))
 
 const edges = computed<Edge[]>(() => {
-    const byId = new Map(layout.value.map((n) => [n.data.id, n]))
+    const byId = new Map(layout.value.map((node) => [node.data.id, node]))
 
     return layout.value
-        .filter((n) => n.parentId !== null)
-        .map((n) => {
-            const p = byId.get(n.parentId!)!
+        .filter((node) => node.parentId !== null)
+        .map((node) => {
+            const parent = byId.get(node.parentId!)!
             return {
-                id: `${p.data.id}--${n.data.id}`,
-                x1: p.x,
-                y1: p.y + NODE_H / 2,
-                x2: n.x,
-                y2: n.y - NODE_H / 2,
+                id: `${parent.data.id}--${node.data.id}`,
+                x1: parent.x,
+                y1: parent.y + NODE_H / 2,
+                x2: node.x,
+                y2: node.y - NODE_H / 2,
             }
         })
 })
@@ -147,13 +317,13 @@ const edges = computed<Edge[]>(() => {
         <div class="toolbar">
             <button :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">all keys</button>
             <button
-                v-for="k in allKeys"
-                :key="k"
+                v-for="key in allKeys"
+                :key="key"
                 style="font-family: var(--mono)"
-                :class="{ active: activeFilter === k }"
-                @click="activeFilter = k"
+                :class="{ active: activeFilter === key }"
+                @click="activeFilter = key"
             >
-                {{ k }}
+                {{ key }}
             </button>
             <button style="margin-left: auto" :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = 'warn'">
                 warnings only
@@ -161,7 +331,6 @@ const edges = computed<Edge[]>(() => {
         </div>
 
         <div class="split">
-            <!-- Graph -->
             <div class="graph-area">
                 <div class="legend">
                     <span class="dot" style="background: var(--teal)"></span>
@@ -173,65 +342,87 @@ const edges = computed<Edge[]>(() => {
                     <span class="dot" style="background: var(--red)"></span>
                     <span>missing provider</span>
                 </div>
-                <div class="canvas-wrap" :style="{ width: canvasW + 'px', height: canvasH + 'px' }">
-                    <svg class="edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
-                        <path
-                            v-for="e in edges"
-                            :key="e.id"
-                            :d="`M ${e.x1},${e.y1} C ${e.x1},${(e.y1 + e.y2) / 2} ${e.x2},${(e.y1 + e.y2) / 2} ${e.x2},${e.y2}`"
-                            class="edge"
-                            fill="none"
-                        />
-                    </svg>
-                    <div
-                        v-for="ln in layout"
-                        :key="ln.data.id"
-                        class="graph-node"
-                        :class="{
-                            'is-selected': selectedNode?.id === ln.data.id,
-                            'is-dimmed': !matchesFilter(ln.data, activeFilter),
-                        }"
-                        :style="{
-                            left: ln.x - NODE_W / 2 + 'px',
-                            top: ln.y - NODE_H / 2 + 'px',
-                            width: NODE_W + 'px',
-                            '--node-color': nodeColor(ln.data),
-                        }"
-                        @click="selectedNode = ln.data"
-                    >
-                        <span class="node-dot" :style="{ background: nodeColor(ln.data) }"></span>
-                        <span class="mono node-label">{{ ln.data.label }}</span>
-                        <span v-if="ln.data.provides.length" class="badge badge-ok badge-xs">+{{ ln.data.provides.length }}</span>
-                        <span v-if="ln.data.injects.some((i) => !i.ok)" class="badge badge-err badge-xs">!</span>
+                <div v-if="layout.length" class="canvas-stage">
+                    <div class="canvas-wrap" :style="{ width: `${canvasW}px`, height: `${canvasH}px` }">
+                        <svg class="edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
+                            <path
+                                v-for="edge in edges"
+                                :key="edge.id"
+                                :d="`M ${edge.x1},${edge.y1} C ${edge.x1},${(edge.y1 + edge.y2) / 2} ${edge.x2},${(edge.y1 + edge.y2) / 2} ${edge.x2},${edge.y2}`"
+                                class="edge"
+                                fill="none"
+                            />
+                        </svg>
+                        <div
+                            v-for="layoutNode in layout"
+                            :key="layoutNode.data.id"
+                            class="graph-node"
+                            :class="{ 'is-selected': selectedNode?.id === layoutNode.data.id }"
+                            :style="{
+                                left: `${layoutNode.x - NODE_W / 2}px`,
+                                top: `${layoutNode.y - NODE_H / 2}px`,
+                                width: `${NODE_W}px`,
+                                '--node-color': nodeColor(layoutNode.data),
+                            }"
+                            @click="selectedNode = layoutNode.data"
+                        >
+                            <span class="node-dot" :style="{ background: nodeColor(layoutNode.data) }"></span>
+                            <span class="mono node-label">{{ layoutNode.data.label }}</span>
+                            <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">+{{ layoutNode.data.provides.length }}</span>
+                            <span v-if="layoutNode.data.injects.some((entry) => !entry.ok)" class="badge badge-err badge-xs">!</span>
+                        </div>
                     </div>
+                </div>
+                <div v-else class="graph-empty">
+                    {{ connected ? 'No components match the current provide/inject filter.' : 'Waiting for connection to the Nuxt app…' }}
                 </div>
             </div>
 
-            <!-- Detail -->
             <div v-if="selectedNode" class="detail-panel">
                 <div class="detail-header">
                     <span class="mono bold" style="font-size: 12px">{{ selectedNode.label }}</span>
                     <button @click="selectedNode = null">×</button>
                 </div>
 
-                <div v-if="selectedNode.provides.length">
+                <div v-if="selectedNode.provides.length" class="detail-section">
                     <div class="section-label">provides ({{ selectedNode.provides.length }})</div>
-                    <div v-for="p in selectedNode.provides" :key="p.key" class="provide-row">
-                        <span class="mono text-sm" style="min-width: 100px; color: var(--text2)">{{ p.key }}</span>
-                        <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                            {{ p.val }}
-                        </span>
-                        <span class="badge" :class="p.reactive ? 'badge-ok' : 'badge-gray'">{{ p.reactive ? 'reactive' : 'static' }}</span>
+                    <div class="detail-list">
+                        <div
+                            v-for="(entry, index) in selectedNode.provides"
+                            :key="provideValueId(selectedNode.id, entry.key, index)"
+                            class="provide-row"
+                        >
+                            <div class="row-main">
+                                <span class="mono text-sm row-key">{{ entry.key }}</span>
+                                <span class="mono text-sm muted row-value-preview" :title="entry.val">{{ entry.val }}</span>
+                                <span class="badge" :class="entry.reactive ? 'badge-ok' : 'badge-gray'">
+                                    {{ entry.reactive ? 'reactive' : 'static' }}
+                                </span>
+                                <button
+                                    v-if="entry.complex"
+                                    class="row-toggle mono"
+                                    @click="toggleProvideValue(provideValueId(selectedNode.id, entry.key, index))"
+                                >
+                                    {{ expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index)) ? 'hide' : 'view' }}
+                                </button>
+                            </div>
+                            <pre
+                                v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
+                                class="value-box"
+                            >{{ formatValueDetail(entry.raw) }}</pre>
+                        </div>
                     </div>
                 </div>
 
-                <div v-if="selectedNode.injects.length" :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }">
+                <div v-if="selectedNode.injects.length" class="detail-section" :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }">
                     <div class="section-label">injects ({{ selectedNode.injects.length }})</div>
-                    <div v-for="inj in selectedNode.injects" :key="inj.key" class="inject-row" :class="{ 'inject-miss': !inj.ok }">
-                        <span class="mono text-sm" style="min-width: 100px">{{ inj.key }}</span>
-                        <span v-if="inj.ok" class="badge badge-ok">resolved</span>
-                        <span v-else class="badge badge-err">no provider</span>
-                        <span class="mono muted text-sm" style="margin-left: auto">{{ inj.from ?? 'undefined' }}</span>
+                    <div class="detail-list">
+                        <div v-for="entry in selectedNode.injects" :key="entry.key" class="inject-row" :class="{ 'inject-miss': !entry.ok }">
+                            <span class="mono text-sm row-key">{{ entry.key }}</span>
+                            <span v-if="entry.ok" class="badge badge-ok">resolved</span>
+                            <span v-else class="badge badge-err">no provider</span>
+                            <span class="mono muted text-sm row-from" :title="entry.from ?? 'undefined'">{{ entry.from ?? 'undefined' }}</span>
+                        </div>
                     </div>
                 </div>
 
@@ -239,7 +430,9 @@ const edges = computed<Edge[]>(() => {
                     no provide/inject in this component
                 </div>
             </div>
-            <div v-else class="detail-empty">click a node to inspect</div>
+            <div v-else class="detail-empty">
+                {{ connected ? 'Click a node to inspect.' : 'Waiting for connection to the Nuxt app…' }}
+            </div>
         </div>
     </div>
 </template>
@@ -286,6 +479,13 @@ const edges = computed<Edge[]>(() => {
     font-size: 11px;
     color: var(--text2);
     margin-bottom: 12px;
+}
+
+.canvas-stage {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-width: 100%;
 }
 
 .dot {
@@ -340,11 +540,6 @@ const edges = computed<Edge[]>(() => {
     background: color-mix(in srgb, var(--node-color) 8%, transparent);
 }
 
-.graph-node.is-dimmed {
-    opacity: 0.2;
-    pointer-events: none;
-}
-
 .node-dot {
     width: 7px;
     height: 7px;
@@ -375,6 +570,7 @@ const edges = computed<Edge[]>(() => {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-height: 0;
 }
 
 .detail-empty {
@@ -387,6 +583,15 @@ const edges = computed<Edge[]>(() => {
     border: 0.5px dashed var(--border);
     border-radius: var(--radius-lg);
     flex-shrink: 0;
+}
+
+.graph-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    color: var(--text3);
+    font-size: 12px;
 }
 
 .detail-header {
@@ -405,14 +610,68 @@ const edges = computed<Edge[]>(() => {
     margin: 8px 0 5px;
 }
 
+.detail-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow: auto;
+    max-height: 220px;
+    padding-right: 2px;
+}
+
 .provide-row {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     padding: 5px 8px;
     background: var(--bg2);
     border-radius: var(--radius);
     margin-bottom: 3px;
+}
+
+.row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.row-key {
+    min-width: 100px;
+    color: var(--text2);
+    flex-shrink: 0;
+}
+
+.row-value-preview {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.row-toggle {
+    padding: 2px 8px;
+    font-size: 10px;
+}
+
+.value-box {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    background: rgb(0 0 0 / 10%);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
+    max-height: 180px;
 }
 
 .inject-row {
@@ -423,6 +682,14 @@ const edges = computed<Edge[]>(() => {
     background: var(--bg2);
     border-radius: var(--radius);
     margin-bottom: 3px;
+}
+
+.row-from {
+    margin-left: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .inject-miss {

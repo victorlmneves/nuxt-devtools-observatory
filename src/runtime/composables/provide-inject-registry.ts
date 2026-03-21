@@ -5,6 +5,8 @@ export interface ProvideEntry {
     componentName: string
     componentFile: string
     componentUid: number
+    parentUid?: number
+    parentFile?: string
     isReactive: boolean
     valueSnapshot: unknown
     line: number
@@ -15,6 +17,8 @@ export interface InjectEntry {
     componentName: string
     componentFile: string
     componentUid: number
+    parentUid?: number
+    parentFile?: string
     resolved: boolean
     resolvedFromFile?: string
     resolvedFromUid?: number
@@ -66,6 +70,8 @@ export function setupProvideInjectRegistry() {
             componentName: entry.componentName,
             componentFile: entry.componentFile,
             componentUid: entry.componentUid,
+            parentUid: entry.parentUid,
+            parentFile: entry.parentFile,
             isReactive: entry.isReactive,
             valueSnapshot: safeValue(entry.valueSnapshot),
             line: entry.line,
@@ -78,6 +84,8 @@ export function setupProvideInjectRegistry() {
             componentName: entry.componentName,
             componentFile: entry.componentFile,
             componentUid: entry.componentUid,
+            parentUid: entry.parentUid,
+            parentFile: entry.parentFile,
             resolved: entry.resolved,
             resolvedFromFile: entry.resolvedFromFile,
             resolvedFromUid: entry.resolvedFromUid,
@@ -126,6 +134,8 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
         componentName: instance?.type?.__name ?? 'unknown',
         componentFile: meta.file,
         componentUid: instance?.uid ?? -1,
+        parentUid: instance?.parent?.uid,
+        parentFile: instance?.parent?.type?.__file,
         isReactive: isRef(value) || isReactive(value as object),
         valueSnapshot: safeSnapshot(unref(value)),
         line: meta.line,
@@ -154,6 +164,8 @@ export function __devInject<T>(key: string | symbol, defaultValue: T | undefined
         componentName: instance?.type?.__name ?? 'unknown',
         componentFile: meta.file,
         componentUid: instance?.uid ?? -1,
+        parentUid: instance?.parent?.uid,
+        parentFile: instance?.parent?.type?.__file,
         resolved: resolved !== undefined,
         resolvedFromFile: providerInfo?.file,
         resolvedFromUid: providerInfo?.uid,

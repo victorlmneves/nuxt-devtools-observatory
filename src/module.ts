@@ -1,4 +1,4 @@
-import { defineNuxtModule, addPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
+import { defineNuxtModule, addPlugin, addServerPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { composableTrackerPlugin } from './transforms/composable-transform'
@@ -100,14 +100,12 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Nitro plugin for SSR fetch capture ────────────────────────────────
         if (options.fetchDashboard) {
-            nuxt.hook('nitro:config', (nitroConfig) => {
-                nitroConfig.plugins = nitroConfig.plugins || []
-                nitroConfig.plugins.push(resolver.resolve('./nitro/fetch-capture'))
-            })
+            addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
         }
 
         // ── Serve the client SPA on its own Vite dev server ──────────────────
         const CLIENT_PORT = 4949
+        const clientOrigin = `http://localhost:${CLIENT_PORT}`
 
         nuxt.hook('vite:serverCreated', async (_viteServer, env) => {
             if (!env.isClient) {
@@ -120,7 +118,7 @@ export default defineNuxtModule<ModuleOptions>({
             const inner = await createServer({
                 root: resolver.resolve('../client'),
                 base: '/',
-                server: { port: CLIENT_PORT, strictPort: false, cors: true },
+                server: { port: CLIENT_PORT, strictPort: true, cors: true },
                 appType: 'spa',
                 configFile: false,
                 plugins: [vue()],
@@ -134,7 +132,7 @@ export default defineNuxtModule<ModuleOptions>({
         // ── Devtools integration ──────────────────────────────────────────────
         // SPA runs at localhost:4949, cross-origin from :3000.
         // Data is bridged via postMessage (see plugin.ts + stores/observatory.ts).
-        const base = `http://localhost:${CLIENT_PORT}`
+        const base = clientOrigin
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         nuxt.hook('devtools:customTabs', (tabs: any[]) => {
@@ -187,6 +185,7 @@ export default defineNuxtModule<ModuleOptions>({
         // ── Expose module options to runtime ──────────────────────────────────
         nuxt.options.runtimeConfig.public.observatory = {
             heatmapThreshold: options.heatmapThreshold ?? 5,
+            clientOrigin,
         }
     },
 })

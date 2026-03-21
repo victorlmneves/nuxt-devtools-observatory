@@ -1,6 +1,6 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.6",
+    "version": "0.1.11",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "type": "module",
     "main": "./dist/module.mjs",
@@ -27,6 +27,7 @@
         "dev": "nuxi dev playground",
         "build:client": "vite build --config client/vite.config.ts",
         "build": "npm run build:client && nuxt-module-build build",
+        "prepack": "npm run build",
         "lint": "eslint .",
         "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .gitignore && stylelint '**/*.{css,vue}' --ignore-pattern '.nuxt/**' --ignore-pattern '.output/**' --ignore-pattern 'coverage/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern 'coverage/**'",
         "typecheck": "vue-tsc --noEmit",
@@ -38,8 +39,7 @@
         "@babel/generator": "^7.29.1",
         "@babel/parser": "^7.29.0",
         "@babel/traverse": "^7.29.0",
-        "@babel/types": "^7.29.0",
-        "@nuxt/kit": "^3.0.0"
+        "@babel/types": "^7.29.0"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.2",
@@ -81,6 +81,9 @@
         "performance",
         "debugging"
     ],
+    "peerDependencies": {
+        "@nuxt/kit": "^3.0.0 || ^4.0.0"
+    },
     "pnpm": {
         "patchedDependencies": {
             "unimport@6.0.1": "patches/unimport@6.0.1.patch"

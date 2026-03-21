@@ -10,7 +10,7 @@ const search = ref('')
 const selected = ref<TransitionEntry | null>(null)
 
 const filtered = computed(() => {
-    let list = entries.value
+    let list = [...entries.value]
 
     if (search.value) {
         const q = search.value.toLowerCase()
@@ -25,7 +25,12 @@ const filtered = computed(() => {
         list = list.filter((e) => e.phase === 'entered' || e.phase === 'left')
     }
 
-    return list
+    return list.sort((a, b) => {
+        const aTime = a.endTime ?? a.startTime
+        const bTime = b.endTime ?? b.startTime
+
+        return bTime - aTime
+    })
 })
 
 const stats = computed(() => ({
