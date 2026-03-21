@@ -76,6 +76,7 @@ export interface RenderEntry {
     file: string
     element?: string
     renders: number
+    navigationRenders: number
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
@@ -120,6 +121,15 @@ function cloneArray<T>(value: T[] | undefined): T[] {
     return value ? value.map((item) => ({ ...item })) : []
 }
 
+function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[] {
+    return value
+        ? value.map((item) => ({
+              ...item,
+              navigationRenders: Number.isFinite(item.navigationRenders) ? item.navigationRenders : 0,
+          }))
+        : []
+}
+
 function getParentOrigin() {
     if (typeof document === 'undefined' || !document.referrer) {
         return '*'
@@ -154,7 +164,7 @@ function onMessage(event: MessageEvent) {
           }
         : { provides: [], injects: [] }
     composables.value = cloneArray(data.composables)
-    renders.value = cloneArray(data.renders)
+    renders.value = normalizeRenderEntries(data.renders)
     transitions.value = cloneArray(data.transitions)
     connected.value = true
 }

@@ -64,7 +64,7 @@ describe('setupRenderRegistry', () => {
         expect(mixinsAfter).toBe(mixinsBefore + 1)
     })
 
-    it('increments the renders counter when the updated hook fires', () => {
+    it('increments the renders counter when a render-triggered update fires', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -73,7 +73,15 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(42)
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            key: 'items',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            key: 'items',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entries = getAll()
@@ -81,6 +89,19 @@ describe('setupRenderRegistry', () => {
         expect(entries).toHaveLength(1)
         expect(entries[0].uid).toBe(42)
         expect(entries[0].renders).toBe(2)
+    })
+
+    it('ignores updated hooks that were not preceded by renderTriggered', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = fakeCPI(44)
+        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+
+        expect(getAll()[0].renders).toBe(0)
     })
 
     it('getAll() returns entries even when they are below the heatmap threshold', () => {
@@ -94,12 +115,32 @@ describe('setupRenderRegistry', () => {
         const instB = fakeCPI(2, 'CompB')
 
         // CompA fires updated twice — below threshold of 3
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instA, {
+            key: 'count',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instA)
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instA, {
+            key: 'count',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instA)
 
         // CompB fires updated three times — meets threshold
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
+            key: 'count',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
+            key: 'count',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
+            key: 'count',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
 
         const visible = getAll()
@@ -123,6 +164,27 @@ describe('setupRenderRegistry', () => {
         expect(entries).toHaveLength(1)
         expect(entries[0].uid).toBe(7)
         expect(entries[0].renders).toBe(1)
+        expect(entries[0].navigationRenders).toBe(0)
+    })
+
+    it('tracks renders that happen during a route navigation window', () => {
+        const app = createApp({})
+        const { getAll, markNavigation } = setupRenderRegistry(makeNuxtApp(app))
+
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = fakeCPI(70, 'RouterView')
+
+        markNavigation()
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            key: 'route',
+            type: 'set',
+        })
+        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+
+        expect(getAll()[0].renders).toBe(1)
+        expect(getAll()[0].navigationRenders).toBe(1)
     })
 
     it('removes entries when components unmount', () => {
@@ -192,6 +254,10 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(5, 'ProductCard', 'ProductCard.vue')
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            key: 'visible',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
@@ -221,6 +287,10 @@ describe('setupRenderRegistry', () => {
             $parent: null,
         } as unknown as ComponentPublicInstance
 
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            key: 'visible',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
@@ -255,6 +325,10 @@ describe('setupRenderRegistry', () => {
             },
         } as unknown as ComponentPublicInstance
 
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            key: 'visible',
+            type: 'set',
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]

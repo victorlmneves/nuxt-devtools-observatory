@@ -117,7 +117,13 @@ export default defineNuxtPlugin(() => {
 
     // Broadcast on every route change (client-side navigation)
     if (import.meta.client && nuxtApp.vueApp.config.globalProperties.$router) {
+        nuxtApp.vueApp.config.globalProperties.$router.beforeEach((_to: unknown, _from: unknown, next: () => void) => {
+            renderRegistry.reset()
+            next()
+        })
+
         nuxtApp.vueApp.config.globalProperties.$router.afterEach(() => {
+            renderRegistry.markNavigation()
             broadcastAll()
         })
     }

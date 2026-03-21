@@ -10,6 +10,7 @@ export interface RenderEntry {
     file: string
     element?: string
     renders: number
+    navigationRenders: number
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
@@ -26,6 +27,9 @@ export interface RenderEntry {
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
+    const pendingTriggeredRenders = new Set<number>()
+    const renderStartTimes = new Map<number, number>()
+    let navigationWindowUntil = 0
 
     function ensureEntry(instance: ComponentPublicInstance) {
         const uid: number = instance.$.uid
@@ -56,18 +60,82 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
         entries.value.delete(uid)
     }
 
+    function isNavigationRender() {
+        return typeof performance !== 'undefined' && performance.now() <= navigationWindowUntil
+    }
+
+    function startRenderTimer(uid: number) {
+        if (typeof performance === 'undefined') {
+            return
+        }
+
+        renderStartTimes.set(uid, performance.now())
+    }
+
+    function recordRenderDuration(entry: RenderEntry) {
+        if (typeof performance === 'undefined') {
+            return
+        }
+
+        const startedAt = renderStartTimes.get(entry.uid)
+
+        if (startedAt === undefined) {
+            return
+        }
+
+        renderStartTimes.delete(entry.uid)
+        entry.totalMs += Math.max(performance.now() - startedAt, 0)
+        entry.avgMs = Math.round((entry.totalMs / Math.max(entry.renders, 1)) * 10) / 10
+    }
+
+    function markNavigation() {
+        if (typeof performance === 'undefined') {
+            return
+        }
+
+        navigationWindowUntil = performance.now() + 800
+    }
+
+    function reset() {
+        pendingTriggeredRenders.clear()
+        renderStartTimes.clear()
+
+        for (const entry of entries.value.values()) {
+            entry.renders = 0
+            entry.navigationRenders = 0
+            entry.totalMs = 0
+            entry.avgMs = 0
+            entry.triggers = []
+        }
+    }
+
     // Hook Vue's global mixin for render tracking
     nuxtApp.vueApp.mixin({
+        beforeMount(this: ComponentPublicInstance) {
+            startRenderTimer(this.$.uid)
+        },
+
         mounted(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
             entry.renders++
+
+            if (isNavigationRender()) {
+                entry.navigationRenders++
+            }
+
             syncRect(entry, this)
+            recordRenderDuration(entry)
             emit('render:update', { uid: entry.uid, renders: entry.renders })
+        },
+
+        beforeUpdate(this: ComponentPublicInstance) {
+            startRenderTimer(this.$.uid)
         },
 
         renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
             const entry = ensureEntry(this)
             entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
+            pendingTriggeredRenders.add(entry.uid)
 
             // Keep last 50 triggers per component
             if (entry.triggers.length > 50) {
@@ -77,46 +145,31 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
 
         updated(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
+
+            // Only count updates Vue explicitly marked as reactive render triggers.
+            if (!pendingTriggeredRenders.has(entry.uid)) {
+                return
+            }
+
+            pendingTriggeredRenders.delete(entry.uid)
             entry.renders++
+
+            if (isNavigationRender()) {
+                entry.navigationRenders++
+            }
+
             syncRect(entry, this)
+            recordRenderDuration(entry)
             emit('render:update', { uid: entry.uid, renders: entry.renders })
         },
 
         unmounted(this: ComponentPublicInstance) {
+            pendingTriggeredRenders.delete(this.$.uid)
+            renderStartTimes.delete(this.$.uid)
             removeEntry(this)
             emit('render:remove', { uid: this.$.uid })
         },
     })
-
-    // PerformanceObserver reads Vue's built-in render marks (requires app.config.performance = true)
-    if (import.meta.client && typeof PerformanceObserver !== 'undefined') {
-        const observer = new PerformanceObserver((list) => {
-            for (const perf of list.getEntries()) {
-                if (!perf.name.includes('vue-component-render')) {
-                    continue
-                }
-
-                const uidMatch = perf.name.match(/uid:(\d+)/)
-
-                if (!uidMatch) {
-                    continue
-                }
-
-                const uid = Number(uidMatch[1])
-                const entry = entries.value.get(uid)
-
-                if (entry) {
-                    entry.totalMs += perf.duration
-                    entry.avgMs = Math.round((entry.totalMs / entry.renders) * 10) / 10
-                }
-            }
-        })
-        try {
-            observer.observe({ entryTypes: ['measure'] })
-        } catch {
-            /* not supported */
-        }
-    }
 
     function sanitize(entry: RenderEntry): RenderEntry {
         return {
@@ -125,6 +178,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
             file: entry.file,
             element: entry.element,
             renders: entry.renders,
+            navigationRenders: entry.navigationRenders,
             totalMs: entry.totalMs,
             avgMs: entry.avgMs,
             triggers: entry.triggers,
@@ -159,7 +213,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
         channel?.send(event, data)
     }
 
-    return { getAll, snapshot }
+    return { getAll, snapshot, markNavigation, reset }
 }
 
 /**
@@ -182,6 +236,7 @@ function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry 
         file,
         element,
         renders: 0,
+        navigationRenders: 0,
         totalMs: 0,
         avgMs: 0,
         triggers: [],

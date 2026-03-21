@@ -10,6 +10,7 @@ interface ComponentNode {
     depth: number
     path: string[]
     renders: number
+    navigationRenders: number
     avgMs: number
     triggers: string[]
     children: ComponentNode[]
@@ -23,9 +24,7 @@ const TreeNode = defineComponent({
         node: Object as () => ComponentNode,
         mode: String,
         threshold: Number,
-        hotOnly: Boolean,
         selected: String,
-        search: String,
         expandedIds: Object as () => Set<string>,
     },
     emits: ['select', 'toggle'],
@@ -38,30 +37,6 @@ const TreeNode = defineComponent({
             return nodeValue(node) >= props.threshold!
         }
 
-        function matchesSearch(node: ComponentNode, search: string): boolean {
-            if (!search) {
-                return true
-            }
-
-            const query = search.toLowerCase()
-
-            return (
-                node.label.toLowerCase().includes(query) ||
-                node.file.toLowerCase().includes(query) ||
-                node.path.some((segment) => segment.toLowerCase().includes(query)) ||
-                node.triggers.some((trigger) => trigger.toLowerCase().includes(query))
-            )
-        }
-
-        function shouldShow(node: ComponentNode, search: string): boolean {
-            const selfMatches = matchesSearch(node, search)
-            const childMatches = node.children.some((child) => shouldShow(child, search))
-            const searchMatches = !search || selfMatches || childMatches
-            const hotMatches = !props.hotOnly || isHot(node) || node.children.some((child) => shouldShow(child, ''))
-
-            return searchMatches && hotMatches
-        }
-
         function rowClass(node: ComponentNode) {
             return {
                 selected: props.selected === node.id,
@@ -71,15 +46,8 @@ const TreeNode = defineComponent({
 
         return () => {
             const node = props.node!
-            const search = props.search?.trim() ?? ''
-
-            if (!shouldShow(node, search)) {
-                return null
-            }
-
             const expanded = props.expandedIds?.has(node.id) ?? false
-            const visibleChildren = node.children.filter((child) => shouldShow(child, search))
-            const canExpand = visibleChildren.length > 0
+            const canExpand = node.children.length > 0
             const metric = props.mode === 'count' ? `${node.renders}` : `${node.avgMs.toFixed(1)}ms`
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
             const badges = []
@@ -109,10 +77,11 @@ const TreeNode = defineComponent({
                         },
                     },
                     [
+                        h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
                         h(
                             'button',
                             {
-                                class: 'tree-toggle',
+                                class: ['tree-toggle', { empty: !canExpand }],
                                 disabled: !canExpand,
                                 onClick: (event: MouseEvent) => {
                                     event.stopPropagation()
@@ -122,9 +91,8 @@ const TreeNode = defineComponent({
                                     }
                                 },
                             },
-                            canExpand ? (expanded ? '▾' : '▸') : '·'
+                            canExpand ? (expanded ? '⌄' : '›') : ''
                         ),
-                        h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
                         h('div', { class: 'tree-copy' }, [
                             h('span', { class: 'tree-name mono', title: node.label }, node.label),
                             badges.length
@@ -135,21 +103,22 @@ const TreeNode = defineComponent({
                                   )
                                 : null,
                         ]),
-                        h('div', { class: 'tree-metrics mono' }, h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`)),
+                        h('div', { class: 'tree-metrics mono' }, [
+                            node.navigationRenders ? h('span', { class: 'tree-nav-pill' }, `${node.navigationRenders} nav`) : null,
+                            h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
+                        ]),
                     ]
                 ),
-                expanded && visibleChildren.length
+                expanded && canExpand
                     ? h(
                           'div',
                           { class: 'tree-children' },
-                          visibleChildren.map((child) =>
+                          node.children.map((child) =>
                               h(TreeNode, {
                                   node: child,
                                   mode: props.mode,
                                   threshold: props.threshold,
-                                  hotOnly: props.hotOnly,
                                   selected: props.selected,
-                                  search: props.search,
                                   expandedIds: props.expandedIds,
                                   onSelect: (value: ComponentNode) => emit('select', value),
                                   onToggle: (value: string) => emit('toggle', value),
@@ -213,6 +182,7 @@ function buildNodes(entries: RenderEntry[]) {
             depth: 0,
             path: [],
             renders: entry.renders,
+            navigationRenders: Number.isFinite(entry.navigationRenders) ? entry.navigationRenders : 0,
             avgMs: entry.avgMs,
             triggers: entry.triggers.map(formatTrigger),
             children: [],
@@ -291,6 +261,22 @@ function pathToNode(node: ComponentNode, targetId: string, trail: string[] = [])
     return null
 }
 
+function findFirstHotNode(node: ComponentNode): ComponentNode | null {
+    if (isHot(node)) {
+        return node
+    }
+
+    for (const child of node.children) {
+        const match = findFirstHotNode(child)
+
+        if (match) {
+            return match
+        }
+    }
+
+    return null
+}
+
 function defaultExpandedIds(root: ComponentNode | null) {
     if (!root) {
         return new Set<string>()
@@ -353,6 +339,35 @@ function treeMatches(node: ComponentNode, searchTerm: string): boolean {
     return matchesSearch(node, searchTerm) || node.children.some((child) => treeMatches(child, searchTerm))
 }
 
+function subtreeHasHotNode(node: ComponentNode): boolean {
+    return isHot(node) || node.children.some((child) => subtreeHasHotNode(child))
+}
+
+function isVisibleRoot(node: ComponentNode, searchTerm: string): boolean {
+    const matchesCurrentSearch = treeMatches(node, searchTerm)
+    const matchesCurrentHeat = !activeHotOnly.value || subtreeHasHotNode(node)
+
+    return matchesCurrentSearch && matchesCurrentHeat
+}
+
+function pruneVisibleTree(node: ComponentNode, searchTerm: string): ComponentNode | null {
+    const visibleChildren = node.children
+        .map((child) => pruneVisibleTree(child, searchTerm))
+        .filter((child): child is ComponentNode => child !== null)
+
+    const matchesCurrentSearch = !searchTerm || matchesSearch(node, searchTerm) || visibleChildren.length > 0
+    const matchesCurrentHeat = !activeHotOnly.value || isHot(node) || visibleChildren.length > 0
+
+    if (!matchesCurrentSearch || !matchesCurrentHeat) {
+        return null
+    }
+
+    return {
+        ...node,
+        children: visibleChildren,
+    }
+}
+
 const displayEntries = computed(() => (frozen.value ? frozenSnapshot.value : renders.value))
 const rootNodes = computed(() => buildNodes(displayEntries.value))
 const rootMap = computed(() => new Map(rootNodes.value.map((node) => [node.id, node])))
@@ -361,7 +376,7 @@ const allComponents = computed(() => flatten(rootNodes.value))
 const filteredRoots = computed(() => {
     const term = search.value.trim()
 
-    return rootNodes.value.filter((root) => treeMatches(root, term))
+    return rootNodes.value.filter((root) => isVisibleRoot(root, term))
 })
 
 const activeRoot = computed(() => {
@@ -372,12 +387,18 @@ const activeRoot = computed(() => {
     return filteredRoots.value[0] ?? rootNodes.value[0] ?? null
 })
 
+const visibleActiveRoot = computed(() => {
+    const term = search.value.trim()
+
+    return activeRoot.value ? pruneVisibleTree(activeRoot.value, term) : null
+})
+
 const visibleTreeRoots = computed(() => {
-    if (!activeRoot.value) {
+    if (!visibleActiveRoot.value) {
         return []
     }
 
-    return [activeRoot.value]
+    return [visibleActiveRoot.value]
 })
 
 const appEntries = computed(() =>
@@ -391,6 +412,7 @@ const appEntries = computed(() =>
 
 const activeSelected = computed(() => allComponents.value.find((node) => node.id === activeSelectedId.value) ?? null)
 const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.renders, 0))
+const totalNavigationRenders = computed(() => allComponents.value.reduce((sum, node) => sum + (Number.isFinite(node.navigationRenders) ? node.navigationRenders : 0), 0))
 const hotCount = computed(() => allComponents.value.filter((node) => isHot(node)).length)
 const avgTime = computed(() => {
     const components = allComponents.value.filter((node) => node.avgMs > 0)
@@ -463,6 +485,34 @@ watch(search, (term) => {
     }
 
     expandedIds.value = defaultExpandedIds(activeRoot.value)
+})
+
+watch([activeHotOnly, activeThreshold, activeMode, filteredRoots], () => {
+    if (!activeHotOnly.value) {
+        return
+    }
+
+    const topLevelRoot = filteredRoots.value[0] ?? null
+
+    if (!topLevelRoot) {
+        activeSelectedId.value = null
+        return
+    }
+
+    const firstHot = findFirstHotNode(topLevelRoot)
+
+    if (!firstHot) {
+        activeSelectedId.value = null
+        return
+    }
+
+    activeRootId.value = topLevelRoot.id
+
+    if (activeSelectedId.value !== firstHot.id) {
+        activeSelectedId.value = firstHot.id
+    }
+
+    expandedIds.value = new Set(pathToNode(topLevelRoot, firstHot.id) ?? [topLevelRoot.id])
 })
 
 function selectNode(node: ComponentNode) {
@@ -545,6 +595,7 @@ function pathLabel(node: ComponentNode) {
             <div class="stat-card">
                 <div class="stat-label">total renders</div>
                 <div class="stat-val">{{ totalRenders }}</div>
+                <div class="stat-sub mono">{{ totalNavigationRenders }} nav</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">hot</div>
@@ -588,9 +639,7 @@ function pathLabel(node: ComponentNode) {
                             :node="root"
                             :mode="activeMode"
                             :threshold="activeThreshold"
-                            :hot-only="activeHotOnly"
                             :selected="activeSelected?.id"
-                            :search="search"
                             :expanded-ids="expandedIds"
                             @select="selectNode"
                             @toggle="toggleNode"
@@ -611,6 +660,7 @@ function pathLabel(node: ComponentNode) {
 
                     <div class="detail-pill-row">
                         <span class="detail-pill mono">{{ activeSelected.renders }} renders</span>
+                        <span v-if="activeSelected.navigationRenders" class="detail-pill mono nav">{{ activeSelected.navigationRenders }} nav</span>
                         <span class="detail-pill mono">{{ activeSelected.avgMs.toFixed(1) }}ms avg</span>
                         <span class="detail-pill mono" :class="{ hot: isHot(activeSelected) }">{{ isHot(activeSelected) ? 'hot' : 'cool' }}</span>
                     </div>
@@ -635,6 +685,8 @@ function pathLabel(node: ComponentNode) {
                     <div class="meta-grid">
                         <span class="muted text-sm">mode value</span>
                         <span class="mono text-sm">{{ activeMode === 'count' ? activeSelected.renders : `${activeSelected.avgMs.toFixed(1)}ms` }}</span>
+                        <span class="muted text-sm">navigation renders</span>
+                        <span class="mono text-sm">{{ activeSelected.navigationRenders }}</span>
                         <span class="muted text-sm">threshold</span>
                         <span class="mono text-sm">{{ activeThreshold }}</span>
                         <span class="muted text-sm">selected mode</span>
@@ -685,6 +737,12 @@ function pathLabel(node: ComponentNode) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     flex-shrink: 0;
+}
+
+.stat-sub {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text3);
 }
 
 .inspector {
@@ -800,7 +858,7 @@ function pathLabel(node: ComponentNode) {
 
 :deep(.tree-row) {
     display: grid;
-    grid-template-columns: 18px 8px minmax(0, 1fr) auto;
+    grid-template-columns: 8px 18px minmax(0, 1fr) auto;
     align-items: center;
     gap: 6px;
     min-width: 0;
@@ -833,15 +891,18 @@ function pathLabel(node: ComponentNode) {
     background: transparent;
     color: var(--text3);
     padding: 0;
-    font-size: 11px;
+    font-size: 14px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
 :deep(.tree-toggle:disabled) {
-    opacity: 0.4;
     cursor: default;
+}
+
+:deep(.tree-toggle.empty) {
+    opacity: 0;
 }
 
 :deep(.tree-rail) {
@@ -893,6 +954,7 @@ function pathLabel(node: ComponentNode) {
     min-width: 92px;
     justify-content: flex-end;
     flex-shrink: 0;
+    gap: 6px;
 }
 
 :deep(.tree-metric-pill) {
@@ -906,6 +968,19 @@ function pathLabel(node: ComponentNode) {
     background: var(--bg2);
     font-size: 10px;
     color: var(--text3);
+}
+
+:deep(.tree-nav-pill) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 54px;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--purple) 55%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--purple) 10%, var(--bg2));
+    font-size: 10px;
+    color: color-mix(in srgb, var(--purple) 70%, white);
 }
 
 :deep(.tree-children) {
@@ -952,6 +1027,11 @@ function pathLabel(node: ComponentNode) {
 .detail-pill.hot {
     border-color: color-mix(in srgb, var(--red) 50%, var(--border));
     color: var(--red);
+}
+
+.detail-pill.nav {
+    border-color: color-mix(in srgb, var(--purple) 55%, var(--border));
+    color: color-mix(in srgb, var(--purple) 70%, white);
 }
 
 .section-label {
