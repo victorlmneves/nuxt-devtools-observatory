@@ -1,4 +1,4 @@
-import { ref, isRef, isReadonly, unref, getCurrentInstance, onUnmounted } from 'vue'
+import { ref, isRef, isReadonly, unref, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
 
 export interface ComposableEntry {
     id: string
@@ -43,10 +43,48 @@ interface TrackedInstance {
  */
 export function setupComposableRegistry() {
     const entries = ref<Map<string, ComposableEntry>>(new Map())
+    // Stores live Ref/computed objects keyed by entry id so getAll() can
+    // re-read current values on every snapshot rather than serving the
+    // stale copy captured at setup time.
+    const liveRefs = new Map<string, Record<string, import('vue').Ref<unknown>>>()
+    // Stop functions for watchEffect instances tracking each composable's live refs
+    const liveRefWatchers = new Map<string, () => void>()
 
     function register(entry: ComposableEntry) {
         entries.value.set(entry.id, entry)
         emit('composable:register', entry)
+    }
+
+    function registerLiveRefs(id: string, refs: Record<string, import('vue').Ref<unknown>>) {
+        // Stop any previous watcher for this entry before replacing refs
+        const prevStop = liveRefWatchers.get(id)
+        if (prevStop) prevStop()
+        liveRefWatchers.delete(id)
+
+        if (Object.keys(refs).length === 0) {
+            // No live refs — remove the entry entirely so sanitize() falls back
+            // to the frozen snapshot stored in entry.refs (e.g. after unmount).
+            liveRefs.delete(id)
+            return
+        }
+
+        liveRefs.set(id, refs)
+
+        // Watch all live refs for this composable. Whenever any changes, fire
+        // the onChange callback (set by the plugin) so it can push a fresh
+        // snapshot to the devtools panel without waiting for the next poll.
+        const stop = watchEffect(() => {
+            for (const r of Object.values(refs)) unref(r)
+            _onChange?.()
+        })
+        liveRefWatchers.set(id, stop)
+    }
+
+    // Callback invoked by the plugin whenever live ref values change.
+    // The plugin sets this after mounting so it can trigger a postMessage push.
+    let _onChange: (() => void) | null = null
+    function onComposableChange(cb: () => void) {
+        _onChange = cb
     }
 
     function update(id: string, patch: Partial<ComposableEntry>) {
@@ -82,6 +120,32 @@ export function setupComposableRegistry() {
     }
 
     function sanitize(entry: ComposableEntry): ComposableEntry {
+        // Re-read live ref values on every snapshot so the devtools panel
+        // reflects the current reactive state rather than setup-time values.
+        // live is null/undefined after unmount (liveRefs.delete was called),
+        // at which point we fall back to the frozen snapshot in entry.refs.
+        const live = liveRefs.get(entry.id)
+        const hasLive = live != null && Object.keys(live).length > 0
+        const freshRefs = hasLive
+            ? Object.fromEntries(
+                  Object.entries(live!).map(([k, r]) => [
+                      k,
+                      {
+                          type: entry.refs[k]?.type ?? 'ref',
+                          value: safeValue(unref(r)),
+                      },
+                  ])
+              )
+            : Object.fromEntries(
+                  Object.entries(entry.refs).map(([k, v]) => [
+                      k,
+                      {
+                          type: v.type,
+                          value: safeValue(typeof v.value === 'object' && v.value !== null && 'value' in v.value ? v.value.value : v.value),
+                      },
+                  ])
+              )
+
         return {
             id: entry.id,
             name: entry.name,
@@ -90,15 +154,7 @@ export function setupComposableRegistry() {
             status: entry.status,
             leak: entry.leak,
             leakReason: entry.leakReason,
-            refs: Object.fromEntries(
-                Object.entries(entry.refs).map(([k, v]) => [
-                    k,
-                    {
-                        type: v.type,
-                        value: safeValue(typeof v.value === 'object' && v.value !== null && 'value' in v.value ? v.value.value : v.value),
-                    },
-                ])
-            ),
+            refs: freshRefs,
             watcherCount: entry.watcherCount,
             intervalCount: entry.intervalCount,
             lifecycle: entry.lifecycle,
@@ -120,7 +176,7 @@ export function setupComposableRegistry() {
         channel?.send(event, data)
     }
 
-    return { register, update, getAll }
+    return { register, registerLiveRefs, onComposableChange, update, getAll }
 }
 
 // ── Dev shim called by Vite transform ─────────────────────────────────────
@@ -142,28 +198,41 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     }
 
     const instance = getCurrentInstance() as TrackedInstance | null
-    const id = `${name}::${instance?.uid ?? 'global'}::${meta.file}:${meta.line}::${Date.now()}`
+    // Use a counter suffix in addition to Date.now() to prevent ID collisions
+    // when multiple composables are called within the same millisecond.
+    const id = `${name}::${instance?.uid ?? 'global'}::${meta.file}:${meta.line}::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
 
-    // Track intervals registered during setup
+    // ── Interval tracking ────────────────────────────────────────────────────
+    // We patch window.setInterval/clearInterval to detect leaked timers.
+    // IMPORTANT: This patch is NOT re-entrant — if composable A calls composable B
+    // during its own setup, B's __trackComposable would overwrite the patched globals
+    // and restore them to the already-patched version, leaving window permanently
+    // patched after A finishes. Guard against this with a nesting depth counter.
     const trackedIntervals: number[] = []
-    const originalSetInterval = window.setInterval
-    const originalClearInterval = window.clearInterval
     const clearedIntervals = new Set<number>()
 
-    window.setInterval = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => {
-        const id = originalSetInterval(fn, ms, ...rest)
-        trackedIntervals.push(id as number)
+    // Only patch if we're the outermost __trackComposable call on the stack
+    const alreadyPatched = !!(window.setInterval as typeof window.setInterval & { __obs?: boolean }).__obs
+    let originalSetInterval: typeof window.setInterval | null = null
+    let originalClearInterval: typeof window.clearInterval | null = null
 
-        return id
-    }) as typeof window.setInterval
+    if (!alreadyPatched) {
+        originalSetInterval = window.setInterval
+        originalClearInterval = window.clearInterval
 
-    window.clearInterval = ((id?: number) => {
-        if (id !== undefined) {
-            clearedIntervals.add(id)
-        }
+        const patchedSetInterval = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => {
+            const timerId = originalSetInterval!(fn, ms, ...rest)
+            trackedIntervals.push(timerId as number)
+            return timerId
+        }) as typeof window.setInterval & { __obs?: boolean }
+        patchedSetInterval.__obs = true
+        window.setInterval = patchedSetInterval
 
-        originalClearInterval(id)
-    }) as typeof window.clearInterval
+        window.clearInterval = ((timerId?: number) => {
+            if (timerId !== undefined) clearedIntervals.add(timerId)
+            originalClearInterval!(timerId)
+        }) as typeof window.clearInterval
+    }
 
     const effectsBefore = new Set(instance?.scope?.effects ?? [])
     const mountedHooksBefore = instance?.bm?.length ?? 0
@@ -171,9 +240,11 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
 
     const result = callFn()
 
-    // Restore globals immediately after setup
-    window.setInterval = originalSetInterval
-    window.clearInterval = originalClearInterval
+    // Restore globals only if we were the ones who patched them
+    if (!alreadyPatched && originalSetInterval) {
+        window.setInterval = originalSetInterval
+        window.clearInterval = originalClearInterval!
+    }
 
     const trackedWatchers = (instance?.scope?.effects ?? [])
         .filter((effect) => !effectsBefore.has(effect))
@@ -182,8 +253,10 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
             stop: () => effect.stop?.(),
         }))
 
-    // Snapshot reactive return values
+    // Snapshot reactive return values for the initial entry,
+    // AND keep live references so getAll() can re-read current values.
     const refs: ComposableEntry['refs'] = {}
+    const liveRefMap: Record<string, import('vue').Ref<unknown>> = {}
 
     if (result && typeof result === 'object') {
         for (const [key, val] of Object.entries(result as object)) {
@@ -192,6 +265,8 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
                     type: isReadonly(val) ? 'computed' : 'ref',
                     value: safeSnapshot(unref(val)),
                 }
+                // Keep the live ref so sanitize() can re-read it on every snapshot
+                liveRefMap[key] = val as import('vue').Ref<unknown>
             }
         }
     }
@@ -217,34 +292,41 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     }
 
     registry.register(entry)
+    registry.registerLiveRefs(id, liveRefMap)
 
-    // Detect leaks on unmount
-    onUnmounted(() => {
-        const leakedWatchers = trackedWatchers.filter((w) => w.effect.active)
-        const leakedIntervals = trackedIntervals.filter((id) => !clearedIntervals.has(id))
+    // Leak detection: only register onUnmounted when called inside a component
+    // context — Vue will warn (and the hook will silently no-op) if called globally.
+    if (instance) {
+        onUnmounted(() => {
+            const leakedWatchers = trackedWatchers.filter((w) => w.effect.active)
+            const leakedIntervals = trackedIntervals.filter((timerId) => !clearedIntervals.has(timerId))
 
-        const leak = leakedWatchers.length > 0 || leakedIntervals.length > 0
-        const reasons: string[] = []
+            const leak = leakedWatchers.length > 0 || leakedIntervals.length > 0
+            const reasons: string[] = []
 
-        if (leakedWatchers.length > 0) {
-            reasons.push(`${leakedWatchers.length} watcher${leakedWatchers.length > 1 ? 's' : ''} still active after unmount`)
-        }
+            if (leakedWatchers.length > 0) {
+                reasons.push(`${leakedWatchers.length} watcher${leakedWatchers.length > 1 ? 's' : ''} still active after unmount`)
+            }
 
-        if (leakedIntervals.length > 0) {
-            reasons.push(`setInterval #${leakedIntervals.join(', #')} never cleared`)
-        }
+            if (leakedIntervals.length > 0) {
+                reasons.push(`setInterval #${leakedIntervals.join(', #')} never cleared`)
+            }
 
-        registry.update(id, {
-            status: 'unmounted',
-            leak,
-            leakReason: reasons.join(' · ') || undefined,
-            lifecycle: {
-                ...entry.lifecycle,
-                watchersCleaned: leakedWatchers.length === 0,
-                intervalsCleaned: leakedIntervals.length === 0,
-            },
+            registry.update(id, {
+                status: 'unmounted',
+                leak,
+                leakReason: reasons.join(' · ') || undefined,
+                lifecycle: {
+                    ...entry.lifecycle,
+                    watchersCleaned: leakedWatchers.length === 0,
+                    intervalsCleaned: leakedIntervals.length === 0,
+                },
+            })
+            // Release the live ref closures and stop the watchEffect —
+            // the component is gone and we no longer need live updates from it.
+            registry.registerLiveRefs(id, {})
         })
-    })
+    }
 
     return result
 }

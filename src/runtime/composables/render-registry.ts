@@ -15,7 +15,6 @@ export interface RenderEntry {
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
-    children: number[]
     parentUid?: number
 }
 
@@ -192,7 +191,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
                       left: entry.rect.left,
                   }
                 : undefined,
-            children: entry.children,
             parentUid: entry.parentUid,
         }
     }
@@ -240,7 +238,6 @@ function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry 
         totalMs: 0,
         avgMs: 0,
         triggers: [],
-        children: [],
         parentUid: instance.$parent?.$.uid,
     }
 }
@@ -270,7 +267,14 @@ function resolveTypeLabel(type: { __name?: string; __file?: string; name?: strin
         return undefined
     }
 
-    return type.__name ?? type.name ?? type.__file?.split('/').pop()?.replace(/\.vue$/i, '')
+    return (
+        type.__name ??
+        type.name ??
+        type.__file
+            ?.split('/')
+            .pop()
+            ?.replace(/\.vue$/i, '')
+    )
 }
 
 function inferAnonymousLabel(parentLabel: string | undefined, element: string | undefined): string | undefined {

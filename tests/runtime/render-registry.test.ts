@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { createApp, type ComponentPublicInstance } from 'vue'
+import { createApp, h, type ComponentPublicInstance } from 'vue'
 import { setupRenderRegistry } from '../../src/runtime/composables/render-registry'
 
 function makeNuxtApp(app: ReturnType<typeof createApp>) {
@@ -197,7 +197,6 @@ describe('setupRenderRegistry', () => {
         const instance = fakeCPI(9, 'Transient', 'Transient.vue')
         ;(mixin.mounted as (this: ComponentPublicInstance) => void).call(instance)
         expect(getAll()).toHaveLength(1)
-
         ;(mixin.unmounted as (this: ComponentPublicInstance) => void).call(instance)
         expect(getAll()).toEqual([])
     })
@@ -335,5 +334,41 @@ describe('setupRenderRegistry', () => {
 
         expect(entry.name).toBe('NavigationMenuList li.min-w-0')
         expect(entry.element).toBe('li.min-w-0')
+    })
+})
+
+// ── Tests for fixes introduced in the bug-fix pass ────────────────────────
+
+describe('RenderEntry interface — children field removed (fix: render-registry)', () => {
+    it('getAll() entries do not have a children property', () => {
+        const app = createApp({ render: () => h('div') })
+        const { getAll } = setupRenderRegistry({ vueApp: app })
+        const el = document.createElement('div')
+        app.mount(el)
+
+        const entries = getAll()
+
+        // If any entry got mounted, verify it has no children field
+        for (const entry of entries) {
+            expect(Object.prototype.hasOwnProperty.call(entry, 'children')).toBe(false)
+        }
+
+        app.unmount()
+    })
+
+    it('getAll() entries have parentUid as the relationship field', () => {
+        const app = createApp({ render: () => h('div') })
+        const { getAll } = setupRenderRegistry({ vueApp: app })
+        const el = document.createElement('div')
+        app.mount(el)
+
+        const entries = getAll()
+
+        for (const entry of entries) {
+            // parentUid may be a number or undefined — never a children array
+            expect(['number', 'undefined']).toContain(typeof entry.parentUid)
+        }
+
+        app.unmount()
     })
 })

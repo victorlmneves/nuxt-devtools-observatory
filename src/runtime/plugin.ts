@@ -73,7 +73,10 @@ export default defineNuxtPlugin(() => {
     const renderRegistry = setupRenderRegistry(nuxtApp)
     const transitionRegistry = setupTransitionRegistry()
 
-    // Expose registries globally so Vite transform shims can reach them
+    // Expose registries globally so Vite transform shims can reach them.
+    // This must happen synchronously — before any component setup() runs —
+    // so that shims injected by the Vite transforms find the registry already
+    // in place rather than silently no-opping on the first render.
     if (import.meta.client) {
         // Always clear any previous registry to avoid cross-project state
         delete (window as ObservatoryWindow).__observatory__
@@ -89,6 +92,9 @@ export default defineNuxtPlugin(() => {
         // origin). It cannot read window.top properties, but CAN send messages.
         // We register this listener immediately (not in app:mounted) so requests
         // arriving before hydration completes are handled correctly.
+        let lastMessageSource: Window | null = null
+        let lastMessageOrigin = ''
+
         window.addEventListener('message', (event: MessageEvent) => {
             if (event.data?.type !== 'observatory:request') {
                 return
@@ -98,6 +104,10 @@ export default defineNuxtPlugin(() => {
                 return
             }
 
+            // Remember the SPA window so we can push unsolicited updates to it
+            lastMessageSource = event.source as Window | null
+            lastMessageOrigin = event.origin
+
             const source = event.source as Window | null
             const snapshot = buildSnapshot()
             source?.postMessage(
@@ -106,6 +116,19 @@ export default defineNuxtPlugin(() => {
                     data: snapshot,
                 },
                 event.origin
+            )
+        })
+
+        // Push a fresh snapshot to the SPA immediately when any tracked
+        // composable's reactive state changes — no need to wait for the next poll.
+        composableRegistry.onComposableChange(() => {
+            if (!lastMessageSource || !lastMessageOrigin) return
+            lastMessageSource.postMessage(
+                {
+                    type: 'observatory:snapshot',
+                    data: buildSnapshot(),
+                },
+                lastMessageOrigin
             )
         })
     }
@@ -118,7 +141,13 @@ export default defineNuxtPlugin(() => {
     // Broadcast on every route change (client-side navigation)
     if (import.meta.client && nuxtApp.vueApp.config.globalProperties.$router) {
         nuxtApp.vueApp.config.globalProperties.$router.beforeEach((_to: unknown, _from: unknown, next: () => void) => {
+            // Reset per-navigation registries so stale entries from the previous
+            // route don't accumulate indefinitely. provide/inject entries are
+            // re-registered as components mount on the new route.
+            // Use optional chaining so a partial deploy (plugin.ts newer than
+            // provide-inject-registry.ts) doesn't throw at runtime.
             renderRegistry.reset()
+            ;(provideInjectRegistry as { clear?: () => void }).clear?.()
             next()
         })
 

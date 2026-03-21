@@ -481,3 +481,79 @@ describe('createTrackedTransition', () => {
         expect(reg.getAll().find((e) => e.direction === 'enter')?.phase).toBe('entered')
     })
 })
+
+// ── Tests for fixes introduced in the bug-fix pass ────────────────────────
+
+describe('setupTransitionRegistry — sanitize() explicit field copy (fix: transition-registry)', () => {
+    it('getAll() returns entries with all expected TransitionEntry fields', () => {
+        const { register, getAll } = setupTransitionRegistry()
+
+        register({
+            id: 'fade::enter::1000',
+            transitionName: 'fade',
+            parentComponent: 'App',
+            direction: 'enter',
+            phase: 'entering',
+            startTime: 1000,
+            cancelled: false,
+            appear: false,
+            mode: 'out-in',
+        })
+
+        const entry = getAll()[0]
+
+        expect(entry.id).toBe('fade::enter::1000')
+        expect(entry.transitionName).toBe('fade')
+        expect(entry.parentComponent).toBe('App')
+        expect(entry.direction).toBe('enter')
+        expect(entry.phase).toBe('entering')
+        expect(entry.startTime).toBe(1000)
+        expect(entry.cancelled).toBe(false)
+        expect(entry.appear).toBe(false)
+        expect(entry.mode).toBe('out-in')
+    })
+
+    it('getAll() does not expose any function properties on returned entries', () => {
+        const { register, getAll } = setupTransitionRegistry()
+
+        register({
+            id: 'slide::leave::2000',
+            transitionName: 'slide',
+            parentComponent: 'Nav',
+            direction: 'leave',
+            phase: 'leaving',
+            startTime: 2000,
+            cancelled: false,
+            appear: false,
+        })
+
+        const entry = getAll()[0]
+        const functionKeys = Object.keys(entry).filter((k) => typeof (entry as Record<string, unknown>)[k] === 'function')
+
+        expect(functionKeys).toHaveLength(0)
+    })
+
+    it('getAll() includes durationMs when endTime has been set via update()', () => {
+        const { register, update, getAll } = setupTransitionRegistry()
+
+        register({
+            id: 'x::enter::0',
+            transitionName: 'x',
+            parentComponent: 'C',
+            direction: 'enter',
+            phase: 'entering',
+            startTime: 0,
+            cancelled: false,
+            appear: false,
+        })
+
+        update('x::enter::0', { phase: 'entered', endTime: 300 })
+
+        const entry = getAll()[0]
+
+        expect(entry.phase).toBe('entered')
+        expect(entry.endTime).toBe(300)
+        expect(typeof entry.durationMs).toBe('number')
+        expect(entry.durationMs).toBeGreaterThanOrEqual(0)
+    })
+})

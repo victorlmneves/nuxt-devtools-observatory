@@ -46,8 +46,23 @@ function matchesFilter(node: TreeNodeData, filter: string): boolean {
     return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
 }
 
-function countLeaves(node: TreeNodeData): number {
-    return node.children.length === 0 ? 1 : node.children.reduce((sum, child) => sum + countLeaves(child), 0)
+/**
+ * Count leaf nodes in a subtree iteratively to avoid stack overflow on
+ * pathologically deep provide/inject trees (e.g. every component re-providing
+ * the same key creates a chain as long as the component tree itself).
+ */
+function countLeaves(root: TreeNodeData): number {
+    let count = 0
+    const stack: TreeNodeData[] = [root]
+    while (stack.length) {
+        const node = stack.pop()!
+        if (node.children.length === 0) {
+            count++
+        } else {
+            stack.push(...node.children)
+        }
+    }
+    return count
 }
 
 function stringifyValue(value: unknown) {
@@ -203,36 +218,52 @@ function toggleProvideValue(id: string) {
 
 const allKeys = computed(() => {
     const keys = new Set<string>()
-
-    function collect(nodesToVisit: TreeNodeData[]) {
-        nodesToVisit.forEach((node) => {
-            node.provides.forEach((entry) => keys.add(entry.key))
-            node.injects.forEach((entry) => keys.add(entry.key))
-            collect(node.children)
-        })
+    const stack = [...nodes.value]
+    while (stack.length) {
+        const node = stack.pop()!
+        node.provides.forEach((entry) => keys.add(entry.key))
+        node.injects.forEach((entry) => keys.add(entry.key))
+        stack.push(...node.children)
     }
-
-    collect(nodes.value)
-
     return [...keys]
 })
 
 const visibleNodes = computed<TreeNodeData[]>(() => {
-    function prune(node: TreeNodeData): TreeNodeData | null {
-        const visibleChildren = node.children.map(prune).filter(Boolean) as TreeNodeData[]
-        const selfMatches = matchesFilter(node, activeFilter.value)
-
-        if (!selfMatches && !visibleChildren.length) {
-            return null
+    // Iterative post-order prune — avoids stack overflow on deep trees.
+    // We process nodes bottom-up so each parent can inspect its children's
+    // already-computed visibility before deciding its own.
+    function pruneIterative(root: TreeNodeData): TreeNodeData | null {
+        // Phase 1: collect nodes in pre-order (parent before children)
+        const order: TreeNodeData[] = []
+        const stack: TreeNodeData[] = [root]
+        while (stack.length) {
+            const node = stack.pop()!
+            order.push(node)
+            for (let i = node.children.length - 1; i >= 0; i--) {
+                stack.push(node.children[i])
+            }
         }
 
-        return {
-            ...node,
-            children: visibleChildren,
+        // Phase 2: process in reverse pre-order (children before parents)
+        const pruned = new Map<TreeNodeData, TreeNodeData | null>()
+        for (let i = order.length - 1; i >= 0; i--) {
+            const node = order[i]
+            const visibleChildren = node.children
+                .map((child) => pruned.get(child) ?? null)
+                .filter((child): child is TreeNodeData => child !== null)
+            const selfMatches = matchesFilter(node, activeFilter.value)
+
+            if (!selfMatches && !visibleChildren.length) {
+                pruned.set(node, null)
+            } else {
+                pruned.set(node, { ...node, children: visibleChildren })
+            }
         }
+
+        return pruned.get(root) ?? null
     }
 
-    return nodes.value.map(prune).filter(Boolean) as TreeNodeData[]
+    return nodes.value.map(pruneIterative).filter(Boolean) as TreeNodeData[]
 })
 
 watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
@@ -241,15 +272,12 @@ watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
     }
 
     const ids = new Set<string>()
-
-    function collect(nodesToVisit: TreeNodeData[]) {
-        nodesToVisit.forEach((node) => {
-            ids.add(node.id)
-            collect(node.children)
-        })
+    const stack = [...currentNodes]
+    while (stack.length) {
+        const node = stack.pop()!
+        ids.add(node.id)
+        stack.push(...node.children)
     }
-
-    collect(currentNodes)
 
     if (!ids.has(currentSelected.id)) {
         selectedNode.value = null
@@ -260,32 +288,47 @@ const layout = computed<LayoutNode[]>(() => {
     const flat: LayoutNode[] = []
     const pad = H_GAP
 
-    function place(node: TreeNodeData, depth: number, slotLeft: number, parentId: string | null) {
-        const leaves = countLeaves(node)
-        const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
-
-        flat.push({
-            data: node,
-            parentId,
-            x: Math.round(slotLeft + slotWidth / 2),
-            y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
-        })
-
-        let childLeft = slotLeft
-
-        for (const child of node.children) {
-            const childLeaves = countLeaves(child)
-            place(child, depth + 1, childLeft, node.id)
-            childLeft += childLeaves * (NODE_W + H_GAP)
-        }
+    // Iterative replacement for the recursive place() — avoids stack overflow
+    // on deep component trees. Uses an explicit stack of pending work items.
+    interface WorkItem {
+        node: TreeNodeData
+        depth: number
+        slotLeft: number
+        parentId: string | null
     }
 
     let left = pad
 
     for (const root of visibleNodes.value) {
-        const leaves = countLeaves(root)
-        place(root, 0, left, null)
-        left += leaves * (NODE_W + H_GAP) + H_GAP * 2
+        const stack: WorkItem[] = [{ node: root, depth: 0, slotLeft: left, parentId: null }]
+
+        while (stack.length) {
+            const { node, depth, slotLeft, parentId } = stack.pop()!
+            const leaves = countLeaves(node)
+            const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
+
+            flat.push({
+                data: node,
+                parentId,
+                x: Math.round(slotLeft + slotWidth / 2),
+                y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
+            })
+
+            // Push children in reverse so leftmost child is processed first
+            let childLeft = slotLeft
+            const childWork: WorkItem[] = []
+            for (const child of node.children) {
+                const childLeaves = countLeaves(child)
+                childWork.push({ node: child, depth: depth + 1, slotLeft: childLeft, parentId: node.id })
+                childLeft += childLeaves * (NODE_W + H_GAP)
+            }
+            for (let i = childWork.length - 1; i >= 0; i--) {
+                stack.push(childWork[i])
+            }
+        }
+
+        const rootLeaves = countLeaves(root)
+        left += rootLeaves * (NODE_W + H_GAP) + H_GAP * 2
     }
 
     return flat
@@ -368,7 +411,9 @@ const edges = computed<Edge[]>(() => {
                         >
                             <span class="node-dot" :style="{ background: nodeColor(layoutNode.data) }"></span>
                             <span class="mono node-label">{{ layoutNode.data.label }}</span>
-                            <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">+{{ layoutNode.data.provides.length }}</span>
+                            <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">
+                                +{{ layoutNode.data.provides.length }}
+                            </span>
                             <span v-if="layoutNode.data.injects.some((entry) => !entry.ok)" class="badge badge-err badge-xs">!</span>
                         </div>
                     </div>
@@ -409,19 +454,31 @@ const edges = computed<Edge[]>(() => {
                             <pre
                                 v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
                                 class="value-box"
-                            >{{ formatValueDetail(entry.raw) }}</pre>
+                                >{{ formatValueDetail(entry.raw) }}</pre
+                            >
                         </div>
                     </div>
                 </div>
 
-                <div v-if="selectedNode.injects.length" class="detail-section" :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }">
+                <div
+                    v-if="selectedNode.injects.length"
+                    class="detail-section"
+                    :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }"
+                >
                     <div class="section-label">injects ({{ selectedNode.injects.length }})</div>
                     <div class="detail-list">
-                        <div v-for="entry in selectedNode.injects" :key="entry.key" class="inject-row" :class="{ 'inject-miss': !entry.ok }">
+                        <div
+                            v-for="entry in selectedNode.injects"
+                            :key="entry.key"
+                            class="inject-row"
+                            :class="{ 'inject-miss': !entry.ok }"
+                        >
                             <span class="mono text-sm row-key">{{ entry.key }}</span>
                             <span v-if="entry.ok" class="badge badge-ok">resolved</span>
                             <span v-else class="badge badge-err">no provider</span>
-                            <span class="mono muted text-sm row-from" :title="entry.from ?? 'undefined'">{{ entry.from ?? 'undefined' }}</span>
+                            <span class="mono muted text-sm row-from" :title="entry.from ?? 'undefined'">
+                                {{ entry.from ?? 'undefined' }}
+                            </span>
                         </div>
                     </div>
                 </div>

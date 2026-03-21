@@ -1,21 +1,25 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.11",
+    "version": "0.1.12",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "type": "module",
     "main": "./dist/module.mjs",
     "module": "./dist/module.mjs",
     "exports": {
         ".": {
+            "types": "./dist/module.d.mts",
             "import": "./dist/module.mjs"
         },
         "./runtime/composable-registry": {
+            "types": "./dist/runtime/composables/composable-registry.d.ts",
             "import": "./dist/runtime/composables/composable-registry.js"
         },
         "./runtime/provide-inject-registry": {
+            "types": "./dist/runtime/composables/provide-inject-registry.d.ts",
             "import": "./dist/runtime/composables/provide-inject-registry.js"
         },
         "./runtime/fetch-registry": {
+            "types": "./dist/runtime/composables/fetch-registry.d.ts",
             "import": "./dist/runtime/composables/fetch-registry.js"
         }
     },
@@ -44,9 +48,9 @@
     "devDependencies": {
         "@eslint/js": "^9.39.2",
         "@nuxt/eslint": "^1.13.0",
-        "@nuxt/kit": "^4.0.0",
+        "@nuxt/kit": "^3.0.0",
         "@nuxt/module-builder": "^1.0.2",
-        "@nuxt/schema": "^4.0.0",
+        "@nuxt/schema": "^3.0.0",
         "@types/babel__generator": "^7.27.0",
         "@types/babel__traverse": "^7.28.0",
         "@types/node": "^25.5.0",

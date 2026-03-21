@@ -176,6 +176,38 @@ describe('__trackComposable', () => {
         expect(entry.refs['label']).toBeUndefined()
     })
 
+    it('getAll() reflects current live ref values after they change — not the setup-time snapshot', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const counter = ref(0)
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useCounter', () => ({ counter }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // Initial snapshot at setup — value is 0
+        expect(reg.getAll()[0].refs['counter'].value).toBe(0)
+
+        // Mutate the ref (simulates clicking "increment")
+        counter.value = 4
+
+        // getAll() must now return the updated value, not the stale 0
+        expect(reg.getAll()[0].refs['counter'].value).toBe(4)
+
+        // Another mutation
+        counter.value = 7
+        expect(reg.getAll()[0].refs['counter'].value).toBe(7)
+
+        app.unmount()
+    })
+
     it('sets status to unmounted after the component unmounts', () => {
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
@@ -333,5 +365,149 @@ describe('__trackComposable', () => {
 
         expect(reg.getAll()[0].lifecycle.watchersCleaned).toBe(true)
         expect(reg.getAll()[0].leak).toBe(false)
+    })
+})
+
+// ── Tests for fixes introduced in the bug-fix pass ────────────────────────
+
+describe('__trackComposable — re-entrant setInterval patch (fix #14)', () => {
+    it('does not permanently leak the setInterval patch when composables are nested', () => {
+        const originalSetInterval = window.setInterval
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        // useOuter calls useInner during its own setup — simulates nested __trackComposable
+        const useInner = () => ({})
+        const useOuter = () => {
+            __trackComposable('useInner', useInner, { file: 'Inner.ts', line: 1 })
+            return {}
+        }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useOuter', useOuter, { file: 'Outer.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        app.unmount()
+
+        // After setup completes, window.setInterval must be fully restored
+        expect(window.setInterval).toBe(originalSetInterval)
+    })
+
+    it('tracks intervals created by the outer composable even when inner composable also patches', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const useInner = () => {
+            window.setInterval(() => {}, 500) // inner interval
+            return {}
+        }
+
+        const useOuter = () => {
+            window.setInterval(() => {}, 1000) // outer interval — must be tracked by outer
+            __trackComposable('useInner', useInner, { file: 'Inner.ts', line: 1 })
+            return {}
+        }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useOuter', useOuter, { file: 'Outer.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        app.unmount()
+
+        const outer = reg.getAll().find((e) => e.name === 'useOuter')
+        // The outer composable should have detected at least the interval it created
+        expect(outer?.intervalCount).toBeGreaterThanOrEqual(1)
+    })
+})
+
+describe('__trackComposable — onUnmounted guard outside component context (fix #15)', () => {
+    it('does not throw and still registers an entry when called outside a component', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        // Called at module level, no active component instance
+        expect(() => {
+            __trackComposable('useGlobal', () => ({ value: 42 }), { file: 'store.ts', line: 1 })
+        }).not.toThrow()
+
+        expect(reg.getAll()).toHaveLength(1)
+        expect(reg.getAll()[0].name).toBe('useGlobal')
+    })
+
+    it('does not produce a Vue warning about missing instance when called outside component', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+        const warnSpy = vi.spyOn(console, 'warn')
+
+        __trackComposable('useGlobal', () => ({}), { file: 'plugin.ts', line: 1 })
+
+        // No Vue lifecycle hook warning should have been emitted
+        const lifecycleWarnings = warnSpy.mock.calls.filter(
+            (args) => String(args[0]).includes('onUnmounted') || String(args[0]).includes('lifecycle')
+        )
+        expect(lifecycleWarnings).toHaveLength(0)
+    })
+})
+
+describe('__trackComposable — live ref snapshot after unmount (regression: empty-object sentinel bug)', () => {
+    it('getAll() after unmount still returns the frozen setup-time ref snapshot', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useStatic', () => ({ count: ref(42) }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        // Unmount causes onUnmounted → registerLiveRefs(id, {}) → liveRefs.delete(id)
+        app.unmount()
+
+        const entry = reg.getAll()[0]
+
+        // Frozen snapshot from setup time must still be accessible
+        expect(entry.refs['count']).toBeDefined()
+        expect(entry.refs['count'].type).toBe('ref')
+        expect(entry.refs['count'].value).toBe(42)
+    })
+
+    it('getAll() while mounted returns the LIVE value, not the setup-time snapshot', async () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let countRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                countRef = ref(0)
+                __trackComposable('useLive', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // Mutate after setup
+        countRef!.value = 99
+
+        const entry = reg.getAll()[0]
+        // Must reflect the current value, not the 0 captured at setup time
+        expect(entry.refs['count']?.value).toBe(99)
+
+        app.unmount()
     })
 })
