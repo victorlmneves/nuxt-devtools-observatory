@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { createApp, defineComponent, h, ref, watch } from 'vue'
+import { createApp, defineComponent, h, ref, watch, reactive, nextTick } from 'vue'
 import { setupComposableRegistry, __trackComposable } from '../../src/runtime/composables/composable-registry'
 
 type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
@@ -776,7 +776,6 @@ describe('setupComposableRegistry — clearPreviousRoute()', () => {
 
 describe('__trackComposable — reactive() object tracking (priority 1)', () => {
     it('captures a reactive() object returned from a composable', () => {
-        const { reactive } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -808,7 +807,6 @@ describe('__trackComposable — reactive() object tracking (priority 1)', () => 
     })
 
     it('reactive() values update live when properties change', async () => {
-        const { reactive, nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -856,7 +854,6 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('appends a history event when a ref value changes', async () => {
-        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -887,7 +884,6 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('does not record unchanged keys as history events', async () => {
-        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -921,7 +917,6 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('clears history when clear() is called', async () => {
-        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
         let countRef: ReturnType<typeof ref<number>> | null = null
