@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
+import { useObservatoryData, getObservatoryOrigin, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
 
 interface ComposableViewEntry {
     id: string
     name: string
     component: string
+    route: string
     instances: number
     status: string
     leak: boolean
@@ -21,7 +22,16 @@ interface ComposableViewEntry {
     }
 }
 
-const { composables: rawEntries, connected } = useObservatoryData()
+const { composables: rawEntries, connected, clearComposables } = useObservatoryData()
+
+function clearSession() {
+    const origin = getObservatoryOrigin()
+    if (!origin) return
+    // Optimistically empty the local list so the UI responds immediately
+    clearComposables()
+    // Tell the host app to wipe its registry too
+    window.top?.postMessage({ type: 'observatory:clear-composables' }, origin)
+}
 
 const entries = computed<ComposableViewEntry[]>(() => {
     const groups = new Map<string, RuntimeComposableEntry[]>()
@@ -34,13 +44,23 @@ const entries = computed<ComposableViewEntry[]>(() => {
     }
 
     return [...groups.entries()].map(([key, group]) => {
-        const latest = [...group].sort((a, b) => b.line - a.line)[0]
+        // Sort by the timestamp embedded in the id (format: name::uid::file:line::timestamp::rand)
+        // so "latest" means the most recently registered instance, not the highest line number.
+        const sorted = [...group].sort((a, b) => {
+            const tsA = Number(a.id.split('::')[4] ?? 0)
+            const tsB = Number(b.id.split('::')[4] ?? 0)
+            return tsB - tsA
+        })
+        const latest = sorted[0]
         const leakReasons = [...new Set(group.map((entry) => entry.leakReason).filter(Boolean))]
 
         return {
             id: key,
             name: latest.name,
             component: latest.componentFile,
+            // Show all unique routes this composable was seen on — most entries
+            // will have just one, but session accumulation may show several.
+            route: [...new Set(group.map((entry) => entry.route).filter(Boolean))].join(', ') || '/',
             instances: group.length,
             status: group.some((entry) => entry.status === 'mounted') ? 'mounted' : 'unmounted',
             leak: group.some((entry) => entry.leak),
@@ -140,6 +160,7 @@ function lifecycleRows(entry: ComposableViewEntry) {
                 placeholder="search composable or component…"
                 style="max-width: 220px; margin-left: auto"
             />
+            <button class="clear-btn" title="Clear session history" @click="clearSession">clear session</button>
         </div>
 
         <div class="list">
@@ -171,6 +192,7 @@ function lifecycleRows(entry: ComposableViewEntry) {
                     <div v-if="entry.leak" class="leak-banner">{{ entry.leakReason }}</div>
 
                     <div class="section-label">reactive state</div>
+                    <div v-if="!entry.refs.length" class="muted text-sm" style="padding: 2px 0 6px">no tracked refs</div>
                     <div v-for="refEntry in entry.refs" :key="refEntry.key" class="ref-row">
                         <span class="mono text-sm" style="min-width: 90px; color: var(--text2)">{{ refEntry.key }}</span>
                         <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
@@ -185,6 +207,9 @@ function lifecycleRows(entry: ComposableViewEntry) {
                         <span class="muted text-sm" style="min-width: 110px">{{ row.label }}</span>
                         <span class="text-sm" :style="{ color: row.ok ? 'var(--teal)' : 'var(--red)' }">{{ row.status }}</span>
                     </div>
+
+                    <div class="section-label" style="margin-top: 8px">registered on</div>
+                    <span class="mono text-sm muted">{{ entry.route }}</span>
                 </div>
             </div>
 
@@ -218,6 +243,18 @@ function lifecycleRows(entry: ComposableViewEntry) {
     gap: 6px;
     flex-shrink: 0;
     flex-wrap: wrap;
+}
+
+.clear-btn {
+    color: var(--text3);
+    border-color: var(--border);
+    flex-shrink: 0;
+}
+
+.clear-btn:hover {
+    color: var(--red);
+    border-color: var(--red);
+    background: transparent;
 }
 
 .list {

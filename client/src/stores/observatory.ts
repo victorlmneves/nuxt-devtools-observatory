@@ -81,7 +81,6 @@ export interface RenderEntry {
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
-    children: number[]
     parentUid?: number
 }
 
@@ -115,7 +114,10 @@ const transitions = ref<TransitionEntry[]>([])
 const connected = ref(false)
 
 let started = false
+// parentOrigin is only used for the outgoing postMessage target. We always
+// validate incoming messages strictly — see onMessage below.
 let parentOrigin = '*'
+let pollIntervalId: ReturnType<typeof window.setInterval> | null = null
 
 function cloneArray<T>(value: T[] | undefined): T[] {
     return value ? value.map((item) => ({ ...item })) : []
@@ -130,19 +132,24 @@ function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[]
         : []
 }
 
-function getParentOrigin() {
-    if (typeof document === 'undefined' || !document.referrer) {
-        return '*'
+function getParentOrigin(): string {
+    if (typeof document === 'undefined') return ''
+    // Prefer the opener/embedder origin from document.referrer.
+    if (document.referrer) {
+        try {
+            return new URL(document.referrer).origin
+        } catch {
+            /* fall through */
+        }
     }
-
-    try {
-        return new URL(document.referrer).origin
-    } catch {
-        return '*'
-    }
+    // When opened as a top-level window (e.g. direct navigation) there is no
+    // referrer and no parent to receive messages from — return empty string so
+    // we never send to or accept from '*'.
+    return ''
 }
 
 function requestSnapshot() {
+    if (!parentOrigin) return
     window.top?.postMessage({ type: 'observatory:request' }, parentOrigin)
 }
 
@@ -151,7 +158,9 @@ function onMessage(event: MessageEvent) {
         return
     }
 
-    if (parentOrigin !== '*' && event.origin !== parentOrigin) {
+    // Always validate the origin of incoming snapshot messages.
+    // Accepting '*' would allow any page to inject arbitrary devtools data.
+    if (!parentOrigin || event.origin !== parentOrigin) {
         return
     }
 
@@ -177,8 +186,30 @@ function ensureStarted() {
     started = true
     parentOrigin = getParentOrigin()
     window.addEventListener('message', onMessage)
-    window.setInterval(requestSnapshot, POLL_MS)
+    pollIntervalId = window.setInterval(requestSnapshot, POLL_MS)
     requestSnapshot()
+}
+
+/**
+ * Stops polling and removes the message listener.
+ * Call this when tearing down the SPA (e.g. in an onUnmounted hook at the
+ * root component level) to prevent the interval from running indefinitely.
+ */
+export function stopObservatoryPolling() {
+    if (pollIntervalId !== null) {
+        window.clearInterval(pollIntervalId)
+        pollIntervalId = null
+    }
+    window.removeEventListener('message', onMessage)
+    started = false
+}
+
+export function getObservatoryOrigin() {
+    return parentOrigin
+}
+
+export function clearComposables() {
+    composables.value = []
 }
 
 export function useObservatoryData() {
@@ -192,5 +223,6 @@ export function useObservatoryData() {
         transitions,
         connected,
         refresh: requestSnapshot,
+        clearComposables,
     }
 }

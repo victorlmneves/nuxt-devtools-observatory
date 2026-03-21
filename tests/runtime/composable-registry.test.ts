@@ -511,3 +511,144 @@ describe('__trackComposable — live ref snapshot after unmount (regression: emp
         app.unmount()
     })
 })
+
+describe('setupComposableRegistry — clear() (session reset)', () => {
+    it('clear() removes all entries', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()).toHaveLength(1)
+
+        reg.clear()
+
+        expect(reg.getAll()).toHaveLength(0)
+
+        app.unmount()
+    })
+
+    it('clear() stops live ref watchers so onChange is not fired after clearing', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let changeCount = 0
+        reg.onComposableChange(() => {
+            changeCount++
+        })
+
+        let countRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                countRef = ref(0)
+                __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        reg.clear()
+        const callsBeforeMutation = changeCount
+
+        // Mutating after clear should NOT fire onChange
+        countRef!.value = 99
+
+        expect(changeCount).toBe(callsBeforeMutation)
+
+        app.unmount()
+    })
+
+    it('clear() exposes entries returning empty array immediately after', () => {
+        const reg = setupComposableRegistry()
+
+        reg.register({
+            id: 'test::1::C.ts:1::0::abc',
+            name: 'useTest',
+            componentFile: 'C.ts',
+            componentUid: 1,
+            status: 'mounted',
+            leak: false,
+            refs: {},
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'C.ts',
+            line: 1,
+            route: '/',
+        })
+
+        expect(reg.getAll()).toHaveLength(1)
+        reg.clear()
+        expect(reg.getAll()).toHaveLength(0)
+    })
+})
+
+describe('setupComposableRegistry — setRoute() / route stamping', () => {
+    it('entries are stamped with the current route at registration time', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        reg.setRoute('/products')
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useProducts', () => ({}), { file: 'P.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        app.unmount()
+
+        expect(reg.getAll()[0].route).toBe('/products')
+    })
+
+    it('entries on different routes carry their respective route path', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        reg.setRoute('/home')
+        const entryA: import('../../src/runtime/composables/composable-registry').ComposableEntry = {
+            id: 'useHome::1::H.ts:1::0::abc',
+            name: 'useHome',
+            componentFile: 'H.ts',
+            componentUid: 1,
+            status: 'mounted',
+            leak: false,
+            refs: {},
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'H.ts',
+            line: 1,
+            route: '/home',
+        }
+        reg.register(entryA)
+
+        reg.setRoute('/about')
+        const entryB: import('../../src/runtime/composables/composable-registry').ComposableEntry = {
+            ...entryA,
+            id: 'useAbout::1::A.ts:1::0::def',
+            name: 'useAbout',
+            componentFile: 'A.ts',
+            route: '/about',
+        }
+        reg.register(entryB)
+
+        const all = reg.getAll()
+        expect(all.find((e) => e.name === 'useHome')?.route).toBe('/home')
+        expect(all.find((e) => e.name === 'useAbout')?.route).toBe('/about')
+    })
+})

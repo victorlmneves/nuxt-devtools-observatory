@@ -19,6 +19,8 @@ export interface ComposableEntry {
     }
     file: string
     line: number
+    /** Route path the composable was registered on, e.g. "/products". */
+    route: string
 }
 
 interface RuntimeEffect {
@@ -49,6 +51,17 @@ export function setupComposableRegistry() {
     const liveRefs = new Map<string, Record<string, import('vue').Ref<unknown>>>()
     // Stop functions for watchEffect instances tracking each composable's live refs
     const liveRefWatchers = new Map<string, () => void>()
+    // The current route path — updated by the plugin on every navigation so new
+    // entries are stamped with the route they were created on.
+    let currentRoute = '/'
+
+    function setRoute(path: string) {
+        currentRoute = path
+    }
+
+    function getRoute(): string {
+        return currentRoute
+    }
 
     function register(entry: ComposableEntry) {
         entries.value.set(entry.id, entry)
@@ -160,6 +173,7 @@ export function setupComposableRegistry() {
             lifecycle: entry.lifecycle,
             file: entry.file,
             line: entry.line,
+            route: entry.route,
         }
     }
     function getAll(): ComposableEntry[] {
@@ -176,7 +190,34 @@ export function setupComposableRegistry() {
         channel?.send(event, data)
     }
 
-    return { register, registerLiveRefs, onComposableChange, update, getAll }
+    function clear() {
+        // Stop all live ref watchers before clearing so we don't fire onChange
+        // callbacks for entries that are about to be deleted.
+        for (const stop of liveRefWatchers.values()) stop()
+        liveRefWatchers.clear()
+        liveRefs.clear()
+        entries.value.clear()
+        emit('composable:clear', {})
+    }
+
+    /**
+     * Called after every navigation. Removes entries from the *previous* route
+     * that unmounted cleanly (no leak). Leaked entries are kept so the developer
+     * can see them even after navigating away from the page they originated on.
+     */
+    function clearPreviousRoute(previousRoute: string) {
+        for (const [id, entry] of entries.value.entries()) {
+            if (entry.route === previousRoute && entry.status === 'unmounted' && !entry.leak) {
+                liveRefWatchers.get(id)?.()
+                liveRefWatchers.delete(id)
+                liveRefs.delete(id)
+                entries.value.delete(id)
+            }
+        }
+        emit('composable:clear', {})
+    }
+
+    return { register, registerLiveRefs, onComposableChange, clear, clearPreviousRoute, setRoute, getRoute, update, getAll }
 }
 
 // ── Dev shim called by Vite transform ─────────────────────────────────────
@@ -289,6 +330,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         },
         file: meta.file,
         line: meta.line,
+        route: registry.getRoute(),
     }
 
     registry.register(entry)

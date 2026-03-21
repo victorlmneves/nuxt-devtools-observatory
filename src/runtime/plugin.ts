@@ -96,27 +96,28 @@ export default defineNuxtPlugin(() => {
         let lastMessageOrigin = ''
 
         window.addEventListener('message', (event: MessageEvent) => {
-            if (event.data?.type !== 'observatory:request') {
-                return
-            }
-
             if (config.clientOrigin && event.origin !== config.clientOrigin) {
                 return
             }
 
-            // Remember the SPA window so we can push unsolicited updates to it
-            lastMessageSource = event.source as Window | null
-            lastMessageOrigin = event.origin
+            const type = event.data?.type
 
-            const source = event.source as Window | null
-            const snapshot = buildSnapshot()
-            source?.postMessage(
-                {
-                    type: 'observatory:snapshot',
-                    data: snapshot,
-                },
-                event.origin
-            )
+            if (type === 'observatory:request') {
+                // Remember the SPA window so we can push unsolicited updates to it
+                lastMessageSource = event.source as Window | null
+                lastMessageOrigin = event.origin
+
+                const source = event.source as Window | null
+                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+                return
+            }
+
+            if (type === 'observatory:clear-composables') {
+                composableRegistry.clear()
+                // Push a fresh (now empty) snapshot back immediately
+                const source = event.source as Window | null
+                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+            }
         })
 
         // Push a fresh snapshot to the SPA immediately when any tracked
@@ -141,13 +142,16 @@ export default defineNuxtPlugin(() => {
     // Broadcast on every route change (client-side navigation)
     if (import.meta.client && nuxtApp.vueApp.config.globalProperties.$router) {
         nuxtApp.vueApp.config.globalProperties.$router.beforeEach((_to: unknown, _from: unknown, next: () => void) => {
-            // Reset per-navigation registries so stale entries from the previous
-            // route don't accumulate indefinitely. provide/inject entries are
-            // re-registered as components mount on the new route.
-            // Use optional chaining so a partial deploy (plugin.ts newer than
-            // provide-inject-registry.ts) doesn't throw at runtime.
             renderRegistry.reset()
             ;(provideInjectRegistry as { clear?: () => void }).clear?.()
+            // Clear composable history so each page starts with a fresh slate,
+            // matching the render heatmap behaviour. Leak detection still works
+            // because onUnmounted hooks run after beforeEach — any leaked watchers
+            // are detected and flagged before their entries are re-registered on
+            // the incoming route.
+            composableRegistry.clear()
+            const toPath = (_to as { path?: string })?.path ?? '/'
+            composableRegistry.setRoute(toPath)
             next()
         })
 
