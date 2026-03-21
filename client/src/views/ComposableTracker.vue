@@ -152,10 +152,16 @@ function typeBadgeClass(type: string) {
                         v-for="[k, v] in Object.entries(entry.refs).slice(0, 3)"
                         :key="k"
                         class="ref-chip"
-                        :class="{ 'ref-chip--reactive': v.type === 'reactive', 'ref-chip--computed': v.type === 'computed' }"
+                        :class="{
+                            'ref-chip--reactive': v.type === 'reactive',
+                            'ref-chip--computed': v.type === 'computed',
+                            'ref-chip--shared': entry.sharedKeys?.includes(k),
+                        }"
+                        :title="entry.sharedKeys?.includes(k) ? 'shared global state' : ''"
                     >
                         <span class="ref-chip-key">{{ k }}</span>
                         <span class="ref-chip-val">{{ formatVal(v.value) }}</span>
+                        <span v-if="entry.sharedKeys?.includes(k)" class="ref-chip-shared-dot" title="global"></span>
                     </span>
                     <span v-if="Object.keys(entry.refs).length > 3" class="muted text-sm">
                         +{{ Object.keys(entry.refs).length - 3 }} more
@@ -165,6 +171,17 @@ function typeBadgeClass(type: string) {
                 <div v-if="expanded === entry.id" class="comp-detail" @click.stop>
                     <div v-if="entry.leak" class="leak-banner">{{ entry.leakReason }}</div>
 
+                    <!-- Global state warning -->
+                    <div v-if="entry.sharedKeys?.length" class="global-banner">
+                        <span class="global-dot"></span>
+                        <span>
+                            <strong>global state</strong>
+                            — {{ entry.sharedKeys.join(', ') }}
+                            {{ entry.sharedKeys.length === 1 ? 'is' : 'are' }}
+                            shared across all instances of {{ entry.name }}
+                        </span>
+                    </div>
+
                     <div class="section-label">reactive state</div>
                     <div v-if="!Object.keys(entry.refs).length" class="muted text-sm" style="padding: 2px 0 6px">
                         no tracked state returned
@@ -173,6 +190,7 @@ function typeBadgeClass(type: string) {
                         <span class="mono text-sm ref-key">{{ k }}</span>
                         <span class="mono text-sm ref-val">{{ formatVal(v.value) }}</span>
                         <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
+                        <span v-if="entry.sharedKeys?.includes(k)" class="badge badge-amber text-xs">global</span>
                     </div>
 
                     <template v-if="entry.history && entry.history.length">
@@ -452,7 +470,49 @@ function typeBadgeClass(type: string) {
     flex-shrink: 0;
 }
 
-.badge-purple {
+.ref-chip--shared {
+    border-color: color-mix(in srgb, var(--amber) 50%, var(--border));
+    background: color-mix(in srgb, var(--amber) 10%, var(--bg2));
+}
+
+.ref-chip-shared-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+    margin-left: 1px;
+}
+
+.global-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: color-mix(in srgb, var(--amber) 10%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+    border-radius: var(--radius);
+    padding: 7px 10px;
+    font-size: 11px;
+    color: var(--text2);
+    margin-bottom: 6px;
+}
+
+.global-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+    margin-top: 3px;
+}
+
+.badge-amber {
+    background: color-mix(in srgb, var(--amber) 15%, transparent);
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+}
     background: color-mix(in srgb, var(--purple) 15%, transparent);
     color: var(--purple);
     border: 0.5px solid color-mix(in srgb, var(--purple) 40%, var(--border));

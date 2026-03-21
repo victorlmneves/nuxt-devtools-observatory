@@ -65,6 +65,7 @@ export interface ComposableEntry {
     leakReason?: string
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
     history: RefChangeEvent[]
+    sharedKeys: string[]
     watcherCount: number
     intervalCount: number
     lifecycle: {

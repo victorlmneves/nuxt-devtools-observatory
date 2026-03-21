@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { createApp, defineComponent, h, ref, watch, reactive, nextTick } from 'vue'
+import { createApp, defineComponent, h, ref, watch } from 'vue'
 import { setupComposableRegistry, __trackComposable } from '../../src/runtime/composables/composable-registry'
 
 type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
@@ -776,6 +776,7 @@ describe('setupComposableRegistry — clearPreviousRoute()', () => {
 
 describe('__trackComposable — reactive() object tracking (priority 1)', () => {
     it('captures a reactive() object returned from a composable', () => {
+        const { reactive } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -807,6 +808,7 @@ describe('__trackComposable — reactive() object tracking (priority 1)', () => 
     })
 
     it('reactive() values update live when properties change', async () => {
+        const { reactive, nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -854,6 +856,7 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('appends a history event when a ref value changes', async () => {
+        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -884,6 +887,7 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('does not record unchanged keys as history events', async () => {
+        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -917,6 +921,7 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('clears history when clear() is called', async () => {
+        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
         let countRef: ReturnType<typeof ref<number>> | null = null
@@ -941,5 +946,180 @@ describe('__trackComposable — change history (priority 3)', () => {
         expect(reg.getAll()).toHaveLength(0)
 
         app.unmount()
+    })
+})
+
+describe('setupComposableRegistry — sharedKeys / global vs local detection (priority 4)', () => {
+    it('sharedKeys is empty for a composable with no other instances', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()[0].sharedKeys).toEqual([])
+
+        app.unmount()
+    })
+
+    it('sharedKeys is empty when two instances create their own separate refs (local state)', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        // Each call to useLocal() creates a NEW ref — not shared
+        function useLocal() {
+            return { count: ref(0) }
+        }
+
+        const CompA = defineComponent({
+            setup() {
+                __trackComposable('useLocal', useLocal, { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+        const CompB = defineComponent({
+            setup() {
+                __trackComposable('useLocal', useLocal, { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const el = document.createElement('div')
+        const appA = createApp(CompA)
+        appA.mount(el)
+        const appB = createApp(CompB)
+        appB.mount(document.createElement('div'))
+
+        const entries = reg.getAll()
+        expect(entries).toHaveLength(2)
+        // Both instances created their own refs → no sharing
+        entries.forEach((e) => expect(e.sharedKeys).toEqual([]))
+
+        appA.unmount()
+        appB.unmount()
+    })
+
+    it('detects sharedKeys when two instances return the same ref object (global/singleton state)', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        // Module-level ref — shared across all instances
+        const sharedCount = ref(0)
+        function useGlobal() {
+            return { count: sharedCount }
+        }
+
+        const CompA = defineComponent({
+            setup() {
+                __trackComposable('useGlobal', useGlobal, { file: 'G.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+        const CompB = defineComponent({
+            setup() {
+                __trackComposable('useGlobal', useGlobal, { file: 'G.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const appA = createApp(CompA)
+        appA.mount(document.createElement('div'))
+        const appB = createApp(CompB)
+        appB.mount(document.createElement('div'))
+
+        const entries = reg.getAll()
+        expect(entries).toHaveLength(2)
+        // Both instances return the SAME ref object → 'count' should be flagged as shared
+        entries.forEach((e) => expect(e.sharedKeys).toContain('count'))
+
+        appA.unmount()
+        appB.unmount()
+    })
+
+    it('only flags the keys that are shared, not local ones', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const globalRef = ref('shared-value')
+
+        function useMixed() {
+            return {
+                global: globalRef, // shared — same object
+                local: ref(0), // local — new ref each call
+            }
+        }
+
+        const CompA = defineComponent({
+            setup() {
+                __trackComposable('useMixed', useMixed, { file: 'M.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+        const CompB = defineComponent({
+            setup() {
+                __trackComposable('useMixed', useMixed, { file: 'M.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const appA = createApp(CompA)
+        appA.mount(document.createElement('div'))
+        const appB = createApp(CompB)
+        appB.mount(document.createElement('div'))
+
+        const entries = reg.getAll()
+        entries.forEach((e) => {
+            expect(e.sharedKeys).toContain('global')
+            expect(e.sharedKeys).not.toContain('local')
+        })
+
+        appA.unmount()
+        appB.unmount()
+    })
+
+    it('does not cross-detect sharing between different composable names', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const shared = ref(42)
+
+        const CompA = defineComponent({
+            setup() {
+                __trackComposable('useA', () => ({ val: shared }), { file: 'A.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+        const CompB = defineComponent({
+            setup() {
+                // Different composable name, same ref — should NOT flag as shared
+                // because sharing is only meaningful within the same composable
+                __trackComposable('useB', () => ({ val: shared }), { file: 'B.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const appA = createApp(CompA)
+        appA.mount(document.createElement('div'))
+        const appB = createApp(CompB)
+        appB.mount(document.createElement('div'))
+
+        const entries = reg.getAll()
+        const entryA = entries.find((e) => e.name === 'useA')!
+        const entryB = entries.find((e) => e.name === 'useB')!
+
+        // No other 'useA' instances → not shared
+        expect(entryA.sharedKeys).toEqual([])
+        // No other 'useB' instances → not shared
+        expect(entryB.sharedKeys).toEqual([])
+
+        appA.unmount()
+        appB.unmount()
     })
 })

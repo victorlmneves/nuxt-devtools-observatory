@@ -17,6 +17,11 @@ export interface ComposableEntry {
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
     /** Capped at MAX_HISTORY_PER_ENTRY events, newest last */
     history: RefChangeEvent[]
+    /**
+     * Keys whose underlying ref/reactive object is shared across multiple
+     * instances of this composable — indicates module-level (global) state.
+     */
+    sharedKeys: string[]
     watcherCount: number
     intervalCount: number
     lifecycle: {
@@ -64,6 +69,32 @@ export function setupComposableRegistry() {
     const entryHistory = new Map<string, RefChangeEvent[]>()
     // Previous serialised values per ref, used to detect which key actually changed
     const prevValues = new Map<string, Record<string, string>>()
+    // Raw (unwrapped) objects per entry — used to detect shared/global state by
+    // comparing object identity across instances of the same composable name.
+    const rawRefs = new Map<string, Record<string, unknown>>()
+
+    /**
+     * For a given entry, return the set of ref keys whose underlying object is
+     * shared with at least one other live instance of the same composable.
+     * Two instances share a ref when they return the exact same object reference.
+     */
+    function computeSharedKeys(id: string, name: string): string[] {
+        const ownRaw = rawRefs.get(id)
+        if (!ownRaw) return []
+
+        const shared = new Set<string>()
+        for (const [otherId, entry] of entries.value.entries()) {
+            if (otherId === id || entry.name !== name) continue
+            const otherRaw = rawRefs.get(otherId)
+            if (!otherRaw) continue
+            for (const [key, obj] of Object.entries(ownRaw)) {
+                if (key in otherRaw && otherRaw[key] === obj) {
+                    shared.add(key)
+                }
+            }
+        }
+        return [...shared]
+    }
     // The current route path — updated by the plugin on every navigation so new
     // entries are stamped with the route they were created on.
     let currentRoute = '/'
@@ -91,6 +122,7 @@ export function setupComposableRegistry() {
             // No live refs — remove the entry entirely so sanitize() falls back
             // to the frozen snapshot stored in entry.refs (e.g. after unmount).
             liveRefs.delete(id)
+            rawRefs.delete(id)
             prevValues.delete(id)
             return
         }
@@ -124,6 +156,10 @@ export function setupComposableRegistry() {
             _onChange?.()
         })
         liveRefWatchers.set(id, stop)
+    }
+
+    function registerRawRefs(id: string, refs: Record<string, unknown>) {
+        rawRefs.set(id, refs)
     }
 
     // Callback invoked by the plugin whenever live ref values change.
@@ -202,6 +238,7 @@ export function setupComposableRegistry() {
             leakReason: entry.leakReason,
             refs: freshRefs,
             history: entryHistory.get(entry.id) ?? [],
+            sharedKeys: computeSharedKeys(entry.id, entry.name),
             watcherCount: entry.watcherCount,
             intervalCount: entry.intervalCount,
             lifecycle: entry.lifecycle,
@@ -228,6 +265,7 @@ export function setupComposableRegistry() {
         for (const stop of liveRefWatchers.values()) stop()
         liveRefWatchers.clear()
         liveRefs.clear()
+        rawRefs.clear()
         prevValues.clear()
         entryHistory.clear()
         entries.value.clear()
@@ -245,13 +283,27 @@ export function setupComposableRegistry() {
                 liveRefWatchers.get(id)?.()
                 liveRefWatchers.delete(id)
                 liveRefs.delete(id)
+                rawRefs.delete(id)
+                prevValues.delete(id)
+                entryHistory.delete(id)
                 entries.value.delete(id)
             }
         }
         emit('composable:clear', {})
     }
 
-    return { register, registerLiveRefs, onComposableChange, clear, clearPreviousRoute, setRoute, getRoute, update, getAll }
+    return {
+        register,
+        registerLiveRefs,
+        registerRawRefs,
+        onComposableChange,
+        clear,
+        clearPreviousRoute,
+        setRoute,
+        getRoute,
+        update,
+        getAll,
+    }
 }
 
 // ── Dev shim called by Vite transform ─────────────────────────────────────
@@ -333,6 +385,8 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     // Supports: ref, computed (readonly ref), and reactive() objects.
     const refs: ComposableEntry['refs'] = {}
     const liveRefMap: Record<string, import('vue').Ref<unknown>> = {}
+    // Raw unwrapped objects for identity comparison (global vs local detection)
+    const rawRefMap: Record<string, unknown> = {}
 
     if (result && typeof result === 'object') {
         for (const [key, val] of Object.entries(result as object)) {
@@ -340,13 +394,11 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
                 const type = isReadonly(val) ? 'computed' : 'ref'
                 refs[key] = { type, value: safeSnapshot(unref(val)) }
                 liveRefMap[key] = val as import('vue').Ref<unknown>
+                rawRefMap[key] = val // store original Ref for identity check
             } else if (isReactive(val)) {
-                // Wrap the reactive object in a computed ref so sanitize() can
-                // call unref() on it uniformly — same path as refs.
                 refs[key] = { type: 'reactive', value: safeSnapshot(val) }
-                // computed(() => val) re-runs whenever any property of val changes,
-                // so the watchEffect in registerLiveRefs will pick up mutations too.
                 liveRefMap[key] = computed(() => val) as import('vue').Ref<unknown>
+                rawRefMap[key] = val // store original reactive object for identity check
             }
         }
     }
@@ -360,6 +412,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         leak: false,
         refs,
         history: [],
+        sharedKeys: [], // computed lazily in sanitize() after all instances are registered
         watcherCount: trackedWatchers.length,
         intervalCount: trackedIntervals.length,
         lifecycle: {
@@ -375,6 +428,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
 
     registry.register(entry)
     registry.registerLiveRefs(id, liveRefMap)
+    registry.registerRawRefs(id, rawRefMap)
 
     // Leak detection: only register onUnmounted when called inside a component
     // context — Vue will warn (and the hook will silently no-op) if called globally.
