@@ -1,4 +1,4 @@
-import { ref, isRef, isReadonly, unref, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
+import { ref, isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
 
 export interface ComposableEntry {
     id: string
@@ -296,18 +296,23 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
 
     // Snapshot reactive return values for the initial entry,
     // AND keep live references so getAll() can re-read current values.
+    // Supports: ref, computed (readonly ref), and reactive() objects.
     const refs: ComposableEntry['refs'] = {}
     const liveRefMap: Record<string, import('vue').Ref<unknown>> = {}
 
     if (result && typeof result === 'object') {
         for (const [key, val] of Object.entries(result as object)) {
             if (isRef(val)) {
-                refs[key] = {
-                    type: isReadonly(val) ? 'computed' : 'ref',
-                    value: safeSnapshot(unref(val)),
-                }
-                // Keep the live ref so sanitize() can re-read it on every snapshot
+                const type = isReadonly(val) ? 'computed' : 'ref'
+                refs[key] = { type, value: safeSnapshot(unref(val)) }
                 liveRefMap[key] = val as import('vue').Ref<unknown>
+            } else if (isReactive(val)) {
+                // Wrap the reactive object in a computed ref so sanitize() can
+                // call unref() on it uniformly — same path as refs.
+                refs[key] = { type: 'reactive', value: safeSnapshot(val) }
+                // computed(() => val) re-runs whenever any property of val changes,
+                // so the watchEffect in registerLiveRefs will pick up mutations too.
+                liveRefMap[key] = computed(() => val) as import('vue').Ref<unknown>
             }
         }
     }
