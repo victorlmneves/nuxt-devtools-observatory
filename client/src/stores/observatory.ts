@@ -49,6 +49,12 @@ export interface ProvideInjectSnapshot {
     injects: InjectEntry[]
 }
 
+export interface RefChangeEvent {
+    t: number
+    key: string
+    value: unknown
+}
+
 export interface ComposableEntry {
     id: string
     name: string
@@ -58,6 +64,7 @@ export interface ComposableEntry {
     leak: boolean
     leakReason?: string
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
+    history: RefChangeEvent[]
     watcherCount: number
     intervalCount: number
     lifecycle: {
@@ -68,6 +75,7 @@ export interface ComposableEntry {
     }
     file: string
     line: number
+    route?: string
 }
 
 export interface RenderEntry {

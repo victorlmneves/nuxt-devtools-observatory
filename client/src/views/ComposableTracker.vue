@@ -175,6 +175,25 @@ function typeBadgeClass(type: string) {
                         <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
                     </div>
 
+                    <template v-if="entry.history && entry.history.length">
+                        <div class="section-label" style="margin-top: 10px">
+                            change history
+                            <span class="muted" style="font-weight: 400; text-transform: none; letter-spacing: 0">
+                                ({{ entry.history.length }} events)
+                            </span>
+                        </div>
+                        <div class="history-list">
+                            <div v-for="(evt, idx) in [...entry.history].reverse().slice(0, 20)" :key="idx" class="history-row">
+                                <span class="history-time mono muted">+{{ (evt.t / 1000).toFixed(2) }}s</span>
+                                <span class="history-key mono">{{ evt.key }}</span>
+                                <span class="history-val mono">{{ formatVal(evt.value) }}</span>
+                            </div>
+                            <div v-if="entry.history.length > 20" class="muted text-sm" style="padding: 2px 0">
+                                … {{ entry.history.length - 20 }} earlier events
+                            </div>
+                        </div>
+                    </template>
+
                     <div class="section-label" style="margin-top: 10px">lifecycle</div>
                     <div v-for="row in lifecycleRows(entry)" :key="row.label" class="lc-row">
                         <span class="lc-dot" :style="{ background: row.ok ? 'var(--teal)' : 'var(--red)' }"></span>
@@ -437,6 +456,51 @@ function typeBadgeClass(type: string) {
     background: color-mix(in srgb, var(--purple) 15%, transparent);
     color: var(--purple);
     border: 0.5px solid color-mix(in srgb, var(--purple) 40%, var(--border));
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 4px 8px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.history-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 11px;
+    font-family: var(--mono);
+    border-bottom: 0.5px solid var(--border);
+}
+
+.history-row:last-child {
+    border-bottom: none;
+}
+
+.history-time {
+    min-width: 52px;
+    color: var(--text3);
+    flex-shrink: 0;
+}
+
+.history-key {
+    min-width: 80px;
+    color: var(--text2);
+    flex-shrink: 0;
+}
+
+.history-val {
+    color: var(--amber);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
 }
 
 /* Stat cards */

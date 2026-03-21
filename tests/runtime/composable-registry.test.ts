@@ -652,3 +652,299 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
         expect(all.find((e) => e.name === 'useAbout')?.route).toBe('/about')
     })
 })
+
+describe('setupComposableRegistry — clearPreviousRoute()', () => {
+    it('removes cleanly unmounted entries from the specified route', () => {
+        const reg = setupComposableRegistry()
+
+        reg.register({
+            id: 'useA::1::A.ts:1::0::a1',
+            name: 'useA',
+            componentFile: 'A.ts',
+            componentUid: 1,
+            status: 'unmounted',
+            leak: false,
+            refs: {},
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
+            file: 'A.ts',
+            line: 1,
+            route: '/home',
+        })
+
+        reg.clearPreviousRoute('/home')
+
+        expect(reg.getAll()).toHaveLength(0)
+    })
+
+    it('keeps leaked entries even after clearPreviousRoute for the same route', () => {
+        const reg = setupComposableRegistry()
+
+        reg.register({
+            id: 'useLeaky::1::L.ts:1::0::l1',
+            name: 'useLeaky',
+            componentFile: 'L.ts',
+            componentUid: 1,
+            status: 'unmounted',
+            leak: true,
+            leakReason: '1 watcher still active',
+            refs: {},
+            watcherCount: 1,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: false, intervalsCleaned: true },
+            file: 'L.ts',
+            line: 1,
+            route: '/home',
+        })
+
+        reg.clearPreviousRoute('/home')
+
+        // Leaked entry must survive the clear
+        expect(reg.getAll()).toHaveLength(1)
+        expect(reg.getAll()[0].leak).toBe(true)
+    })
+
+    it('keeps still-mounted entries from other routes untouched', () => {
+        const reg = setupComposableRegistry()
+
+        reg.register({
+            id: 'useOld::1::O.ts:1::0::o1',
+            name: 'useOld',
+            componentFile: 'O.ts',
+            componentUid: 1,
+            status: 'unmounted',
+            leak: false,
+            refs: {},
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
+            file: 'O.ts',
+            line: 1,
+            route: '/old',
+        })
+        reg.register({
+            id: 'useNew::2::N.ts:1::0::n1',
+            name: 'useNew',
+            componentFile: 'N.ts',
+            componentUid: 2,
+            status: 'mounted',
+            leak: false,
+            refs: {},
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'N.ts',
+            line: 1,
+            route: '/new',
+        })
+
+        reg.clearPreviousRoute('/old')
+
+        const all = reg.getAll()
+        expect(all).toHaveLength(1)
+        expect(all[0].name).toBe('useNew')
+    })
+
+    it('does not remove still-mounted entries from the cleared route (layout components)', () => {
+        const reg = setupComposableRegistry()
+
+        // A layout composable that stays mounted across routes
+        reg.register({
+            id: 'useLayout::1::Layout.ts:1::0::la1',
+            name: 'useLayout',
+            componentFile: 'Layout.ts',
+            componentUid: 1,
+            status: 'mounted',
+            leak: false,
+            refs: {},
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'Layout.ts',
+            line: 1,
+            route: '/home',
+        })
+
+        reg.clearPreviousRoute('/home')
+
+        // Still mounted — must not be removed
+        expect(reg.getAll()).toHaveLength(1)
+        expect(reg.getAll()[0].status).toBe('mounted')
+    })
+})
+
+describe('__trackComposable — reactive() object tracking (priority 1)', () => {
+    it('captures a reactive() object returned from a composable', () => {
+        const { reactive } = require('vue')
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable(
+                    'useStore',
+                    () => {
+                        const state = reactive({ count: 5, name: 'test' })
+                        return { state }
+                    },
+                    { file: 'Store.ts', line: 1 }
+                )
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        const entry = reg.getAll()[0]
+
+        expect(entry.refs['state']).toBeDefined()
+        expect(entry.refs['state'].type).toBe('reactive')
+        // Value should be a snapshot of the reactive object
+        expect((entry.refs['state'].value as Record<string, unknown>)?.count).toBe(5)
+
+        app.unmount()
+    })
+
+    it('reactive() values update live when properties change', async () => {
+        const { reactive, nextTick } = require('vue')
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let state: { count: number } | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                state = reactive({ count: 0 })
+                __trackComposable('useReactive', () => ({ state: state! }), { file: 'R.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        state!.count = 42
+        await nextTick()
+
+        const entry = reg.getAll()[0]
+        expect((entry.refs['state'].value as Record<string, unknown>)?.count).toBe(42)
+
+        app.unmount()
+    })
+})
+
+describe('__trackComposable — change history (priority 3)', () => {
+    it('records an empty history on initial registration', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()[0].history).toEqual([])
+
+        app.unmount()
+    })
+
+    it('appends a history event when a ref value changes', async () => {
+        const { nextTick } = require('vue')
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let countRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                countRef = ref(0)
+                __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        countRef!.value = 10
+        await nextTick()
+        countRef!.value = 20
+        await nextTick()
+
+        const history = reg.getAll()[0].history
+        expect(history.length).toBeGreaterThanOrEqual(2)
+        expect(history[history.length - 1].key).toBe('count')
+        expect(history[history.length - 1].value).toBe(20)
+
+        app.unmount()
+    })
+
+    it('does not record unchanged keys as history events', async () => {
+        const { nextTick } = require('vue')
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let aRef: ReturnType<typeof ref<number>> | null = null
+        let bRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                aRef = ref(1)
+                bRef = ref(100)
+                __trackComposable('useTwo', () => ({ a: aRef!, b: bRef! }), { file: 'T.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // Only mutate 'a'
+        aRef!.value = 2
+        await nextTick()
+
+        const history = reg.getAll()[0].history
+        // Only 'a' should have a history event — 'b' didn't change
+        const bEvents = history.filter((e) => e.key === 'b')
+        expect(bEvents).toHaveLength(0)
+        const aEvents = history.filter((e) => e.key === 'a')
+        expect(aEvents.length).toBeGreaterThanOrEqual(1)
+
+        app.unmount()
+    })
+
+    it('clears history when clear() is called', async () => {
+        const { nextTick } = require('vue')
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+        let countRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                countRef = ref(0)
+                __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        countRef!.value = 5
+        await nextTick()
+
+        expect(reg.getAll()[0].history.length).toBeGreaterThanOrEqual(1)
+
+        reg.clear()
+        expect(reg.getAll()).toHaveLength(0)
+
+        app.unmount()
+    })
+})

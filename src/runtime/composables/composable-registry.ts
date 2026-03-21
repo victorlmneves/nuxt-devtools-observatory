@@ -1,5 +1,11 @@
 import { ref, isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
 
+export interface RefChangeEvent {
+    t: number // performance.now() timestamp
+    key: string // which ref/reactive key changed
+    value: unknown // serialised snapshot of the new value
+}
+
 export interface ComposableEntry {
     id: string
     name: string
@@ -9,6 +15,8 @@ export interface ComposableEntry {
     leak: boolean
     leakReason?: string
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
+    /** Capped at MAX_HISTORY_PER_ENTRY events, newest last */
+    history: RefChangeEvent[]
     watcherCount: number
     intervalCount: number
     lifecycle: {
@@ -51,6 +59,11 @@ export function setupComposableRegistry() {
     const liveRefs = new Map<string, Record<string, import('vue').Ref<unknown>>>()
     // Stop functions for watchEffect instances tracking each composable's live refs
     const liveRefWatchers = new Map<string, () => void>()
+    // Per-entry change history: id → array of RefChangeEvent (capped at MAX_HISTORY)
+    const MAX_HISTORY = 50
+    const entryHistory = new Map<string, RefChangeEvent[]>()
+    // Previous serialised values per ref, used to detect which key actually changed
+    const prevValues = new Map<string, Record<string, string>>()
     // The current route path — updated by the plugin on every navigation so new
     // entries are stamped with the route they were created on.
     let currentRoute = '/'
@@ -78,16 +91,36 @@ export function setupComposableRegistry() {
             // No live refs — remove the entry entirely so sanitize() falls back
             // to the frozen snapshot stored in entry.refs (e.g. after unmount).
             liveRefs.delete(id)
+            prevValues.delete(id)
             return
         }
 
         liveRefs.set(id, refs)
+        // Initialise the previous-value map so the first run doesn't log everything as "changed"
+        prevValues.set(id, Object.fromEntries(Object.entries(refs).map(([k, r]) => [k, JSON.stringify(unref(r)) ?? ''])))
 
-        // Watch all live refs for this composable. Whenever any changes, fire
-        // the onChange callback (set by the plugin) so it can push a fresh
-        // snapshot to the devtools panel without waiting for the next poll.
         const stop = watchEffect(() => {
-            for (const r of Object.values(refs)) unref(r)
+            // Read every ref to subscribe — the effect re-runs when any changes.
+            // Compare against previous values to record which key(s) changed.
+            const prev = prevValues.get(id) ?? {}
+            const now: Record<string, string> = {}
+            const t = typeof performance !== 'undefined' ? performance.now() : Date.now()
+
+            for (const [k, r] of Object.entries(refs)) {
+                const val = unref(r)
+                const serialised = JSON.stringify(val) ?? ''
+                now[k] = serialised
+
+                if (serialised !== prev[k]) {
+                    // This key changed — append a history event
+                    const history = entryHistory.get(id) ?? []
+                    history.push({ t, key: k, value: safeValue(val) })
+                    if (history.length > MAX_HISTORY) history.shift()
+                    entryHistory.set(id, history)
+                }
+            }
+
+            prevValues.set(id, now)
             _onChange?.()
         })
         liveRefWatchers.set(id, stop)
@@ -168,6 +201,7 @@ export function setupComposableRegistry() {
             leak: entry.leak,
             leakReason: entry.leakReason,
             refs: freshRefs,
+            history: entryHistory.get(entry.id) ?? [],
             watcherCount: entry.watcherCount,
             intervalCount: entry.intervalCount,
             lifecycle: entry.lifecycle,
@@ -191,11 +225,11 @@ export function setupComposableRegistry() {
     }
 
     function clear() {
-        // Stop all live ref watchers before clearing so we don't fire onChange
-        // callbacks for entries that are about to be deleted.
         for (const stop of liveRefWatchers.values()) stop()
         liveRefWatchers.clear()
         liveRefs.clear()
+        prevValues.clear()
+        entryHistory.clear()
         entries.value.clear()
         emit('composable:clear', {})
     }
@@ -325,6 +359,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         status: 'mounted',
         leak: false,
         refs,
+        history: [],
         watcherCount: trackedWatchers.length,
         intervalCount: trackedIntervals.length,
         lifecycle: {
