@@ -26,7 +26,13 @@ export interface RenderEntry {
 }
 
 /**
- * Sets up a render registry for the given Nuxt app.
+ * Sets up a render registry for tracking render-related metrics (e.g. rerenders, render time, etc.)
+ * The registry is exposed over the WebSocket channel, and can be accessed from the browser's devtools.
+ * @param {object} nuxtApp - The Nuxt app instance.
+ * @param {import('vue').App} nuxtApp.vueApp - The Vue app instance used to register lifecycle hooks.
+ * @param {object} [options] - Optional configuration object.
+ * @param {function(): boolean} [options.isHydrating] - Function to determine if the current render is during SSR hydration.
+ * @returns {object} An object containing the render registry's API methods: `getAll()`, `snapshot()`, and `reset()`.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
