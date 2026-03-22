@@ -9,13 +9,16 @@ interface ComponentNode {
     element?: string
     depth: number
     path: string[]
-    renders: number
+    rerenders: number
+    mountCount: number
     navigationRenders: number
     avgMs: number
     triggers: string[]
     children: ComponentNode[]
     parentId?: string
     parentLabel?: string
+    isPersistent: boolean
+    isHydrationMount: boolean
 }
 
 const TreeNode = defineComponent({
@@ -30,7 +33,7 @@ const TreeNode = defineComponent({
     emits: ['select', 'toggle'],
     setup(props, { emit }): () => VNode | null {
         function nodeValue(node: ComponentNode) {
-            return props.mode === 'count' ? node.renders : node.avgMs
+            return props.mode === 'count' ? node.rerenders : node.avgMs
         }
 
         function isHot(node: ComponentNode) {
@@ -48,7 +51,7 @@ const TreeNode = defineComponent({
             const node = props.node!
             const expanded = props.expandedIds?.has(node.id) ?? false
             const canExpand = node.children.length > 0
-            const metric = props.mode === 'count' ? `${node.renders}` : `${node.avgMs.toFixed(1)}ms`
+            const metric = props.mode === 'count' ? `${node.rerenders}` : `${node.avgMs.toFixed(1)}ms`
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
             const badges = []
             const normalizedElement = node.element?.toLowerCase()
@@ -58,7 +61,11 @@ const TreeNode = defineComponent({
             }
 
             if (node.file !== 'unknown') {
-                const fileBadge = node.file.split('/').pop()?.replace(/\.vue$/i, '') ?? node.file
+                const fileBadge =
+                    node.file
+                        .split('/')
+                        .pop()
+                        ?.replace(/\.vue$/i, '') ?? node.file
 
                 if (fileBadge !== node.label && !badges.includes(fileBadge)) {
                     badges.push(fileBadge)
@@ -104,6 +111,23 @@ const TreeNode = defineComponent({
                                 : null,
                         ]),
                         h('div', { class: 'tree-metrics mono' }, [
+                            node.isPersistent
+                                ? h(
+                                      'span',
+                                      { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
+                                      'persistent'
+                                  )
+                                : null,
+                            node.isHydrationMount
+                                ? h(
+                                      'span',
+                                      {
+                                          class: 'tree-hydration-pill',
+                                          title: 'First mount was SSR hydration — not a user-triggered render',
+                                      },
+                                      'hydrated'
+                                  )
+                                : null,
                             node.navigationRenders ? h('span', { class: 'tree-nav-pill' }, `${node.navigationRenders} nav`) : null,
                             h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
                         ]),
@@ -153,7 +177,10 @@ function displayLabel(entry: RenderEntry) {
         return entry.element
     }
 
-    const basename = entry.file.split('/').pop()?.replace(/\.vue$/i, '')
+    const basename = entry.file
+        .split('/')
+        .pop()
+        ?.replace(/\.vue$/i, '')
 
     if (basename && basename !== 'unknown') {
         return basename
@@ -181,12 +208,15 @@ function buildNodes(entries: RenderEntry[]) {
             element: entry.element,
             depth: 0,
             path: [],
-            renders: entry.renders,
+            rerenders: entry.rerenders ?? 0,
+            mountCount: entry.mountCount ?? 1,
             navigationRenders: Number.isFinite(entry.navigationRenders) ? entry.navigationRenders : 0,
             avgMs: entry.avgMs,
             triggers: entry.triggers.map(formatTrigger),
             children: [],
             parentId: entry.parentUid !== undefined ? String(entry.parentUid) : undefined,
+            isPersistent: Boolean(entry.isPersistent),
+            isHydrationMount: Boolean(entry.isHydrationMount),
         })
     }
 
@@ -309,7 +339,7 @@ function searchExpandedIds(root: ComponentNode | null, term: string) {
 }
 
 function nodeValue(node: ComponentNode) {
-    return activeMode.value === 'count' ? node.renders : node.avgMs
+    return activeMode.value === 'count' ? node.rerenders : node.avgMs
 }
 
 function isHot(node: ComponentNode) {
@@ -411,8 +441,10 @@ const appEntries = computed(() =>
 )
 
 const activeSelected = computed(() => allComponents.value.find((node) => node.id === activeSelectedId.value) ?? null)
-const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.renders, 0))
-const totalNavigationRenders = computed(() => allComponents.value.reduce((sum, node) => sum + (Number.isFinite(node.navigationRenders) ? node.navigationRenders : 0), 0))
+const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.rerenders, 0))
+const totalNavigationRenders = computed(() =>
+    allComponents.value.reduce((sum, node) => sum + (Number.isFinite(node.navigationRenders) ? node.navigationRenders : 0), 0)
+)
 const hotCount = computed(() => allComponents.value.filter((node) => isHot(node)).length)
 const avgTime = computed(() => {
     const components = allComponents.value.filter((node) => node.avgMs > 0)
@@ -561,7 +593,12 @@ function toggleFreeze() {
 }
 
 function basename(file: string) {
-    return file.split('/').pop()?.replace(/\.vue$/i, '') ?? file
+    return (
+        file
+            .split('/')
+            .pop()
+            ?.replace(/\.vue$/i, '') ?? file
+    )
 }
 
 function pathLabel(node: ComponentNode) {
@@ -659,10 +696,19 @@ function pathLabel(node: ComponentNode) {
                     </div>
 
                     <div class="detail-pill-row">
-                        <span class="detail-pill mono">{{ activeSelected.renders }} renders</span>
-                        <span v-if="activeSelected.navigationRenders" class="detail-pill mono nav">{{ activeSelected.navigationRenders }} nav</span>
+                        <span class="detail-pill mono">{{ activeSelected.rerenders }} re-renders</span>
+                        <span class="detail-pill mono muted">
+                            {{ activeSelected.mountCount }} mount{{ activeSelected.mountCount !== 1 ? 's' : '' }}
+                        </span>
+                        <span v-if="activeSelected.navigationRenders" class="detail-pill mono nav">
+                            {{ activeSelected.navigationRenders }} nav
+                        </span>
+                        <span v-if="activeSelected.isPersistent" class="detail-pill mono persistent">persistent</span>
+                        <span v-if="activeSelected.isHydrationMount" class="detail-pill mono hydrated">hydrated</span>
                         <span class="detail-pill mono">{{ activeSelected.avgMs.toFixed(1) }}ms avg</span>
-                        <span class="detail-pill mono" :class="{ hot: isHot(activeSelected) }">{{ isHot(activeSelected) ? 'hot' : 'cool' }}</span>
+                        <span class="detail-pill mono" :class="{ hot: isHot(activeSelected) }">
+                            {{ isHot(activeSelected) ? 'hot' : 'cool' }}
+                        </span>
                     </div>
 
                     <div class="section-label">identity</div>
@@ -683,14 +729,24 @@ function pathLabel(node: ComponentNode) {
 
                     <div class="section-label">rendering</div>
                     <div class="meta-grid">
-                        <span class="muted text-sm">mode value</span>
-                        <span class="mono text-sm">{{ activeMode === 'count' ? activeSelected.renders : `${activeSelected.avgMs.toFixed(1)}ms` }}</span>
+                        <span class="muted text-sm">re-renders</span>
+                        <span class="mono text-sm">{{ activeSelected.rerenders }}</span>
+                        <span class="muted text-sm">mounts</span>
+                        <span class="mono text-sm">{{ activeSelected.mountCount }}</span>
                         <span class="muted text-sm">navigation renders</span>
                         <span class="mono text-sm">{{ activeSelected.navigationRenders }}</span>
+                        <span class="muted text-sm">persistent</span>
+                        <span class="mono text-sm" :style="{ color: activeSelected.isPersistent ? 'var(--amber)' : 'inherit' }">
+                            {{ activeSelected.isPersistent ? 'yes — survives navigation' : 'no' }}
+                        </span>
+                        <span class="muted text-sm">hydration mount</span>
+                        <span class="mono text-sm">{{ activeSelected.isHydrationMount ? 'yes — SSR hydrated' : 'no' }}</span>
+                        <span class="muted text-sm">avg render time</span>
+                        <span class="mono text-sm">{{ activeSelected.avgMs.toFixed(1) }}ms</span>
                         <span class="muted text-sm">threshold</span>
                         <span class="mono text-sm">{{ activeThreshold }}</span>
-                        <span class="muted text-sm">selected mode</span>
-                        <span class="mono text-sm">{{ activeMode === 'count' ? 'render count' : 'render time' }}</span>
+                        <span class="muted text-sm">mode</span>
+                        <span class="mono text-sm">{{ activeMode === 'count' ? 're-render count' : 'render time' }}</span>
                     </div>
 
                     <div class="section-label">triggers</div>
@@ -983,6 +1039,28 @@ function pathLabel(node: ComponentNode) {
     color: color-mix(in srgb, var(--purple) 70%, white);
 }
 
+:deep(.tree-persistent-pill) {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--amber) 55%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--amber) 10%, var(--bg2));
+    font-size: 10px;
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+}
+
+:deep(.tree-hydration-pill) {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--teal) 55%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--teal) 10%, var(--bg2));
+    font-size: 10px;
+    color: color-mix(in srgb, var(--teal) 80%, var(--text));
+}
+
 :deep(.tree-children) {
     margin-left: 7px;
     padding-left: 11px;
@@ -1032,6 +1110,21 @@ function pathLabel(node: ComponentNode) {
 .detail-pill.nav {
     border-color: color-mix(in srgb, var(--purple) 55%, var(--border));
     color: color-mix(in srgb, var(--purple) 70%, white);
+}
+
+.detail-pill.persistent {
+    border-color: color-mix(in srgb, var(--amber) 55%, var(--border));
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+}
+
+.detail-pill.hydrated {
+    border-color: color-mix(in srgb, var(--teal) 55%, var(--border));
+    color: color-mix(in srgb, var(--teal) 80%, var(--text));
+}
+
+.detail-pill.muted {
+    color: var(--text3);
+    border-color: var(--border);
 }
 
 .section-label {

@@ -9,26 +9,33 @@ export interface RenderEntry {
     name: string
     file: string
     element?: string
-    renders: number
+    /** Total times this instance mounted (usually 1, >1 means it was unmounted+remounted) */
+    mountCount: number
+    /** Re-renders triggered by reactive state changes (excludes initial mount) */
+    rerenders: number
+    /** Subset of rerenders that happened within 800ms of a navigation */
     navigationRenders: number
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
     parentUid?: number
+    /** True if this component survived at least one reset() — indicates a layout/persistent component */
+    isPersistent: boolean
+    /** True if the first mount of this component happened during SSR hydration */
+    isHydrationMount: boolean
 }
 
 /**
  * Sets up a render registry for the given Nuxt app.
- * @param {{ vueApp: import('vue').App }} nuxtApp - The Nuxt app object.
- * @param {object} nuxtApp.vueApp - The Vue app instance.
- * @returns {object} The render registry object.
  */
-export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
+export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
     const pendingTriggeredRenders = new Set<number>()
     const renderStartTimes = new Map<number, number>()
     let navigationWindowUntil = 0
+    // Track uids that existed before the last reset() — used to flag persistent components
+    let preResetUids = new Set<number>()
 
     function ensureEntry(instance: ComponentPublicInstance) {
         const uid: number = instance.$.uid
@@ -96,15 +103,20 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
     }
 
     function reset() {
+        // Snapshot current uids before clearing so we can flag persistent components
+        // (those that survive the reset — layouts, global headers, etc.)
+        preResetUids = new Set(entries.value.keys())
+
         pendingTriggeredRenders.clear()
         renderStartTimes.clear()
 
         for (const entry of entries.value.values()) {
-            entry.renders = 0
+            entry.rerenders = 0
             entry.navigationRenders = 0
             entry.totalMs = 0
             entry.avgMs = 0
             entry.triggers = []
+            entry.mountCount = 0
         }
     }
 
@@ -116,15 +128,26 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
 
         mounted(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
-            entry.renders++
+            entry.mountCount++
 
-            if (isNavigationRender()) {
-                entry.navigationRenders++
+            // Mark as persistent if this uid survived the last reset()
+            if (preResetUids.has(entry.uid)) {
+                entry.isPersistent = true
+            }
+
+            // Initial mount is NOT a re-render — don't count it.
+            // Only count if the component re-mounts on the same page (v-if toggle etc.)
+            const isHydration = options.isHydrating?.() ?? false
+            if (isHydration && entry.mountCount === 1) {
+                entry.isHydrationMount = true
+            } else if (entry.mountCount > 1) {
+                entry.rerenders++
+                if (isNavigationRender()) entry.navigationRenders++
             }
 
             syncRect(entry, this)
             recordRenderDuration(entry)
-            emit('render:update', { uid: entry.uid, renders: entry.renders })
+            emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
 
         beforeUpdate(this: ComponentPublicInstance) {
@@ -151,7 +174,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
             }
 
             pendingTriggeredRenders.delete(entry.uid)
-            entry.renders++
+            entry.rerenders++
 
             if (isNavigationRender()) {
                 entry.navigationRenders++
@@ -159,7 +182,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
 
             syncRect(entry, this)
             recordRenderDuration(entry)
-            emit('render:update', { uid: entry.uid, renders: entry.renders })
+            emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
 
         unmounted(this: ComponentPublicInstance) {
@@ -176,7 +199,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
             name: entry.name,
             file: entry.file,
             element: entry.element,
-            renders: entry.renders,
+            mountCount: entry.mountCount,
+            rerenders: entry.rerenders,
             navigationRenders: entry.navigationRenders,
             totalMs: entry.totalMs,
             avgMs: entry.avgMs,
@@ -192,6 +216,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }) {
                   }
                 : undefined,
             parentUid: entry.parentUid,
+            isPersistent: entry.isPersistent,
+            isHydrationMount: entry.isHydrationMount,
         }
     }
     function getAll(): RenderEntry[] {
@@ -233,12 +259,15 @@ function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry 
         name: ownLabel ?? inferAnonymousLabel(parentLabel, element) ?? `Component#${uid}`,
         file,
         element,
-        renders: 0,
+        mountCount: 0,
+        rerenders: 0,
         navigationRenders: 0,
         totalMs: 0,
         avgMs: 0,
         triggers: [],
         parentUid: instance.$parent?.$.uid,
+        isPersistent: false,
+        isHydrationMount: false,
     }
 }
 

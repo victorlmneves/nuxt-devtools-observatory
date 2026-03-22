@@ -88,7 +88,7 @@ describe('setupRenderRegistry', () => {
 
         expect(entries).toHaveLength(1)
         expect(entries[0].uid).toBe(42)
-        expect(entries[0].renders).toBe(2)
+        expect(entries[0].rerenders).toBe(2) // two renderTriggered+updated cycles
     })
 
     it('ignores updated hooks that were not preceded by renderTriggered', () => {
@@ -101,7 +101,7 @@ describe('setupRenderRegistry', () => {
         const instance = fakeCPI(44)
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
-        expect(getAll()[0].renders).toBe(0)
+        expect(getAll()[0].rerenders).toBe(0)
     })
 
     it('getAll() returns entries even when they are below the heatmap threshold', () => {
@@ -149,7 +149,7 @@ describe('setupRenderRegistry', () => {
         expect(visible.map((entry) => entry.uid)).toEqual([1, 2])
     })
 
-    it('counts the initial mounted render', () => {
+    it('initial mount does NOT count as a re-render (mountCount tracks it instead)', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -163,7 +163,8 @@ describe('setupRenderRegistry', () => {
 
         expect(entries).toHaveLength(1)
         expect(entries[0].uid).toBe(7)
-        expect(entries[0].renders).toBe(1)
+        expect(entries[0].rerenders).toBe(0) // initial mount is NOT a re-render
+        expect(entries[0].mountCount).toBe(1)
         expect(entries[0].navigationRenders).toBe(0)
     })
 
@@ -183,7 +184,7 @@ describe('setupRenderRegistry', () => {
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
-        expect(getAll()[0].renders).toBe(1)
+        expect(getAll()[0].rerenders).toBe(1)
         expect(getAll()[0].navigationRenders).toBe(1)
     })
 
@@ -399,7 +400,6 @@ describe('makeEntry — describeElement edge cases', () => {
         triggerRender(mixin, instance)
 
         const entry = getAll().find((e) => e.uid === 10)
-
         expect(entry?.element).toBe('section#hero')
     })
 
@@ -423,7 +423,6 @@ describe('makeEntry — describeElement edge cases', () => {
         triggerRender(mixin, instance)
 
         const entry = getAll().find((e) => e.uid === 11)
-
         expect(entry?.element).toBe('span.badge')
     })
 
@@ -442,7 +441,6 @@ describe('makeEntry — describeElement edge cases', () => {
         triggerRender(mixin, instance)
 
         const entry = getAll().find((e) => e.uid === 12)
-
         expect(entry?.element).toBeUndefined()
     })
 
@@ -461,7 +459,6 @@ describe('makeEntry — describeElement edge cases', () => {
         triggerRender(mixin, instance)
 
         const entry = getAll().find((e) => e.uid === 13)
-
         expect(entry?.element).toBeUndefined()
     })
 })
@@ -560,7 +557,6 @@ describe('render-registry — describeElement / resolveTypeLabel / inferAnonymou
 
         const entries = reg.getAll()
         const anon = entries.find((e) => e.file.includes('SomeWidget'))
-
         // Either resolved from __file or fell back to Component#uid — both are valid
         if (anon) {
             expect(typeof anon.name).toBe('string')
@@ -592,7 +588,6 @@ describe('render-registry — describeElement / resolveTypeLabel / inferAnonymou
 
         const entries = reg.getAll()
         const entry = entries.find((e) => e.element?.includes('section'))
-
         if (entry) {
             expect(entry.element).toContain('section')
         }
@@ -649,7 +644,6 @@ describe('makeEntry — describeElement paths', () => {
         app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
 
         const entry = getAll()[0]
-
         expect(entry.element).toBe('button#submit-btn.primary')
     })
 
@@ -668,7 +662,6 @@ describe('makeEntry — describeElement paths', () => {
         app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
 
         const entry = getAll()[0]
-
         expect(entry.element).toBeUndefined()
     })
 
@@ -767,11 +760,11 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         mixin.mounted?.call(cpi)
         mixin.mounted?.call(cpi) // render it twice
 
-        expect(getAll()[0].renders).toBe(2)
+        expect(getAll()[0].rerenders).toBe(1) // 2nd mount counts as rerender
 
         reset()
 
-        expect(getAll()[0].renders).toBe(0)
+        expect(getAll()[0].rerenders).toBe(0)
         expect(getAll()[0].totalMs).toBe(0)
         expect(getAll()[0].avgMs).toBe(0)
         expect(getAll()[0].triggers).toEqual([])
@@ -787,7 +780,8 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         const cpi = fakeCPI(20)
         mixin.mounted?.call(cpi)
 
-        expect(getAll()[0].navigationRenders).toBe(1)
+        // Only rerenders (via updated()) count toward navigationRenders — not initial mounts
+        expect(getAll()[0].navigationRenders).toBe(0)
     })
 
     it('does NOT mark renders as navigationRenders after the 800ms window expires', async () => {
@@ -816,7 +810,7 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         mixin.renderTriggered?.call(cpi, { key: 'count', type: 'set' })
         mixin.updated?.call(cpi)
 
-        expect(getAll()[0].renders).toBe(2) // 1 from mount + 1 from update
+        expect(getAll()[0].rerenders).toBe(1) // only the reactive update counts
     })
 
     it('syncRect returns undefined rect when $el has no getBoundingClientRect', () => {
@@ -833,5 +827,94 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         mixin.mounted?.call(cpi)
 
         expect(getAll()[0].rect).toBeUndefined()
+    })
+})
+
+describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
+    it('isPersistent is false on first registration before any reset()', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+        const cpi = fakeCPI(100)
+        mixin.mounted?.call(cpi)
+        expect(getAll()[0].isPersistent).toBe(false)
+    })
+
+    it('isPersistent becomes true for a component that survives reset()', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(101)
+        mixin.mounted?.call(cpi)
+        expect(getAll()[0].isPersistent).toBe(false)
+
+        // Simulate navigation: reset() snapshots current uids
+        reset()
+
+        // Component re-mounts on the new page (uid 101 was in preResetUids)
+        mixin.mounted?.call(cpi)
+        expect(getAll()[0].isPersistent).toBe(true)
+    })
+
+    it('a new component that mounts only after reset() is NOT persistent', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const oldCpi = fakeCPI(200)
+        mixin.mounted?.call(oldCpi)
+        reset()
+        mixin.unmounted?.call(oldCpi)
+
+        // Brand new component, never seen before reset
+        const newCpi = fakeCPI(201)
+        mixin.mounted?.call(newCpi)
+
+        const entry = getAll().find((e) => e.uid === 201)
+        expect(entry?.isPersistent).toBe(false)
+    })
+
+    it('isHydrationMount is true when mounted during hydration', () => {
+        const app = createApp({})
+        let hydrating = true
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app), {
+            isHydrating: () => hydrating,
+        })
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(300)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].isHydrationMount).toBe(true)
+        expect(getAll()[0].rerenders).toBe(0) // hydration mount is not a rerender
+        expect(getAll()[0].mountCount).toBe(1)
+    })
+
+    it('isHydrationMount is false for components mounted after hydration ends', () => {
+        const app = createApp({})
+        let hydrating = false
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app), {
+            isHydrating: () => hydrating,
+        })
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(301)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].isHydrationMount).toBe(false)
+    })
+
+    it('re-mounting the same component (mountCount > 1) counts as a rerender', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(400)
+        mixin.mounted?.call(cpi) // first mount — not a rerender
+        mixin.mounted?.call(cpi) // second mount (v-if re-toggle) — counts as rerender
+
+        expect(getAll()[0].mountCount).toBe(2)
+        expect(getAll()[0].rerenders).toBe(1)
     })
 })

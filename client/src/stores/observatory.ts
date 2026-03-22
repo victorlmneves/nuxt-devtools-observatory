@@ -84,13 +84,16 @@ export interface RenderEntry {
     name: string
     file: string
     element?: string
-    renders: number
+    mountCount: number
+    rerenders: number
     navigationRenders: number
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
     parentUid?: number
+    isPersistent: boolean
+    isHydrationMount: boolean
 }
 
 export interface TransitionEntry {
