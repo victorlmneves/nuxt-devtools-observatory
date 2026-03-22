@@ -6,7 +6,11 @@ const { composables: rawEntries, connected, clearComposables } = useObservatoryD
 
 function clearSession() {
     const origin = getObservatoryOrigin()
-    if (!origin) return
+
+    if (!origin) {
+        return
+    }
+
     clearComposables()
     window.top?.postMessage({ type: 'observatory:clear-composables' }, origin)
 }
@@ -17,17 +21,28 @@ function clearSession() {
 // same composable in different components are two separate rows.
 
 function formatVal(v: unknown): string {
-    if (v === null) return 'null'
-    if (v === undefined) return 'undefined'
-    if (typeof v === 'string') return `"${v}"`
+    if (v === null) {
+        return 'null'
+    }
+
+    if (v === undefined) {
+        return 'undefined'
+    }
+
+    if (typeof v === 'string') {
+        return `"${v}"`
+    }
+
     if (typeof v === 'object') {
         try {
             const s = JSON.stringify(v)
+
             return s.length > 80 ? s.slice(0, 80) + '…' : s
         } catch {
             return String(v)
         }
     }
+
     return String(v)
 }
 
@@ -48,16 +63,37 @@ const counts = computed(() => ({
 
 const filtered = computed(() => {
     return entries.value.filter((entry) => {
-        if (filter.value === 'leak' && !entry.leak) return false
-        if (filter.value === 'mounted' && entry.status !== 'mounted') return false
-        if (filter.value === 'unmounted' && entry.status !== 'unmounted') return false
+        if (filter.value === 'leak' && !entry.leak) {
+            return false
+        }
+
+        if (filter.value === 'mounted' && entry.status !== 'mounted') {
+            return false
+        }
+
+        if (filter.value === 'unmounted' && entry.status !== 'unmounted') {
+            return false
+        }
+
         const q = search.value.toLowerCase()
+
         if (q) {
             const matchesName = entry.name.toLowerCase().includes(q)
             const matchesFile = entry.componentFile.toLowerCase().includes(q)
             const matchesRef = Object.keys(entry.refs).some((k) => k.toLowerCase().includes(q))
-            if (!matchesName && !matchesFile && !matchesRef) return false
+            const matchesVal = Object.values(entry.refs).some((v) => {
+                try {
+                    return String(JSON.stringify(v.value)).toLowerCase().includes(q)
+                } catch {
+                    return false
+                }
+            })
+
+            if (!matchesName && !matchesFile && !matchesRef && !matchesVal) {
+                return false
+            }
         }
+
         return true
     })
 })
@@ -88,9 +124,90 @@ function lifecycleRows(entry: RuntimeComposableEntry) {
 }
 
 function typeBadgeClass(type: string) {
-    if (type === 'computed') return 'badge-info'
-    if (type === 'reactive') return 'badge-purple'
+    if (type === 'computed') {
+        return 'badge-info'
+    }
+
+    if (type === 'reactive') {
+        return 'badge-purple'
+    }
+
     return 'badge-gray'
+}
+
+// ── Reverse lookup ────────────────────────────────────────────────────────
+// Clicking a ref key shows every mounted instance that exposes the same key.
+
+const lookupKey = ref<string | null>(null)
+
+const lookupResults = computed(() => {
+    if (!lookupKey.value) {
+        return []
+    }
+
+    const key = lookupKey.value
+
+    return entries.value.filter((e) => key in e.refs)
+})
+
+function openLookup(key: string) {
+    lookupKey.value = lookupKey.value === key ? null : key
+}
+
+// ── Inline editing ────────────────────────────────────────────────────────
+// Only writable refs (type === 'ref') can be edited. Computed are read-only.
+
+interface EditTarget {
+    id: string
+    key: string
+    rawValue: string
+}
+
+const editTarget = ref<EditTarget | null>(null)
+const editError = ref('')
+
+function openEdit(id: string, key: string, currentValue: unknown) {
+    editError.value = ''
+    editTarget.value = {
+        id,
+        key,
+        rawValue: JSON.stringify(currentValue, null, 2),
+    }
+}
+
+function applyEdit() {
+    if (!editTarget.value) {
+        return
+    }
+
+    let parsed: unknown
+
+    try {
+        parsed = JSON.parse(editTarget.value.rawValue)
+        editError.value = ''
+    } catch (err) {
+        editError.value = `Invalid JSON: ${(err as Error).message}`
+
+        return
+    }
+
+    const origin = getObservatoryOrigin()
+
+    if (!origin) {
+        return
+    }
+
+    window.top?.postMessage(
+        {
+            type: 'observatory:edit-composable',
+            id: editTarget.value.id,
+            key: editTarget.value.key,
+            value: parsed,
+        },
+        origin
+    )
+
+    editTarget.value = null
 }
 </script>
 
@@ -187,10 +304,19 @@ function typeBadgeClass(type: string) {
                         no tracked state returned
                     </div>
                     <div v-for="[k, v] in Object.entries(entry.refs)" :key="k" class="ref-row">
-                        <span class="mono text-sm ref-key">{{ k }}</span>
+                        <span
+                            class="mono text-sm ref-key ref-key--clickable"
+                            :title="`click to see all instances exposing '${k}'`"
+                            @click.stop="openLookup(k)"
+                        >
+                            {{ k }}
+                        </span>
                         <span class="mono text-sm ref-val">{{ formatVal(v.value) }}</span>
                         <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
                         <span v-if="entry.sharedKeys?.includes(k)" class="badge badge-amber text-xs">global</span>
+                        <button v-if="v.type === 'ref'" class="edit-btn" title="Edit value" @click.stop="openEdit(entry.id, k, v.value)">
+                            edit
+                        </button>
                     </div>
 
                     <template v-if="entry.history && entry.history.length">
@@ -251,6 +377,47 @@ function typeBadgeClass(type: string) {
                 {{ connected ? 'No composables recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
             </div>
         </div>
+
+        <!-- ── Reverse lookup panel ──────────────────────────────────────── -->
+        <Transition name="slide">
+            <div v-if="lookupKey" class="lookup-panel">
+                <div class="lookup-header">
+                    <span class="mono text-sm">{{ lookupKey }}</span>
+                    <span class="muted text-sm">— {{ lookupResults.length }} instance{{ lookupResults.length !== 1 ? 's' : '' }}</span>
+                    <button class="clear-btn" style="margin-left: auto" @click="lookupKey = null">✕</button>
+                </div>
+                <div v-if="!lookupResults.length" class="muted text-sm" style="padding: 6px 0">No mounted instances expose this key.</div>
+                <div v-for="r in lookupResults" :key="r.id" class="lookup-row">
+                    <span class="mono text-sm">{{ r.name }}</span>
+                    <span class="muted text-sm">{{ basename(r.componentFile) }}</span>
+                    <span class="muted text-sm" style="margin-left: auto">{{ r.route }}</span>
+                </div>
+            </div>
+        </Transition>
+
+        <!-- ── Edit value dialog ─────────────────────────────────────────── -->
+        <Transition name="fade">
+            <div v-if="editTarget" class="edit-overlay" @click.self="editTarget = null">
+                <div class="edit-dialog">
+                    <div class="edit-dialog-header">
+                        edit
+                        <span class="mono">{{ editTarget.key }}</span>
+                        <button class="clear-btn" style="margin-left: auto" @click="editTarget = null">✕</button>
+                    </div>
+                    <p class="muted text-sm" style="padding: 4px 0 8px">
+                        Value applied immediately to the live ref. Only
+                        <span class="mono">ref</span>
+                        values are writable.
+                    </p>
+                    <textarea v-model="editTarget.rawValue" class="edit-textarea" rows="6" spellcheck="false" />
+                    <div v-if="editError" class="edit-error text-sm">{{ editError }}</div>
+                    <div class="edit-actions">
+                        <button @click="applyEdit">apply</button>
+                        <button class="clear-btn" @click="editTarget = null">cancel</button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
     </div>
 </template>
 
@@ -581,5 +748,152 @@ function typeBadgeClass(type: string) {
     font-weight: 500;
     line-height: 1;
     color: var(--text);
+}
+
+/* Clickable ref key */
+.ref-key--clickable {
+    cursor: pointer;
+    text-decoration: underline dotted var(--text3);
+    text-underline-offset: 2px;
+}
+
+.ref-key--clickable:hover {
+    color: var(--purple);
+    text-decoration-color: var(--purple);
+}
+
+/* Edit button inline with ref row */
+.edit-btn {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    margin-left: auto;
+    flex-shrink: 0;
+    font-family: var(--mono);
+}
+
+.edit-btn:hover {
+    border-color: var(--purple);
+    color: var(--purple);
+    background: color-mix(in srgb, var(--purple) 8%, transparent);
+}
+
+/* Reverse lookup panel — appears below the list */
+.lookup-panel {
+    flex-shrink: 0;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg3);
+    overflow: hidden;
+}
+
+.lookup-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--bg2);
+}
+
+.lookup-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-bottom: 0.5px solid var(--border);
+}
+
+.lookup-row:last-child {
+    border-bottom: none;
+}
+
+/* Edit overlay + dialog */
+.edit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.edit-dialog {
+    background: var(--bg1, var(--bg2));
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    width: 380px;
+    max-width: 92vw;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.edit-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 2px;
+}
+
+.edit-textarea {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    resize: vertical;
+    outline: none;
+}
+
+.edit-textarea:focus {
+    border-color: var(--purple);
+}
+
+.edit-error {
+    color: var(--red);
+    font-family: var(--mono);
+}
+
+.edit-actions {
+    display: flex;
+    gap: 6px;
+    padding-top: 4px;
+}
+
+/* Slide / fade transitions for the panels */
+.slide-enter-active,
+.slide-leave-active {
+    transition:
+        opacity 0.15s,
+        transform 0.15s;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+    opacity: 0;
+    transform: translateY(6px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.15s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
 }
 </style>

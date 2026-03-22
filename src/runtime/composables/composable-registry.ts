@@ -77,22 +77,37 @@ export function setupComposableRegistry() {
      * For a given entry, return the set of ref keys whose underlying object is
      * shared with at least one other live instance of the same composable.
      * Two instances share a ref when they return the exact same object reference.
+     * @param {string} id - The composable entry ID to check for shared refs.
+     * @param {string} name - The composable name to compare instances against.
+     * @returns {string[]} Array of ref keys that are shared with other instances.
      */
     function computeSharedKeys(id: string, name: string): string[] {
         const ownRaw = rawRefs.get(id)
-        if (!ownRaw) return []
+
+        if (!ownRaw) {
+            return []
+        }
 
         const shared = new Set<string>()
+
         for (const [otherId, entry] of entries.value.entries()) {
-            if (otherId === id || entry.name !== name) continue
+            if (otherId === id || entry.name !== name) {
+                continue // same instance or not the same composable, continue
+            }
+
             const otherRaw = rawRefs.get(otherId)
-            if (!otherRaw) continue
+
+            if (!otherRaw) {
+                continue
+            }
+
             for (const [key, obj] of Object.entries(ownRaw)) {
                 if (key in otherRaw && otherRaw[key] === obj) {
                     shared.add(key)
                 }
             }
         }
+
         return [...shared]
     }
     // The current route path — updated by the plugin on every navigation so new
@@ -115,7 +130,11 @@ export function setupComposableRegistry() {
     function registerLiveRefs(id: string, refs: Record<string, import('vue').Ref<unknown>>) {
         // Stop any previous watcher for this entry before replacing refs
         const prevStop = liveRefWatchers.get(id)
-        if (prevStop) prevStop()
+
+        if (prevStop) {
+            prevStop()
+        }
+
         liveRefWatchers.delete(id)
 
         if (Object.keys(refs).length === 0) {
@@ -124,6 +143,7 @@ export function setupComposableRegistry() {
             liveRefs.delete(id)
             rawRefs.delete(id)
             prevValues.delete(id)
+
             return
         }
 
@@ -158,7 +178,11 @@ export function setupComposableRegistry() {
                     // This key changed — append a history event
                     const history = entryHistory.get(id) ?? []
                     history.push({ t, key: k, value: safeValue(val) })
-                    if (history.length > MAX_HISTORY) history.shift()
+    
+                    if (history.length > MAX_HISTORY) {
+                        history.shift()
+                    }
+
                     entryHistory.set(id, history)
                 }
             }
@@ -166,6 +190,7 @@ export function setupComposableRegistry() {
             prevValues.set(id, now)
             _onChange?.()
         })
+
         liveRefWatchers.set(id, stop)
     }
 
@@ -176,6 +201,7 @@ export function setupComposableRegistry() {
     // Callback invoked by the plugin whenever live ref values change.
     // The plugin sets this after mounting so it can trigger a postMessage push.
     let _onChange: (() => void) | null = null
+
     function onComposableChange(cb: () => void) {
         _onChange = cb
     }
@@ -283,7 +309,45 @@ export function setupComposableRegistry() {
         emit('composable:clear', {})
     }
 
-    return { register, registerLiveRefs, registerRawRefs, onComposableChange, clear, setRoute, getRoute, update, getAll }
+    /**
+     * Overrides the live value of a writable ref inside a mounted composable.
+     * Only works for `ref` type entries (not `computed` — those are read-only).
+     * Writing to the live ref triggers the existing watchEffect, which records
+     * a history event and calls _onChange() to push an updated snapshot.
+     * Allow the DevTools UI to temporarily override a ref value for live testing.
+     * Only works for 'ref' (not computed — those are read-only by definition).
+     * @param {string} id - The composable entry ID
+     * @param {string} key - The ref key to edit
+     * @param {unknown} value - The new value to set
+     */
+    function editValue(id: string, key: string, value: unknown) {
+        const live = liveRefs.get(id)
+
+        if (!live) {
+            return
+        }
+
+        const r = live[key]
+
+        if (!r) {
+            return
+        }
+
+        const entry = entries.value.get(id)
+
+        if (!entry) {
+            return
+        }
+
+        // Guard against computed refs — they are read-only
+        if (entry.refs[key]?.type === 'computed') {
+            return
+        }
+
+        r.value = value
+    }
+
+    return { register, registerLiveRefs, registerRawRefs, onComposableChange, clear, setRoute, getRoute, update, getAll, editValue }
 }
 
 // ── Dev shim called by Vite transform ─────────────────────────────────────
@@ -330,13 +394,18 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         const patchedSetInterval = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => {
             const timerId = originalSetInterval!(fn, ms, ...rest)
             trackedIntervals.push(timerId as number)
+
             return timerId
         }) as typeof window.setInterval & { __obs?: boolean }
+
         patchedSetInterval.__obs = true
         window.setInterval = patchedSetInterval
 
         window.clearInterval = ((timerId?: number) => {
-            if (timerId !== undefined) clearedIntervals.add(timerId)
+            if (timerId !== undefined) {
+                clearedIntervals.add(timerId)
+            }
+
             originalClearInterval!(timerId)
         }) as typeof window.clearInterval
     }

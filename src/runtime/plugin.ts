@@ -127,6 +127,14 @@ export default defineNuxtPlugin(() => {
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
             }
+
+            if (type === 'observatory:edit-composable') {
+                const { id, key, value } = event.data as { id: string; key: string; value: unknown }
+                composableRegistry.editValue(id, key, value)
+
+                // The watchEffect inside the registry will call _onChange() which
+                // pushes the updated snapshot automatically — no explicit broadcast needed.
+            }
         })
 
         // Push a fresh snapshot to the SPA immediately when any tracked
@@ -158,17 +166,19 @@ export default defineNuxtPlugin(() => {
         // no new setup() has run yet, so clearing here is safe and race-free.
         // page:start (Suspense.onPending) fires AFTER synchronous setup() runs,
         // which causes clear() to wipe entries that were just registered.
-        router.beforeEach((_to: ReturnType<typeof useRouter>['currentRoute']['value'], from: ReturnType<typeof useRouter>['currentRoute']['value']) => {
-            // Skip reset on the very first navigation (initial page load has no from route).
-            // On subsequent navigations, reset per-page state so stale counts don't carry over.
-            if (!from || from.name === undefined) {
-                return
-            }
+        router.beforeEach(
+            (_to: ReturnType<typeof useRouter>['currentRoute']['value'], from: ReturnType<typeof useRouter>['currentRoute']['value']) => {
+                // Skip reset on the very first navigation (initial page load has no from route).
+                // On subsequent navigations, reset per-page state so stale counts don't carry over.
+                if (!from || from.name === undefined) {
+                    return
+                }
 
-            renderRegistry.reset()
-            ;(provideInjectRegistry as { clear?: () => void }).clear?.()
-            composableRegistry.clear()
-        })
+                renderRegistry.reset()
+                ;(provideInjectRegistry as { clear?: () => void }).clear?.()
+                composableRegistry.clear()
+            }
+        )
 
         // afterEach fires after the new route is fully committed and rendered.
         // Use nextTick so persistent component updated() hooks have flushed
