@@ -377,7 +377,12 @@ describe('RenderEntry interface — children field removed (fix: render-registry
 // ── describeElement / resolveTypeLabel / inferAnonymousLabel coverage ────
 
 function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance, key = 'count') {
-    ;(mixin.renderTriggered as (this: import('vue').ComponentPublicInstance, e: { key: string; type: typeof TriggerOpTypes[keyof typeof TriggerOpTypes] }) => void).call(instance, {
+    ;(
+        mixin.renderTriggered as (
+            this: import('vue').ComponentPublicInstance,
+            e: { key: string; type: (typeof TriggerOpTypes)[keyof typeof TriggerOpTypes] }
+        ) => void
+    ).call(instance, {
         key,
         type: TriggerOpTypes.SET,
     })
@@ -785,7 +790,7 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
 
     it('does NOT mark renders as navigationRenders after the 800ms window expires', async () => {
         const app = createApp({})
-        const { getAll, markNavigation } = setupRenderRegistry(makeNuxtApp(app))
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         // markNavigation in the past (simulate window already closed)
@@ -806,7 +811,10 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         mixin.mounted?.call(cpi)
         // Then trigger update cycle
         mixin.beforeUpdate?.call(cpi)
-        mixin.renderTriggered?.call(cpi, { key: 'count', type: TriggerOpTypes.SET } as { key: string; type: string })
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void)?.call(cpi, {
+            key: 'count',
+            type: TriggerOpTypes.SET,
+        })
         mixin.updated?.call(cpi)
 
         expect(getAll()[0].rerenders).toBe(1) // only the reactive update counts

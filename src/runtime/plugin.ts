@@ -49,6 +49,7 @@ function toSerializable(value: unknown, seen = new WeakSet<object>()): unknown {
         }
 
         seen.delete(value)
+
         return plain
     }
 
@@ -111,11 +112,13 @@ export default defineNuxtPlugin(() => {
 
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+
                 return
             }
 
             if (type === 'observatory:clear-composables') {
                 composableRegistry.clear()
+
                 // Push a fresh (now empty) snapshot back immediately
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
@@ -125,7 +128,10 @@ export default defineNuxtPlugin(() => {
         // Push a fresh snapshot to the SPA immediately when any tracked
         // composable's reactive state changes — no need to wait for the next poll.
         composableRegistry.onComposableChange(() => {
-            if (!lastMessageSource || !lastMessageOrigin) return
+            if (!lastMessageSource || !lastMessageOrigin) {
+                return
+            }
+
             lastMessageSource.postMessage(
                 {
                     type: 'observatory:snapshot',
@@ -156,7 +162,7 @@ export default defineNuxtPlugin(() => {
 
         // afterEach fires after the new route is fully committed and rendered.
         // Safe to stamp the route and broadcast the fresh snapshot.
-        router.afterEach((to) => {
+        router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
             composableRegistry.setRoute(to.path ?? '/')
             renderRegistry.markNavigation()
             broadcastAll()

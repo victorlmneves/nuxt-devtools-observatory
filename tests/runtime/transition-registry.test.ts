@@ -244,13 +244,14 @@ describe('createTrackedTransition', () => {
         await nextTick()
 
         const leaving = reg.getAll().find((e) => e.direction === 'leave')
+
         expect(leaving?.phase).toBe('leaving')
 
-        // Now complete the transition
-        const done = capturedDone
+        // Now complete the transition by calling done(), which should update the phase to 'left'
+        const done: unknown = capturedDone
 
-        if (done) {
-            done()
+        if (typeof done === 'function') {
+            (done as () => void)()
         }
 
         await nextTick()
@@ -528,7 +529,7 @@ describe('setupTransitionRegistry — sanitize() explicit field copy (fix: trans
         })
 
         const entry = getAll()[0]
-        const functionKeys = Object.keys(entry).filter((k) => typeof (entry as Record<string, unknown>)[k] === 'function')
+        const functionKeys = Object.keys(entry).filter((k) => typeof ((entry as unknown) as Record<string, unknown>)[k] === 'function')
 
         expect(functionKeys).toHaveLength(0)
     })
@@ -580,7 +581,7 @@ describe('createTrackedTransition — interrupted and leave-cancelled paths', ()
                               {
                                   name: 'slide',
                                   css: false,
-                                  onLeave: (_el: Element, _done: () => void) => {
+                                  onLeave: () => {
                                       /* never call done */
                                   },
                               },
@@ -688,13 +689,11 @@ describe('createTrackedTransition — interrupt paths (lines 109-110, 178-180)',
         })
 
         const app = createApp(Wrapper)
-        const el = document.createElement('div')
-        document.body.appendChild(el)
-        app.mount(el)
+        app.mount(document.createElement('div'))
         await nextTick()
 
         // Manually trigger onBeforeEnter to start an enter transition
-        const entries = reg.getAll()
+        // const entries = reg.getAll() // removed unused variable
         // Simulate: grab the TrackedTransition instance and fire its onBeforeEnter hook
         // by calling the hook wired into hookedAttrs directly via the registry.
         // We do this by registering a fake in-progress enter entry:
@@ -713,7 +712,7 @@ describe('createTrackedTransition — interrupt paths (lines 109-110, 178-180)',
         // Now unmount while in-progress — the onUnmounted hook should mark it interrupted
         // We simulate this by directly unmounting the app
         app.unmount()
-        el.remove()
+        // el.remove() // removed invalid line
 
         // The fake entry we registered won't be auto-updated (it's not tracked by the
         // component). Test the direct update path instead:
@@ -728,7 +727,7 @@ describe('createTrackedTransition — interrupt paths (lines 109-110, 178-180)',
         const reg = setupTransitionRegistry()
         const TrackedTransition = createTrackedTransition(reg)
 
-        let capturedAttrs: Record<string, unknown> = {}
+        const capturedAttrs: Record<string, unknown> = {}
 
         // Intercept the h(VueTransition, ...) call by wrapping the component
         const Wrapper = defineComponent({
@@ -738,7 +737,7 @@ describe('createTrackedTransition — interrupt paths (lines 109-110, 178-180)',
                         TrackedTransition,
                         {
                             name: 'slide',
-                            onLeaveCancelled: (el: Element) => {
+                            onLeaveCancelled: () => {
                                 capturedAttrs['leaveCancelledFired'] = true
                             },
                         },
@@ -750,8 +749,7 @@ describe('createTrackedTransition — interrupt paths (lines 109-110, 178-180)',
         })
 
         const app = createApp(Wrapper)
-        const el = document.createElement('div')
-        app.mount(el)
+        app.mount(document.createElement('div'))
         await nextTick()
 
         // Register an in-progress leave entry the way the registry would
@@ -796,8 +794,7 @@ describe('createTrackedTransition — interrupt paths (lines 109-110, 178-180)',
         })
 
         const app = createApp(Comp)
-        const el = document.createElement('div')
-        app.mount(el)
+        app.mount(document.createElement('div'))
         await nextTick()
 
         // Register both in-progress enter and leave entries
@@ -843,7 +840,7 @@ describe('createTrackedTransition — live component interrupt/cancel (lines 104
         const TrackedTransition = createTrackedTransition(reg)
 
         // Collect the hooked attrs by mounting and inspecting via a spy
-        let capturedHooks: Record<string, (el: Element) => void> = {}
+        const capturedHooks: Record<string, (el: Element) => void> = {}
 
         const Inner = defineComponent({
             setup() {
@@ -859,7 +856,7 @@ describe('createTrackedTransition — live component interrupt/cancel (lines 104
                         TrackedTransition,
                         {
                             name: 'fade',
-                            onEnterCancelled: (el: Element) => {
+                            onEnterCancelled: () => {
                                 capturedHooks['userEnterCancelled'] = true as unknown as (el: Element) => void
                             },
                         },
@@ -869,8 +866,7 @@ describe('createTrackedTransition — live component interrupt/cancel (lines 104
         })
 
         const app = createApp(Wrapper)
-        const el = document.createElement('div')
-        app.mount(el)
+        app.mount(document.createElement('div'))
         await nextTick()
 
         // Manually drive the lifecycle: register an enter entry, then cancel it
@@ -930,8 +926,7 @@ describe('createTrackedTransition — live component interrupt/cancel (lines 104
         })
 
         const app = createApp(Wrapper)
-        const el = document.createElement('div')
-        app.mount(el)
+        app.mount(document.createElement('div'))
         await nextTick()
 
         // Register enter in-progress via update
