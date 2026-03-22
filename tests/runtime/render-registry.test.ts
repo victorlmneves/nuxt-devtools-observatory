@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { createApp, defineComponent, h, type ComponentPublicInstance } from 'vue'
+import { createApp, defineComponent, h, TriggerOpTypes, type ComponentPublicInstance } from 'vue'
 import { setupRenderRegistry } from '../../src/runtime/composables/render-registry'
 
 function makeNuxtApp(app: ReturnType<typeof createApp>) {
@@ -75,12 +75,12 @@ describe('setupRenderRegistry', () => {
         const instance = fakeCPI(42)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'items',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'items',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
@@ -117,29 +117,29 @@ describe('setupRenderRegistry', () => {
         // CompA fires updated twice — below threshold of 3
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instA, {
             key: 'count',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instA)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instA, {
             key: 'count',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instA)
 
         // CompB fires updated three times — meets threshold
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
             key: 'count',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
             key: 'count',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
             key: 'count',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
 
@@ -180,7 +180,7 @@ describe('setupRenderRegistry', () => {
         markNavigation()
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'route',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
@@ -214,7 +214,7 @@ describe('setupRenderRegistry', () => {
         // Fire renderTriggered before updated so the entry exists
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'count',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
@@ -256,7 +256,7 @@ describe('setupRenderRegistry', () => {
         const instance = fakeCPI(5, 'ProductCard', 'ProductCard.vue')
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'visible',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
@@ -289,7 +289,7 @@ describe('setupRenderRegistry', () => {
 
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'visible',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
@@ -327,7 +327,7 @@ describe('setupRenderRegistry', () => {
 
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
             key: 'visible',
-            type: 'set',
+            type: TriggerOpTypes.SET,
         })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
@@ -377,9 +377,9 @@ describe('RenderEntry interface — children field removed (fix: render-registry
 // ── describeElement / resolveTypeLabel / inferAnonymousLabel coverage ────
 
 function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance, key = 'count') {
-    ;(mixin.renderTriggered as (this: import('vue').ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+    ;(mixin.renderTriggered as (this: import('vue').ComponentPublicInstance, e: { key: string; type: typeof TriggerOpTypes[keyof typeof TriggerOpTypes] }) => void).call(instance, {
         key,
-        type: 'set',
+        type: TriggerOpTypes.SET,
     })
     ;(mixin.updated as (this: import('vue').ComponentPublicInstance) => void).call(instance)
 }
@@ -627,7 +627,6 @@ describe('makeEntry — describeElement paths', () => {
     it('produces element descriptor with id and class from $el', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
-        const mixin = app.config.globalProperties
 
         // Build an instance whose $el has tagName, id, and className
         const cpi = {
@@ -807,7 +806,7 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         mixin.mounted?.call(cpi)
         // Then trigger update cycle
         mixin.beforeUpdate?.call(cpi)
-        mixin.renderTriggered?.call(cpi, { key: 'count', type: 'set' })
+        mixin.renderTriggered?.call(cpi, { key: 'count', type: TriggerOpTypes.SET } as { key: string; type: string })
         mixin.updated?.call(cpi)
 
         expect(getAll()[0].rerenders).toBe(1) // only the reactive update counts
@@ -837,6 +836,7 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
         const mixin = app._context.mixins[app._context.mixins.length - 1]
         const cpi = fakeCPI(100)
         mixin.mounted?.call(cpi)
+
         expect(getAll()[0].isPersistent).toBe(false)
     })
 
@@ -847,6 +847,7 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
 
         const cpi = fakeCPI(101)
         mixin.mounted?.call(cpi)
+
         expect(getAll()[0].isPersistent).toBe(false)
 
         // Simulate navigation: reset() snapshots current uids
@@ -854,6 +855,7 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
 
         // Component re-mounts on the new page (uid 101 was in preResetUids)
         mixin.mounted?.call(cpi)
+
         expect(getAll()[0].isPersistent).toBe(true)
     })
 
@@ -872,12 +874,13 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
         mixin.mounted?.call(newCpi)
 
         const entry = getAll().find((e) => e.uid === 201)
+
         expect(entry?.isPersistent).toBe(false)
     })
 
     it('isHydrationMount is true when mounted during hydration', () => {
         const app = createApp({})
-        let hydrating = true
+        const hydrating = true
         const { getAll } = setupRenderRegistry(makeNuxtApp(app), {
             isHydrating: () => hydrating,
         })
@@ -893,7 +896,7 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
 
     it('isHydrationMount is false for components mounted after hydration ends', () => {
         const app = createApp({})
-        let hydrating = false
+        const hydrating = false
         const { getAll } = setupRenderRegistry(makeNuxtApp(app), {
             isHydrating: () => hydrating,
         })

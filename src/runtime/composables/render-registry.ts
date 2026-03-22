@@ -28,6 +28,11 @@ export interface RenderEntry {
 
 /**
  * Sets up a render registry for the given Nuxt app.
+ * @param {{ vueApp: import('vue').App }} nuxtApp - The Nuxt application instance.
+ * @param {import('vue').App} nuxtApp.vueApp - The root Vue application instance.
+ * @param {{ isHydrating?: () => boolean }} [options] - Optional configuration.
+ * @param {() => boolean} [options.isHydrating] - Optional function that returns true if the app is currently hydrating.
+ * @returns {{ getAll: () => RenderEntry[], snapshot: () => RenderEntry[], markNavigation: () => void, reset: () => void }} An object with methods to get all entries, take a snapshot, mark navigation, and reset the registry.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
@@ -91,7 +96,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         renderStartTimes.delete(entry.uid)
         entry.totalMs += Math.max(performance.now() - startedAt, 0)
-        entry.avgMs = Math.round((entry.totalMs / Math.max(entry.renders, 1)) * 10) / 10
+        entry.avgMs = Math.round((entry.totalMs / Math.max(entry.rerenders, 1)) * 10) / 10
     }
 
     function markNavigation() {
@@ -154,7 +159,9 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             startRenderTimer(this.$.uid)
         },
 
-        renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
+        // Custom event type for render triggers to avoid DebuggerEvent inference.
+        renderTriggered(this: ComponentPublicInstance, event: { key: string; type: string }) {
+            const { key, type } = event
             const entry = ensureEntry(this)
             entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
             pendingTriggeredRenders.add(entry.uid)

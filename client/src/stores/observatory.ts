@@ -129,7 +129,7 @@ let started = false
 // parentOrigin is only used for the outgoing postMessage target. We always
 // validate incoming messages strictly — see onMessage below.
 let parentOrigin = '*'
-let pollIntervalId: ReturnType<typeof window.setInterval> | null = null
+let pollIntervalId: number | null = null
 
 function cloneArray<T>(value: T[] | undefined): T[] {
     return value ? value.map((item) => ({ ...item })) : []
