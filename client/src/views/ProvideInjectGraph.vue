@@ -5,9 +5,21 @@ import { useObservatoryData, type InjectEntry, type ProvideEntry } from '../stor
 interface TreeNodeData {
     id: string
     label: string
+    componentName: string
     type: 'provider' | 'consumer' | 'both' | 'error'
-    provides: Array<{ key: string; val: string; raw: unknown; reactive: boolean; complex: boolean }>
-    injects: Array<{ key: string; from: string | null; ok: boolean }>
+    provides: Array<{
+        key: string
+        val: string
+        raw: unknown
+        reactive: boolean
+        complex: boolean
+        scope: 'global' | 'layout' | 'component'
+        isShadowing: boolean
+        /** UIDs of components that inject this key */
+        consumerUids: number[]
+        consumerNames: string[]
+    }>
+    injects: Array<{ key: string; from: string | null; fromName: string | null; ok: boolean }>
     children: TreeNodeData[]
 }
 
@@ -43,11 +55,38 @@ function nodeColor(node: TreeNodeData): string {
 function matchesFilter(node: TreeNodeData, filter: string): boolean {
     if (filter === 'all') return true
     if (filter === 'warn') return node.injects.some((entry) => !entry.ok)
+    if (filter === 'shadow') return node.provides.some((entry) => entry.isShadowing)
     return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
 }
 
-function countLeaves(node: TreeNodeData): number {
-    return node.children.length === 0 ? 1 : node.children.reduce((sum, child) => sum + countLeaves(child), 0)
+function matchesSearch(node: TreeNodeData, query: string): boolean {
+    if (!query) return true
+    const q = query.toLowerCase()
+    return (
+        node.label.toLowerCase().includes(q) ||
+        node.componentName.toLowerCase().includes(q) ||
+        node.provides.some((p) => p.key.toLowerCase().includes(q)) ||
+        node.injects.some((i) => i.key.toLowerCase().includes(q))
+    )
+}
+
+/**
+ * Count leaf nodes in a subtree iteratively to avoid stack overflow on
+ * pathologically deep provide/inject trees (e.g. every component re-providing
+ * the same key creates a chain as long as the component tree itself).
+ */
+function countLeaves(root: TreeNodeData): number {
+    let count = 0
+    const stack: TreeNodeData[] = [root]
+    while (stack.length) {
+        const node = stack.pop()!
+        if (node.children.length === 0) {
+            count++
+        } else {
+            stack.push(...node.children)
+        }
+    }
+    return count
 }
 
 function stringifyValue(value: unknown) {
@@ -122,6 +161,7 @@ const nodes = computed<TreeNodeData[]>(() => {
         const created: TreeNodeData = {
             id,
             label: basename(entry.componentFile),
+            componentName: entry.componentName ?? basename(entry.componentFile),
             type: 'consumer',
             provides: [],
             injects: [],
@@ -133,14 +173,36 @@ const nodes = computed<TreeNodeData[]>(() => {
         return created
     }
 
+    // Build a lookup: key → list of inject entries (to compute consumer lists)
+    const injectsByKey = new Map<string, InjectEntry[]>()
+    for (const entry of provideInject.value.injects) {
+        const list = injectsByKey.get(entry.key) ?? []
+        list.push(entry)
+        injectsByKey.set(entry.key, list)
+    }
+
+    // Build a lookup: uid → componentName for resolvedFrom display
+    const nameByUid = new Map<number, string>()
+    for (const entry of provideInject.value.provides) {
+        nameByUid.set(entry.componentUid, entry.componentName)
+    }
+    for (const entry of provideInject.value.injects) {
+        nameByUid.set(entry.componentUid, entry.componentName)
+    }
+
     for (const entry of provideInject.value.provides) {
         const node = ensureNode(entry)
+        const consumers = injectsByKey.get(entry.key) ?? []
         node.provides.push({
             key: entry.key,
             val: formatValuePreview(entry.valueSnapshot),
             raw: entry.valueSnapshot,
             reactive: entry.isReactive,
             complex: isComplexValue(entry.valueSnapshot),
+            scope: entry.scope ?? 'component',
+            isShadowing: entry.isShadowing ?? false,
+            consumerUids: consumers.map((c) => c.componentUid),
+            consumerNames: consumers.map((c) => c.componentName),
         })
     }
 
@@ -149,6 +211,7 @@ const nodes = computed<TreeNodeData[]>(() => {
         node.injects.push({
             key: entry.key,
             from: entry.resolvedFromFile ?? null,
+            fromName: entry.resolvedFromUid !== undefined ? (nameByUid.get(entry.resolvedFromUid) ?? null) : null,
             ok: entry.resolved,
         })
     }
@@ -182,6 +245,7 @@ const nodes = computed<TreeNodeData[]>(() => {
 })
 
 const activeFilter = ref('all')
+const searchQuery = ref('')
 const selectedNode = ref<TreeNodeData | null>(null)
 const expandedProvideValues = ref<Set<string>>(new Set())
 
@@ -203,36 +267,52 @@ function toggleProvideValue(id: string) {
 
 const allKeys = computed(() => {
     const keys = new Set<string>()
-
-    function collect(nodesToVisit: TreeNodeData[]) {
-        nodesToVisit.forEach((node) => {
-            node.provides.forEach((entry) => keys.add(entry.key))
-            node.injects.forEach((entry) => keys.add(entry.key))
-            collect(node.children)
-        })
+    const stack = [...nodes.value]
+    while (stack.length) {
+        const node = stack.pop()!
+        node.provides.forEach((entry) => keys.add(entry.key))
+        node.injects.forEach((entry) => keys.add(entry.key))
+        stack.push(...node.children)
     }
-
-    collect(nodes.value)
-
     return [...keys]
 })
 
 const visibleNodes = computed<TreeNodeData[]>(() => {
-    function prune(node: TreeNodeData): TreeNodeData | null {
-        const visibleChildren = node.children.map(prune).filter(Boolean) as TreeNodeData[]
-        const selfMatches = matchesFilter(node, activeFilter.value)
-
-        if (!selfMatches && !visibleChildren.length) {
-            return null
+    // Iterative post-order prune — avoids stack overflow on deep trees.
+    // We process nodes bottom-up so each parent can inspect its children's
+    // already-computed visibility before deciding its own.
+    function pruneIterative(root: TreeNodeData): TreeNodeData | null {
+        // Phase 1: collect nodes in pre-order (parent before children)
+        const order: TreeNodeData[] = []
+        const stack: TreeNodeData[] = [root]
+        while (stack.length) {
+            const node = stack.pop()!
+            order.push(node)
+            for (let i = node.children.length - 1; i >= 0; i--) {
+                stack.push(node.children[i])
+            }
         }
 
-        return {
-            ...node,
-            children: visibleChildren,
+        // Phase 2: process in reverse pre-order (children before parents)
+        const pruned = new Map<TreeNodeData, TreeNodeData | null>()
+        for (let i = order.length - 1; i >= 0; i--) {
+            const node = order[i]
+            const visibleChildren = node.children
+                .map((child) => pruned.get(child) ?? null)
+                .filter((child): child is TreeNodeData => child !== null)
+            const selfMatches = matchesFilter(node, activeFilter.value) && matchesSearch(node, searchQuery.value)
+
+            if (!selfMatches && !visibleChildren.length) {
+                pruned.set(node, null)
+            } else {
+                pruned.set(node, { ...node, children: visibleChildren })
+            }
         }
+
+        return pruned.get(root) ?? null
     }
 
-    return nodes.value.map(prune).filter(Boolean) as TreeNodeData[]
+    return nodes.value.map(pruneIterative).filter(Boolean) as TreeNodeData[]
 })
 
 watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
@@ -241,15 +321,12 @@ watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
     }
 
     const ids = new Set<string>()
-
-    function collect(nodesToVisit: TreeNodeData[]) {
-        nodesToVisit.forEach((node) => {
-            ids.add(node.id)
-            collect(node.children)
-        })
+    const stack = [...currentNodes]
+    while (stack.length) {
+        const node = stack.pop()!
+        ids.add(node.id)
+        stack.push(...node.children)
     }
-
-    collect(currentNodes)
 
     if (!ids.has(currentSelected.id)) {
         selectedNode.value = null
@@ -260,32 +337,47 @@ const layout = computed<LayoutNode[]>(() => {
     const flat: LayoutNode[] = []
     const pad = H_GAP
 
-    function place(node: TreeNodeData, depth: number, slotLeft: number, parentId: string | null) {
-        const leaves = countLeaves(node)
-        const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
-
-        flat.push({
-            data: node,
-            parentId,
-            x: Math.round(slotLeft + slotWidth / 2),
-            y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
-        })
-
-        let childLeft = slotLeft
-
-        for (const child of node.children) {
-            const childLeaves = countLeaves(child)
-            place(child, depth + 1, childLeft, node.id)
-            childLeft += childLeaves * (NODE_W + H_GAP)
-        }
+    // Iterative replacement for the recursive place() — avoids stack overflow
+    // on deep component trees. Uses an explicit stack of pending work items.
+    interface WorkItem {
+        node: TreeNodeData
+        depth: number
+        slotLeft: number
+        parentId: string | null
     }
 
     let left = pad
 
     for (const root of visibleNodes.value) {
-        const leaves = countLeaves(root)
-        place(root, 0, left, null)
-        left += leaves * (NODE_W + H_GAP) + H_GAP * 2
+        const stack: WorkItem[] = [{ node: root, depth: 0, slotLeft: left, parentId: null }]
+
+        while (stack.length) {
+            const { node, depth, slotLeft, parentId } = stack.pop()!
+            const leaves = countLeaves(node)
+            const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
+
+            flat.push({
+                data: node,
+                parentId,
+                x: Math.round(slotLeft + slotWidth / 2),
+                y: Math.round(pad + depth * (NODE_H + V_GAP) + NODE_H / 2),
+            })
+
+            // Push children in reverse so leftmost child is processed first
+            let childLeft = slotLeft
+            const childWork: WorkItem[] = []
+            for (const child of node.children) {
+                const childLeaves = countLeaves(child)
+                childWork.push({ node: child, depth: depth + 1, slotLeft: childLeft, parentId: node.id })
+                childLeft += childLeaves * (NODE_W + H_GAP)
+            }
+            for (let i = childWork.length - 1; i >= 0; i--) {
+                stack.push(childWork[i])
+            }
+        }
+
+        const rootLeaves = countLeaves(root)
+        left += rootLeaves * (NODE_W + H_GAP) + H_GAP * 2
     }
 
     return flat
@@ -325,9 +417,17 @@ const edges = computed<Edge[]>(() => {
             >
                 {{ key }}
             </button>
-            <button style="margin-left: auto" :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = 'warn'">
-                warnings only
+            <button
+                style="margin-left: auto"
+                :class="{ 'danger-active': activeFilter === 'shadow' }"
+                @click="activeFilter = activeFilter === 'shadow' ? 'all' : 'shadow'"
+            >
+                shadowed
             </button>
+            <button :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = activeFilter === 'warn' ? 'all' : 'warn'">
+                warnings
+            </button>
+            <input v-model="searchQuery" type="search" placeholder="search component or key…" style="max-width: 200px" />
         </div>
 
         <div class="split">
@@ -368,7 +468,9 @@ const edges = computed<Edge[]>(() => {
                         >
                             <span class="node-dot" :style="{ background: nodeColor(layoutNode.data) }"></span>
                             <span class="mono node-label">{{ layoutNode.data.label }}</span>
-                            <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">+{{ layoutNode.data.provides.length }}</span>
+                            <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">
+                                +{{ layoutNode.data.provides.length }}
+                            </span>
                             <span v-if="layoutNode.data.injects.some((entry) => !entry.ok)" class="badge badge-err badge-xs">!</span>
                         </div>
                     </div>
@@ -395,6 +497,7 @@ const edges = computed<Edge[]>(() => {
                             <div class="row-main">
                                 <span class="mono text-sm row-key">{{ entry.key }}</span>
                                 <span class="mono text-sm muted row-value-preview" :title="entry.val">{{ entry.val }}</span>
+                                <span class="badge scope-badge" :class="`scope-${entry.scope}`">{{ entry.scope }}</span>
                                 <span class="badge" :class="entry.reactive ? 'badge-ok' : 'badge-gray'">
                                     {{ entry.reactive ? 'reactive' : 'static' }}
                                 </span>
@@ -406,22 +509,43 @@ const edges = computed<Edge[]>(() => {
                                     {{ expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index)) ? 'hide' : 'view' }}
                                 </button>
                             </div>
+                            <!-- Shadowing warning -->
+                            <div v-if="entry.isShadowing" class="row-warning">shadows a parent provide with the same key</div>
+                            <!-- Consumer list -->
+                            <div v-if="entry.consumerNames.length" class="row-consumers">
+                                <span class="muted text-sm">used by:</span>
+                                <span v-for="name in entry.consumerNames" :key="name" class="consumer-chip mono">{{ name }}</span>
+                                <span v-if="!entry.consumerNames.length" class="muted text-sm">no consumers</span>
+                            </div>
+                            <div v-else class="muted text-sm" style="padding: 2px 0; font-size: 11px">no consumers detected</div>
                             <pre
                                 v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
                                 class="value-box"
-                            >{{ formatValueDetail(entry.raw) }}</pre>
+                                >{{ formatValueDetail(entry.raw) }}</pre
+                            >
                         </div>
                     </div>
                 </div>
 
-                <div v-if="selectedNode.injects.length" class="detail-section" :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }">
+                <div
+                    v-if="selectedNode.injects.length"
+                    class="detail-section"
+                    :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }"
+                >
                     <div class="section-label">injects ({{ selectedNode.injects.length }})</div>
                     <div class="detail-list">
-                        <div v-for="entry in selectedNode.injects" :key="entry.key" class="inject-row" :class="{ 'inject-miss': !entry.ok }">
+                        <div
+                            v-for="entry in selectedNode.injects"
+                            :key="entry.key"
+                            class="inject-row"
+                            :class="{ 'inject-miss': !entry.ok }"
+                        >
                             <span class="mono text-sm row-key">{{ entry.key }}</span>
                             <span v-if="entry.ok" class="badge badge-ok">resolved</span>
                             <span v-else class="badge badge-err">no provider</span>
-                            <span class="mono muted text-sm row-from" :title="entry.from ?? 'undefined'">{{ entry.from ?? 'undefined' }}</span>
+                            <span class="mono text-sm row-from" :class="entry.fromName ? '' : 'muted'" :title="entry.from ?? 'undefined'">
+                                {{ entry.fromName ?? entry.from ?? 'undefined' }}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -628,11 +752,58 @@ const edges = computed<Edge[]>(() => {
 .provide-row {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     padding: 5px 8px;
     background: var(--bg2);
     border-radius: var(--radius);
     margin-bottom: 3px;
+}
+
+.row-warning {
+    font-size: 11px;
+    color: var(--amber);
+    padding: 2px 0;
+}
+
+.row-consumers {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+}
+
+.consumer-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--blue) 10%, var(--bg3));
+    border: 0.5px solid color-mix(in srgb, var(--blue) 30%, var(--border));
+    color: var(--text2);
+}
+
+.scope-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+.scope-global {
+    background: color-mix(in srgb, var(--amber) 15%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+}
+
+.scope-layout {
+    background: color-mix(in srgb, var(--purple) 15%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--purple) 40%, var(--border));
+    color: color-mix(in srgb, var(--purple) 80%, var(--text));
+}
+
+.scope-component {
+    background: var(--bg3);
+    border: 0.5px solid var(--border);
+    color: var(--text3);
 }
 
 .row-main {

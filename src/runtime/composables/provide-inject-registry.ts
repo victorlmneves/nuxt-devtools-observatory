@@ -10,6 +10,17 @@ export interface ProvideEntry {
     isReactive: boolean
     valueSnapshot: unknown
     line: number
+    /**
+     * Scope of the provide:
+     * - 'global'    — provided via app.provide() or at the app root (no parent component)
+     * - 'layout'    — provided by a layout component (file path contains 'layout')
+     * - 'component' — provided by a regular component
+     */
+    scope: 'global' | 'layout' | 'component'
+    /**
+     * True when a parent component already provides the same key — this provide shadows it.
+     */
+    isShadowing: boolean
 }
 
 export interface InjectEntry {
@@ -28,20 +39,43 @@ export interface InjectEntry {
 /**
  * Sets up the provide/inject registry, which tracks all provide/inject calls
  * and their associated metadata (e.g. component name, file, line).
- * @returns {object} The provide/inject registry with `registerProvide`, `registerInject`, and `getAll` members.
+ * @returns {object} The provide/inject registry with `registerProvide`, `registerInject`, `getAll`, and `clear` members.
  */
-export function setupProvideInjectRegistry() {
+export function setupProvideInjectRegistry(): {
+    registerProvide: (entry: ProvideEntry) => void
+    registerInject: (entry: InjectEntry) => void
+    getAll: () => { provides: ProvideEntry[]; injects: InjectEntry[] }
+    clear: () => void
+} {
     const provides = ref<ProvideEntry[]>([])
     const injects = ref<InjectEntry[]>([])
 
     function registerProvide(entry: ProvideEntry) {
-        provides.value.push(entry)
+        // Deduplicate: replace an existing entry for the same key + component so
+        // re-renders don't accumulate duplicate rows in the graph.
+        const idx = provides.value.findIndex((e) => e.key === entry.key && e.componentUid === entry.componentUid)
+        if (idx !== -1) {
+            provides.value[idx] = entry
+        } else {
+            provides.value.push(entry)
+        }
         emit('provide:register', entry)
     }
 
     function registerInject(entry: InjectEntry) {
-        injects.value.push(entry)
+        const idx = injects.value.findIndex((e) => e.key === entry.key && e.componentUid === entry.componentUid)
+        if (idx !== -1) {
+            injects.value[idx] = entry
+        } else {
+            injects.value.push(entry)
+        }
         emit('inject:register', entry)
+    }
+
+    function clear() {
+        provides.value = []
+        injects.value = []
+        emit('provide:clear', {})
     }
 
     function safeValue(val: unknown): unknown {
@@ -75,6 +109,8 @@ export function setupProvideInjectRegistry() {
             isReactive: entry.isReactive,
             valueSnapshot: safeValue(entry.valueSnapshot),
             line: entry.line,
+            scope: entry.scope,
+            isShadowing: entry.isShadowing,
         }
     }
 
@@ -110,7 +146,7 @@ export function setupProvideInjectRegistry() {
         channel?.send(event, data)
     }
 
-    return { registerProvide, registerInject, getAll }
+    return { registerProvide, registerInject, getAll, clear }
 }
 
 // ── Dev shims called by Vite transform ────────────────────────────────────
@@ -129,8 +165,22 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
     }
 
     const instance = getCurrentInstance()
+    const keyStr = String(key)
+
+    // Determine scope: global (no parent component or app root), layout, or component
+    const file = meta.file.toLowerCase()
+    let scope: ProvideEntry['scope'] = 'component'
+    if (!instance?.parent || instance?.parent?.type === instance?.appContext?.app?._component) {
+        scope = 'global'
+    } else if (file.includes('layout') || file.includes('layouts')) {
+        scope = 'layout'
+    }
+
+    // Detect shadowing: walk up the parent chain to see if any ancestor already provides this key
+    const isShadowing = findProvider(keyStr, instance) !== null
+
     registry.registerProvide({
-        key: String(key),
+        key: keyStr,
         componentName: instance?.type?.__name ?? 'unknown',
         componentFile: meta.file,
         componentUid: instance?.uid ?? -1,
@@ -139,6 +189,8 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
         isReactive: isRef(value) || isReactive(value as object),
         valueSnapshot: safeSnapshot(unref(value)),
         line: meta.line,
+        scope,
+        isShadowing,
     })
 }
 

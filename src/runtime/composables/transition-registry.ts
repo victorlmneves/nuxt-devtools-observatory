@@ -41,16 +41,22 @@ export function setupTransitionRegistry() {
     }
 
     function sanitize(entry: TransitionEntry): TransitionEntry {
-        const clone = { ...entry }
-
-        // Remove any function properties
-        for (const key in clone) {
-            if (typeof clone[key] === 'function') {
-                delete clone[key]
-            }
+        // Build the serialisable snapshot by copying only the known scalar fields
+        // rather than using for..in + delete, which iterates the prototype chain
+        // and would break if the TransitionEntry type ever gains function properties.
+        return {
+            id: entry.id,
+            transitionName: entry.transitionName,
+            parentComponent: entry.parentComponent,
+            direction: entry.direction,
+            phase: entry.phase,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+            durationMs: entry.durationMs,
+            cancelled: entry.cancelled,
+            appear: entry.appear,
+            mode: entry.mode,
         }
-
-        return clone
     }
 
     function getAll(): TransitionEntry[] {

@@ -56,8 +56,8 @@ const timelineGeometry = computed(() => {
         return []
     }
 
-    const minT = Math.min(...all.map((e) => e.startTime))
-    const maxT = Math.max(...all.map((e) => e.endTime ?? e.startTime + 400))
+    const minT = all.reduce((min, e) => Math.min(min, e.startTime), all[0].startTime)
+    const maxT = all.reduce((max, e) => Math.max(max, e.endTime ?? e.startTime + 400), 0)
     const span = Math.max(maxT - minT, 1)
 
     return all.map((e) => ({

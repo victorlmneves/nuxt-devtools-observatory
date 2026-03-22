@@ -1,100 +1,79 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
+import { useObservatoryData, getObservatoryOrigin, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
 
-interface ComposableViewEntry {
-    id: string
-    name: string
-    component: string
-    instances: number
-    status: string
-    leak: boolean
-    leakReason?: string
-    refs: Array<{ key: string; type: string; val: string }>
-    watchers: number
-    intervals: number
-    lifecycle: {
-        onMounted: boolean
-        onUnmounted: boolean
-        watchersCleaned: boolean
-        intervalsCleaned: boolean
-    }
+const { composables: rawEntries, connected, clearComposables } = useObservatoryData()
+
+function clearSession() {
+    const origin = getObservatoryOrigin()
+    if (!origin) return
+    clearComposables()
+    window.top?.postMessage({ type: 'observatory:clear-composables' }, origin)
 }
 
-const { composables: rawEntries, connected } = useObservatoryData()
+// ── Flat per-instance display ─────────────────────────────────────────────
+// Each entry is shown individually so you can see exactly which component
+// instance uses which state. No grouping — instanceA and instanceB of the
+// same composable in different components are two separate rows.
 
-const entries = computed<ComposableViewEntry[]>(() => {
-    const groups = new Map<string, RuntimeComposableEntry[]>()
-
-    for (const entry of rawEntries.value) {
-        const key = `${entry.name}::${entry.componentFile}`
-        const list = groups.get(key) ?? []
-        list.push(entry)
-        groups.set(key, list)
-    }
-
-    return [...groups.entries()].map(([key, group]) => {
-        const latest = [...group].sort((a, b) => b.line - a.line)[0]
-        const leakReasons = [...new Set(group.map((entry) => entry.leakReason).filter(Boolean))]
-
-        return {
-            id: key,
-            name: latest.name,
-            component: latest.componentFile,
-            instances: group.length,
-            status: group.some((entry) => entry.status === 'mounted') ? 'mounted' : 'unmounted',
-            leak: group.some((entry) => entry.leak),
-            leakReason: leakReasons.join(' · ') || undefined,
-            refs: Object.entries(latest.refs).map(([refKey, refValue]) => ({
-                key: refKey,
-                type: refValue.type,
-                val: typeof refValue.value === 'string' ? refValue.value : JSON.stringify(refValue.value),
-            })),
-            watchers: group.reduce((sum, entry) => sum + entry.watcherCount, 0),
-            intervals: group.reduce((sum, entry) => sum + entry.intervalCount, 0),
-            lifecycle: {
-                onMounted: group.some((entry) => entry.lifecycle.hasOnMounted),
-                onUnmounted: group.some((entry) => entry.lifecycle.hasOnUnmounted),
-                watchersCleaned: group.every((entry) => entry.lifecycle.watchersCleaned),
-                intervalsCleaned: group.every((entry) => entry.lifecycle.intervalsCleaned),
-            },
+function formatVal(v: unknown): string {
+    if (v === null) return 'null'
+    if (v === undefined) return 'undefined'
+    if (typeof v === 'string') return `"${v}"`
+    if (typeof v === 'object') {
+        try {
+            const s = JSON.stringify(v)
+            return s.length > 80 ? s.slice(0, 80) + '…' : s
+        } catch {
+            return String(v)
         }
-    })
-})
+    }
+    return String(v)
+}
+
+function basename(file: string) {
+    return file.split('/').pop() ?? file
+}
 
 const filter = ref('all')
 const search = ref('')
 const expanded = ref<string | null>(null)
 
+const entries = computed<RuntimeComposableEntry[]>(() => rawEntries.value)
+
 const counts = computed(() => ({
-    mounted: entries.value.filter((entry) => entry.status === 'mounted').length,
-    leaks: entries.value.filter((entry) => entry.leak).length,
+    mounted: entries.value.filter((e) => e.status === 'mounted').length,
+    leaks: entries.value.filter((e) => e.leak).length,
 }))
 
 const filtered = computed(() => {
     return entries.value.filter((entry) => {
-        if (filter.value === 'leak' && !entry.leak) {
-            return false
-        }
-
-        if (filter.value === 'unmounted' && entry.status !== 'unmounted') {
-            return false
-        }
-
+        if (filter.value === 'leak' && !entry.leak) return false
+        if (filter.value === 'mounted' && entry.status !== 'mounted') return false
+        if (filter.value === 'unmounted' && entry.status !== 'unmounted') return false
         const q = search.value.toLowerCase()
-
-        if (q && !entry.name.toLowerCase().includes(q) && !entry.component.toLowerCase().includes(q)) {
-            return false
+        if (q) {
+            const matchesName = entry.name.toLowerCase().includes(q)
+            const matchesFile = entry.componentFile.toLowerCase().includes(q)
+            const matchesRef = Object.keys(entry.refs).some((k) => k.toLowerCase().includes(q))
+            if (!matchesName && !matchesFile && !matchesRef) return false
         }
-
         return true
     })
 })
 
-function lifecycleRows(entry: ComposableViewEntry) {
+function lifecycleRows(entry: RuntimeComposableEntry) {
     return [
-        { label: 'onMounted', ok: entry.lifecycle.onMounted, status: entry.lifecycle.onMounted ? 'registered' : 'not used' },
-        { label: 'onUnmounted', ok: entry.lifecycle.onUnmounted, status: entry.lifecycle.onUnmounted ? 'registered' : 'missing' },
+        {
+            label: 'onMounted',
+            ok: entry.lifecycle.hasOnMounted,
+            status: entry.lifecycle.hasOnMounted ? 'registered' : 'not used',
+        },
+        {
+            label: 'onUnmounted',
+            ok: entry.lifecycle.hasOnUnmounted,
+            status: entry.lifecycle.hasOnUnmounted ? 'registered' : 'missing',
+        },
         {
             label: 'watchers cleaned',
             ok: entry.lifecycle.watchersCleaned,
@@ -106,6 +85,12 @@ function lifecycleRows(entry: ComposableViewEntry) {
             status: entry.lifecycle.intervalsCleaned ? 'all cleared' : 'NOT cleared',
         },
     ]
+}
+
+function typeBadgeClass(type: string) {
+    if (type === 'computed') return 'badge-info'
+    if (type === 'reactive') return 'badge-purple'
+    return 'badge-gray'
 }
 </script>
 
@@ -126,20 +111,17 @@ function lifecycleRows(entry: ComposableViewEntry) {
             </div>
             <div class="stat-card">
                 <div class="stat-label">instances</div>
-                <div class="stat-val">{{ entries.reduce((sum, entry) => sum + entry.instances, 0) }}</div>
+                <div class="stat-val">{{ entries.length }}</div>
             </div>
         </div>
 
         <div class="toolbar">
             <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
+            <button :class="{ active: filter === 'mounted' }" @click="filter = 'mounted'">mounted</button>
             <button :class="{ 'danger-active': filter === 'leak' }" @click="filter = 'leak'">leaks only</button>
             <button :class="{ active: filter === 'unmounted' }" @click="filter = 'unmounted'">unmounted</button>
-            <input
-                v-model="search"
-                type="search"
-                placeholder="search composable or component…"
-                style="max-width: 220px; margin-left: auto"
-            />
+            <input v-model="search" type="search" placeholder="search name, file, or ref…" style="max-width: 220px; margin-left: auto" />
+            <button class="clear-btn" title="Clear session history" @click="clearSession">clear</button>
         </div>
 
         <div class="list">
@@ -151,39 +133,116 @@ function lifecycleRows(entry: ComposableViewEntry) {
                 @click="expanded = expanded === entry.id ? null : entry.id"
             >
                 <div class="comp-header">
-                    <span class="mono bold" style="font-size: 12px">{{ entry.name }}</span>
-                    <span class="muted text-sm" style="margin-left: 4px">{{ entry.component }}</span>
+                    <div class="comp-identity">
+                        <span class="comp-name mono">{{ entry.name }}</span>
+                        <span class="comp-file muted mono">{{ basename(entry.componentFile) }}</span>
+                    </div>
                     <div class="comp-meta">
-                        <span v-if="entry.instances > 1" class="muted text-sm">{{ entry.instances }}×</span>
-                        <span v-if="entry.watchers > 0 && !entry.leak" class="badge badge-warn">
-                            {{ entry.watchers }} watcher{{ entry.watchers > 1 ? 's' : '' }}
-                        </span>
-                        <span v-if="entry.intervals > 0 && !entry.leak" class="badge badge-warn">
-                            {{ entry.intervals }} interval{{ entry.intervals > 1 ? 's' : '' }}
-                        </span>
-                        <span v-if="entry.leak" class="badge badge-err">leak detected</span>
+                        <span v-if="entry.watcherCount > 0 && !entry.leak" class="badge badge-warn">{{ entry.watcherCount }}w</span>
+                        <span v-if="entry.intervalCount > 0 && !entry.leak" class="badge badge-warn">{{ entry.intervalCount }}t</span>
+                        <span v-if="entry.leak" class="badge badge-err">leak</span>
                         <span v-else-if="entry.status === 'mounted'" class="badge badge-ok">mounted</span>
                         <span v-else class="badge badge-gray">unmounted</span>
                     </div>
                 </div>
 
+                <!-- Inline ref preview — shows up to 3 refs without expanding -->
+                <div v-if="Object.keys(entry.refs).length" class="refs-preview">
+                    <span
+                        v-for="[k, v] in Object.entries(entry.refs).slice(0, 3)"
+                        :key="k"
+                        class="ref-chip"
+                        :class="{
+                            'ref-chip--reactive': v.type === 'reactive',
+                            'ref-chip--computed': v.type === 'computed',
+                            'ref-chip--shared': entry.sharedKeys?.includes(k),
+                        }"
+                        :title="entry.sharedKeys?.includes(k) ? 'shared global state' : ''"
+                    >
+                        <span class="ref-chip-key">{{ k }}</span>
+                        <span class="ref-chip-val">{{ formatVal(v.value) }}</span>
+                        <span v-if="entry.sharedKeys?.includes(k)" class="ref-chip-shared-dot" title="global"></span>
+                    </span>
+                    <span v-if="Object.keys(entry.refs).length > 3" class="muted text-sm">
+                        +{{ Object.keys(entry.refs).length - 3 }} more
+                    </span>
+                </div>
+
                 <div v-if="expanded === entry.id" class="comp-detail" @click.stop>
                     <div v-if="entry.leak" class="leak-banner">{{ entry.leakReason }}</div>
 
-                    <div class="section-label">reactive state</div>
-                    <div v-for="refEntry in entry.refs" :key="refEntry.key" class="ref-row">
-                        <span class="mono text-sm" style="min-width: 90px; color: var(--text2)">{{ refEntry.key }}</span>
-                        <span class="mono text-sm muted" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
-                            {{ refEntry.val }}
+                    <!-- Global state warning -->
+                    <div v-if="entry.sharedKeys?.length" class="global-banner">
+                        <span class="global-dot"></span>
+                        <span>
+                            <strong>global state</strong>
+                            — {{ entry.sharedKeys.join(', ') }}
+                            {{ entry.sharedKeys.length === 1 ? 'is' : 'are' }}
+                            shared across all instances of {{ entry.name }}
                         </span>
-                        <span class="badge badge-info text-xs">{{ refEntry.type }}</span>
                     </div>
 
-                    <div class="section-label" style="margin-top: 8px">lifecycle</div>
+                    <div class="section-label">reactive state</div>
+                    <div v-if="!Object.keys(entry.refs).length" class="muted text-sm" style="padding: 2px 0 6px">
+                        no tracked state returned
+                    </div>
+                    <div v-for="[k, v] in Object.entries(entry.refs)" :key="k" class="ref-row">
+                        <span class="mono text-sm ref-key">{{ k }}</span>
+                        <span class="mono text-sm ref-val">{{ formatVal(v.value) }}</span>
+                        <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
+                        <span v-if="entry.sharedKeys?.includes(k)" class="badge badge-amber text-xs">global</span>
+                    </div>
+
+                    <template v-if="entry.history && entry.history.length">
+                        <div class="section-label" style="margin-top: 10px">
+                            change history
+                            <span class="muted" style="font-weight: 400; text-transform: none; letter-spacing: 0">
+                                ({{ entry.history.length }} events)
+                            </span>
+                        </div>
+                        <div class="history-list">
+                            <div v-for="(evt, idx) in [...entry.history].reverse().slice(0, 20)" :key="idx" class="history-row">
+                                <span class="history-time mono muted">+{{ (evt.t / 1000).toFixed(2) }}s</span>
+                                <span class="history-key mono">{{ evt.key }}</span>
+                                <span class="history-val mono">{{ formatVal(evt.value) }}</span>
+                            </div>
+                            <div v-if="entry.history.length > 20" class="muted text-sm" style="padding: 2px 0">
+                                … {{ entry.history.length - 20 }} earlier events
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="section-label" style="margin-top: 10px">lifecycle</div>
                     <div v-for="row in lifecycleRows(entry)" :key="row.label" class="lc-row">
                         <span class="lc-dot" :style="{ background: row.ok ? 'var(--teal)' : 'var(--red)' }"></span>
-                        <span class="muted text-sm" style="min-width: 110px">{{ row.label }}</span>
+                        <span class="muted text-sm" style="min-width: 120px">{{ row.label }}</span>
                         <span class="text-sm" :style="{ color: row.ok ? 'var(--teal)' : 'var(--red)' }">{{ row.status }}</span>
+                    </div>
+
+                    <div class="section-label" style="margin-top: 10px">context</div>
+                    <div class="lc-row">
+                        <span class="muted text-sm" style="min-width: 120px">component</span>
+                        <span class="mono text-sm">{{ basename(entry.componentFile) }}</span>
+                    </div>
+                    <div class="lc-row">
+                        <span class="muted text-sm" style="min-width: 120px">uid</span>
+                        <span class="mono text-sm muted">{{ entry.componentUid }}</span>
+                    </div>
+                    <div class="lc-row">
+                        <span class="muted text-sm" style="min-width: 120px">defined in</span>
+                        <span class="mono text-sm muted">{{ entry.file }}:{{ entry.line }}</span>
+                    </div>
+                    <div class="lc-row">
+                        <span class="muted text-sm" style="min-width: 120px">route</span>
+                        <span class="mono text-sm muted">{{ entry.route }}</span>
+                    </div>
+                    <div class="lc-row">
+                        <span class="muted text-sm" style="min-width: 120px">watchers</span>
+                        <span class="mono text-sm">{{ entry.watcherCount }}</span>
+                    </div>
+                    <div class="lc-row">
+                        <span class="muted text-sm" style="min-width: 120px">intervals</span>
+                        <span class="mono text-sm">{{ entry.intervalCount }}</span>
                     </div>
                 </div>
             </div>
@@ -220,12 +279,24 @@ function lifecycleRows(entry: ComposableViewEntry) {
     flex-wrap: wrap;
 }
 
+.clear-btn {
+    color: var(--text3);
+    border-color: var(--border);
+    flex-shrink: 0;
+}
+
+.clear-btn:hover {
+    color: var(--red);
+    border-color: var(--red);
+    background: transparent;
+}
+
 .list {
     flex: 1;
     overflow: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
     min-height: 0;
 }
 
@@ -254,30 +325,104 @@ function lifecycleRows(entry: ComposableViewEntry) {
 .comp-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
     gap: 8px;
-    padding: 9px 13px;
-    min-height: 44px;
+}
+
+.comp-identity {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
+.comp-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    flex-shrink: 0;
+}
+
+.comp-file {
+    font-size: 11px;
+    color: var(--text3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .comp-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-left: auto;
+    gap: 5px;
+    flex-shrink: 0;
 }
 
+/* Inline ref preview chips */
+.refs-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 12px 8px;
+    align-items: center;
+}
+
+.ref-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    font-size: 11px;
+    font-family: var(--mono);
+    max-width: 220px;
+    overflow: hidden;
+}
+
+.ref-chip--reactive {
+    border-color: color-mix(in srgb, var(--purple) 40%, var(--border));
+    background: color-mix(in srgb, var(--purple) 8%, var(--bg2));
+}
+
+.ref-chip--computed {
+    border-color: color-mix(in srgb, var(--blue) 40%, var(--border));
+    background: color-mix(in srgb, var(--blue) 8%, var(--bg2));
+}
+
+.ref-chip-key {
+    color: var(--text2);
+    flex-shrink: 0;
+}
+
+.ref-chip-val {
+    color: var(--teal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Expanded detail */
 .comp-detail {
+    padding: 4px 12px 12px;
     border-top: 0.5px solid var(--border);
-    padding: 10px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
 }
 
 .leak-banner {
-    background: rgb(226 75 74 / 10%);
+    background: color-mix(in srgb, var(--red) 12%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--red) 40%, var(--border));
     border-radius: var(--radius);
-    padding: 7px 10px;
-    font-size: 12px;
+    padding: 6px 10px;
+    font-size: 11px;
     color: var(--red);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+    font-family: var(--mono);
 }
 
 .section-label {
@@ -286,30 +431,155 @@ function lifecycleRows(entry: ComposableViewEntry) {
     text-transform: uppercase;
     letter-spacing: 0.4px;
     color: var(--text3);
-    margin-bottom: 5px;
+    margin-top: 6px;
+    margin-bottom: 3px;
 }
 
 .ref-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 8px;
-    background: var(--bg2);
-    border-radius: var(--radius);
-    margin-bottom: 3px;
+    padding: 3px 0;
+}
+
+.ref-key {
+    min-width: 90px;
+    color: var(--text2);
+    flex-shrink: 0;
+}
+
+.ref-val {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--teal);
 }
 
 .lc-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 0;
+    padding: 2px 0;
 }
 
 .lc-dot {
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
+}
+
+.ref-chip--shared {
+    border-color: color-mix(in srgb, var(--amber) 50%, var(--border));
+    background: color-mix(in srgb, var(--amber) 10%, var(--bg2));
+}
+
+.ref-chip-shared-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+    margin-left: 1px;
+}
+
+.global-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: color-mix(in srgb, var(--amber) 10%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+    border-radius: var(--radius);
+    padding: 7px 10px;
+    font-size: 11px;
+    color: var(--text2);
+    margin-bottom: 6px;
+}
+
+.global-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+    margin-top: 3px;
+}
+
+.badge-amber {
+    background: color-mix(in srgb, var(--amber) 15%, transparent);
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 4px 8px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.history-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    font-size: 11px;
+    font-family: var(--mono);
+    border-bottom: 0.5px solid var(--border);
+}
+
+.history-row:last-child {
+    border-bottom: none;
+}
+
+.history-time {
+    min-width: 52px;
+    color: var(--text3);
+    flex-shrink: 0;
+}
+
+.history-key {
+    min-width: 80px;
+    color: var(--text2);
+    flex-shrink: 0;
+}
+
+.history-val {
+    color: var(--amber);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+/* Stat cards */
+.stat-card {
+    background: var(--bg3);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 10px 14px;
+}
+
+.stat-label {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text3);
+    margin-bottom: 4px;
+}
+
+.stat-val {
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text);
 }
 </style>

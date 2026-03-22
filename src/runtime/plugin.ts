@@ -1,4 +1,5 @@
-import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig } from '#app'
+import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig, useRouter } from '#app'
+import { nextTick } from 'vue'
 import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
 import { setupComposableRegistry } from './composables/composable-registry'
@@ -49,6 +50,7 @@ function toSerializable(value: unknown, seen = new WeakSet<object>()): unknown {
         }
 
         seen.delete(value)
+
         return plain
     }
 
@@ -70,10 +72,18 @@ export default defineNuxtPlugin(() => {
     const fetchRegistry = setupFetchRegistry()
     const provideInjectRegistry = setupProvideInjectRegistry()
     const composableRegistry = setupComposableRegistry()
-    const renderRegistry = setupRenderRegistry(nuxtApp)
+    const renderRegistry = setupRenderRegistry(nuxtApp, {
+        // Only flag as hydration when the page was actually server-rendered.
+        // nuxtApp.isHydrating is true on ALL initial mounts (including CSR-only),
+        // so we gate on payload.serverRendered to avoid false positives.
+        isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
+    })
     const transitionRegistry = setupTransitionRegistry()
 
-    // Expose registries globally so Vite transform shims can reach them
+    // Expose registries globally so Vite transform shims can reach them.
+    // This must happen synchronously — before any component setup() runs —
+    // so that shims injected by the Vite transforms find the registry already
+    // in place rather than silently no-opping on the first render.
     if (import.meta.client) {
         // Always clear any previous registry to avoid cross-project state
         delete (window as ObservatoryWindow).__observatory__
@@ -89,23 +99,49 @@ export default defineNuxtPlugin(() => {
         // origin). It cannot read window.top properties, but CAN send messages.
         // We register this listener immediately (not in app:mounted) so requests
         // arriving before hydration completes are handled correctly.
-        window.addEventListener('message', (event: MessageEvent) => {
-            if (event.data?.type !== 'observatory:request') {
-                return
-            }
+        let lastMessageSource: Window | null = null
+        let lastMessageOrigin = ''
 
+        window.addEventListener('message', (event: MessageEvent) => {
             if (config.clientOrigin && event.origin !== config.clientOrigin) {
                 return
             }
 
-            const source = event.source as Window | null
-            const snapshot = buildSnapshot()
-            source?.postMessage(
+            const type = event.data?.type
+
+            if (type === 'observatory:request') {
+                // Remember the SPA window so we can push unsolicited updates to it
+                lastMessageSource = event.source as Window | null
+                lastMessageOrigin = event.origin
+
+                const source = event.source as Window | null
+                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+
+                return
+            }
+
+            if (type === 'observatory:clear-composables') {
+                composableRegistry.clear()
+
+                // Push a fresh (now empty) snapshot back immediately
+                const source = event.source as Window | null
+                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+            }
+        })
+
+        // Push a fresh snapshot to the SPA immediately when any tracked
+        // composable's reactive state changes — no need to wait for the next poll.
+        composableRegistry.onComposableChange(() => {
+            if (!lastMessageSource || !lastMessageOrigin) {
+                return
+            }
+
+            lastMessageSource.postMessage(
                 {
                     type: 'observatory:snapshot',
-                    data: snapshot,
+                    data: buildSnapshot(),
                 },
-                event.origin
+                lastMessageOrigin
             )
         })
     }
@@ -115,16 +151,31 @@ export default defineNuxtPlugin(() => {
         broadcastAll()
     })
 
-    // Broadcast on every route change (client-side navigation)
-    if (import.meta.client && nuxtApp.vueApp.config.globalProperties.$router) {
-        nuxtApp.vueApp.config.globalProperties.$router.beforeEach((_to: unknown, _from: unknown, next: () => void) => {
+    if (import.meta.client) {
+        const router = useRouter()
+
+        // router.beforeEach fires BEFORE Vue renders anything for the new route —
+        // no new setup() has run yet, so clearing here is safe and race-free.
+        // page:start (Suspense.onPending) fires AFTER synchronous setup() runs,
+        // which causes clear() to wipe entries that were just registered.
+        router.beforeEach((_to: ReturnType<typeof useRouter>['currentRoute']['value'], from: ReturnType<typeof useRouter>['currentRoute']['value']) => {
+            // Skip reset on the very first navigation (initial page load has no from route).
+            // On subsequent navigations, reset per-page state so stale counts don't carry over.
+            if (!from || from.name === undefined) {
+                return
+            }
+
             renderRegistry.reset()
-            next()
+            ;(provideInjectRegistry as { clear?: () => void }).clear?.()
+            composableRegistry.clear()
         })
 
-        nuxtApp.vueApp.config.globalProperties.$router.afterEach(() => {
-            renderRegistry.markNavigation()
-            broadcastAll()
+        // afterEach fires after the new route is fully committed and rendered.
+        // Use nextTick so persistent component updated() hooks have flushed
+        // before we broadcast — otherwise rerenders shows 0 on navigation.
+        router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
+            composableRegistry.setRoute(to.path ?? '/')
+            nextTick(() => broadcastAll())
         })
     }
 
