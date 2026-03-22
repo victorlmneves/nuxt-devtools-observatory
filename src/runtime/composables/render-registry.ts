@@ -14,7 +14,6 @@ export interface RenderEntry {
     /** Re-renders triggered by reactive state changes (excludes initial mount) */
     rerenders: number
     /** Subset of rerenders that happened within 800ms of a navigation */
-    navigationRenders: number
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
@@ -28,17 +27,11 @@ export interface RenderEntry {
 
 /**
  * Sets up a render registry for the given Nuxt app.
- * @param {{ vueApp: import('vue').App }} nuxtApp - The Nuxt application instance.
- * @param {import('vue').App} nuxtApp.vueApp - The root Vue application instance.
- * @param {{ isHydrating?: () => boolean }} [options] - Optional configuration.
- * @param {() => boolean} [options.isHydrating] - Optional function that returns true if the app is currently hydrating.
- * @returns {{ getAll: () => RenderEntry[], snapshot: () => RenderEntry[], markNavigation: () => void, reset: () => void }} An object with methods to get all entries, take a snapshot, mark navigation, and reset the registry.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
     const entries = ref<Map<number, RenderEntry>>(new Map())
     const pendingTriggeredRenders = new Set<number>()
     const renderStartTimes = new Map<number, number>()
-    let navigationWindowUntil = 0
     // Track uids that existed before the last reset() — used to flag persistent components
     let preResetUids = new Set<number>()
 
@@ -71,10 +64,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         entries.value.delete(uid)
     }
 
-    function isNavigationRender() {
-        return typeof performance !== 'undefined' && performance.now() <= navigationWindowUntil
-    }
-
     function startRenderTimer(uid: number) {
         if (typeof performance === 'undefined') {
             return
@@ -96,15 +85,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         renderStartTimes.delete(entry.uid)
         entry.totalMs += Math.max(performance.now() - startedAt, 0)
-        entry.avgMs = Math.round((entry.totalMs / Math.max(entry.rerenders, 1)) * 10) / 10
-    }
-
-    function markNavigation() {
-        if (typeof performance === 'undefined') {
-            return
-        }
-
-        navigationWindowUntil = performance.now() + 800
+        // avgMs covers both initial mounts and re-renders since both take real time.
+        // Use rerenders + mountCount as the denominator; guard against 0 with max(,1).
+        const totalEvents = (entry.rerenders ?? 0) + Math.max(entry.mountCount, 1)
+        entry.avgMs = Math.round((entry.totalMs / totalEvents) * 10) / 10
     }
 
     function reset() {
@@ -117,11 +101,13 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         for (const entry of entries.value.values()) {
             entry.rerenders = 0
-            entry.navigationRenders = 0
             entry.totalMs = 0
             entry.avgMs = 0
             entry.triggers = []
-            entry.mountCount = 0
+            // mountCount intentionally NOT reset — it reflects how many times this
+            // component mounted during the current page's lifetime. Resetting it
+            // would make the second mount appear to be a first mount and bypass
+            // the re-mount → rerender counting logic.
         }
     }
 
@@ -147,7 +133,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 entry.isHydrationMount = true
             } else if (entry.mountCount > 1) {
                 entry.rerenders++
-                if (isNavigationRender()) entry.navigationRenders++
             }
 
             syncRect(entry, this)
@@ -159,9 +144,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             startRenderTimer(this.$.uid)
         },
 
-        // Custom event type for render triggers to avoid DebuggerEvent inference.
-        renderTriggered(this: ComponentPublicInstance, event: { key: string; type: string }) {
-            const { key, type } = event
+        renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
             const entry = ensureEntry(this)
             entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
             pendingTriggeredRenders.add(entry.uid)
@@ -175,17 +158,12 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         updated(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
 
-            // Only count updates Vue explicitly marked as reactive render triggers.
-            if (!pendingTriggeredRenders.has(entry.uid)) {
-                return
-            }
-
+            // Count every reactive update as a re-render.
+            // renderTriggered (above) already captured which deps triggered it.
+            // We clear the pending flag regardless — it was only needed when
+            // updated() also had to filter out initial mounts (no longer the case).
             pendingTriggeredRenders.delete(entry.uid)
             entry.rerenders++
-
-            if (isNavigationRender()) {
-                entry.navigationRenders++
-            }
 
             syncRect(entry, this)
             recordRenderDuration(entry)
@@ -208,7 +186,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             element: entry.element,
             mountCount: entry.mountCount,
             rerenders: entry.rerenders,
-            navigationRenders: entry.navigationRenders,
             totalMs: entry.totalMs,
             avgMs: entry.avgMs,
             triggers: entry.triggers,
@@ -244,7 +221,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         channel?.send(event, data)
     }
 
-    return { getAll, snapshot, markNavigation, reset }
+    return { getAll, snapshot, reset }
 }
 
 /**
@@ -268,7 +245,6 @@ function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry 
         element,
         mountCount: 0,
         rerenders: 0,
-        navigationRenders: 0,
         totalMs: 0,
         avgMs: 0,
         triggers: [],

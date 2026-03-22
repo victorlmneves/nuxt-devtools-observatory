@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { createApp, defineComponent, h, TriggerOpTypes, type ComponentPublicInstance } from 'vue'
+import { createApp, defineComponent, h, TriggerOpTypes, effect, type ComponentPublicInstance } from 'vue'
 import { setupRenderRegistry } from '../../src/runtime/composables/render-registry'
 
 function makeNuxtApp(app: ReturnType<typeof createApp>) {
@@ -73,12 +73,14 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(42)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            key: 'items',
-            type: TriggerOpTypes.SET,
-        })
+            ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+                effect: effect(() => {}).effect,
+                key: 'items',
+                type: TriggerOpTypes.SET,
+            })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+                effect: effect(() => {}).effect,
             key: 'items',
             type: TriggerOpTypes.SET,
         })
@@ -91,7 +93,7 @@ describe('setupRenderRegistry', () => {
         expect(entries[0].rerenders).toBe(2) // two renderTriggered+updated cycles
     })
 
-    it('ignores updated hooks that were not preceded by renderTriggered', () => {
+    it('counts updated() even without a preceding renderTriggered (parent-driven re-renders)', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -99,9 +101,12 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(44)
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+        // updated() without renderTriggered — this is how parent-driven re-renders
+        // arrive (prop changes, slot re-renders, forced updates).
+        // They must be counted, otherwise most real-world re-renders are invisible.
+            ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
-        expect(getAll()[0].rerenders).toBe(0)
+        expect(getAll()[0].rerenders).toBe(1)
     })
 
     it('getAll() returns entries even when they are below the heatmap threshold', () => {
@@ -165,27 +170,6 @@ describe('setupRenderRegistry', () => {
         expect(entries[0].uid).toBe(7)
         expect(entries[0].rerenders).toBe(0) // initial mount is NOT a re-render
         expect(entries[0].mountCount).toBe(1)
-        expect(entries[0].navigationRenders).toBe(0)
-    })
-
-    it('tracks renders that happen during a route navigation window', () => {
-        const app = createApp({})
-        const { getAll, markNavigation } = setupRenderRegistry(makeNuxtApp(app))
-
-        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
-        const mixin = mixins[mixins.length - 1]
-
-        const instance = fakeCPI(70, 'RouterView')
-
-        markNavigation()
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            key: 'route',
-            type: TriggerOpTypes.SET,
-        })
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
-
-        expect(getAll()[0].rerenders).toBe(1)
-        expect(getAll()[0].navigationRenders).toBe(1)
     })
 
     it('removes entries when components unmount', () => {
@@ -212,17 +196,18 @@ describe('setupRenderRegistry', () => {
         const instance = fakeCPI(10)
 
         // Fire renderTriggered before updated so the entry exists
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
+            ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+                effect: effect(() => {}).effect,
+                key: 'count',
+                type: TriggerOpTypes.SET,
+            })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
 
         expect(entry.triggers).toHaveLength(1)
         expect(entry.triggers[0].key).toBe('count')
-        expect(entry.triggers[0].type).toBe('set')
+        expect(entry.triggers[0].type).toBe(TriggerOpTypes.SET)
     })
 
     it('keeps at most 50 trigger entries per component', () => {
@@ -238,7 +223,7 @@ describe('setupRenderRegistry', () => {
         for (let i = 0; i < 60; i++) {
             ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
                 key: `k${i}`,
-                type: 'set',
+                type: TriggerOpTypes.SET,
             })
         }
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
@@ -377,12 +362,7 @@ describe('RenderEntry interface — children field removed (fix: render-registry
 // ── describeElement / resolveTypeLabel / inferAnonymousLabel coverage ────
 
 function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance, key = 'count') {
-    ;(
-        mixin.renderTriggered as (
-            this: import('vue').ComponentPublicInstance,
-            e: { key: string; type: (typeof TriggerOpTypes)[keyof typeof TriggerOpTypes] }
-        ) => void
-    ).call(instance, {
+    ;(mixin.renderTriggered as (this: import('vue').ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
         key,
         type: TriggerOpTypes.SET,
     })
@@ -648,6 +628,7 @@ describe('makeEntry — describeElement paths', () => {
         app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
 
         const entry = getAll()[0]
+
         expect(entry.element).toBe('button#submit-btn.primary')
     })
 
@@ -774,33 +755,6 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         expect(getAll()[0].triggers).toEqual([])
     })
 
-    it('marks renders within 800ms of markNavigation() as navigationRenders', () => {
-        const app = createApp({})
-        const { getAll, markNavigation } = setupRenderRegistry(makeNuxtApp(app))
-        const mixin = app._context.mixins[app._context.mixins.length - 1]
-
-        markNavigation() // opens the 800ms window
-
-        const cpi = fakeCPI(20)
-        mixin.mounted?.call(cpi)
-
-        // Only rerenders (via updated()) count toward navigationRenders — not initial mounts
-        expect(getAll()[0].navigationRenders).toBe(0)
-    })
-
-    it('does NOT mark renders as navigationRenders after the 800ms window expires', async () => {
-        const app = createApp({})
-        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
-        const mixin = app._context.mixins[app._context.mixins.length - 1]
-
-        // markNavigation in the past (simulate window already closed)
-        // by directly NOT calling markNavigation before mounting
-        const cpi = fakeCPI(21)
-        mixin.mounted?.call(cpi)
-
-        expect(getAll()[0].navigationRenders).toBe(0)
-    })
-
     it('beforeUpdate calls startRenderTimer for re-renders', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
@@ -811,10 +765,7 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         mixin.mounted?.call(cpi)
         // Then trigger update cycle
         mixin.beforeUpdate?.call(cpi)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void)?.call(cpi, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
+        mixin.renderTriggered?.call(cpi, { effect: effect(() => {}).effect, target: {}, key: 'count', type: TriggerOpTypes.SET })
         mixin.updated?.call(cpi)
 
         expect(getAll()[0].rerenders).toBe(1) // only the reactive update counts
@@ -925,6 +876,41 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
         mixin.mounted?.call(cpi) // first mount — not a rerender
         mixin.mounted?.call(cpi) // second mount (v-if re-toggle) — counts as rerender
 
+        expect(getAll()[0].mountCount).toBe(2)
+        expect(getAll()[0].rerenders).toBe(1)
+    })
+})
+
+describe('setupRenderRegistry — reset() preserves mountCount', () => {
+    it('reset() does NOT zero mountCount — mounts are page-lifetime data', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(500)
+        mixin.mounted?.call(cpi)
+        expect(getAll()[0].mountCount).toBe(1)
+
+        reset()
+
+        // mountCount survives — still reflects the page lifetime
+        expect(getAll()[0].mountCount).toBe(1)
+        // But rerenders and timing are cleared
+        expect(getAll()[0].rerenders).toBe(0)
+        expect(getAll()[0].totalMs).toBe(0)
+    })
+
+    it('a component that re-mounts after reset() gets mountCount 2 (not 1)', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(501)
+        mixin.mounted?.call(cpi) // mountCount = 1
+        reset()
+        mixin.mounted?.call(cpi) // mountCount = 2 (re-mount after reset)
+
+        // mountCount = 2 means it re-mounted → counts as a rerender
         expect(getAll()[0].mountCount).toBe(2)
         expect(getAll()[0].rerenders).toBe(1)
     })

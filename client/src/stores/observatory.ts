@@ -88,7 +88,6 @@ export interface RenderEntry {
     element?: string
     mountCount: number
     rerenders: number
-    navigationRenders: number
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
@@ -141,7 +140,6 @@ function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[]
     return value
         ? value.map((item) => ({
               ...item,
-              navigationRenders: Number.isFinite(item.navigationRenders) ? item.navigationRenders : 0,
           }))
         : []
 }

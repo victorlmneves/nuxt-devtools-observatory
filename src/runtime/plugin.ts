@@ -1,4 +1,5 @@
 import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig, useRouter } from '#app'
+import { nextTick } from 'vue'
 import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
 import { setupComposableRegistry } from './composables/composable-registry'
@@ -72,7 +73,10 @@ export default defineNuxtPlugin(() => {
     const provideInjectRegistry = setupProvideInjectRegistry()
     const composableRegistry = setupComposableRegistry()
     const renderRegistry = setupRenderRegistry(nuxtApp, {
-        isHydrating: () => nuxtApp.isHydrating ?? false,
+        // Only flag as hydration when the page was actually server-rendered.
+        // nuxtApp.isHydrating is true on ALL initial mounts (including CSR-only),
+        // so we gate on payload.serverRendered to avoid false positives.
+        isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
     })
     const transitionRegistry = setupTransitionRegistry()
 
@@ -154,18 +158,24 @@ export default defineNuxtPlugin(() => {
         // no new setup() has run yet, so clearing here is safe and race-free.
         // page:start (Suspense.onPending) fires AFTER synchronous setup() runs,
         // which causes clear() to wipe entries that were just registered.
-        router.beforeEach(() => {
+        router.beforeEach((_to: ReturnType<typeof useRouter>['currentRoute']['value'], from: ReturnType<typeof useRouter>['currentRoute']['value']) => {
+            // Skip reset on the very first navigation (initial page load has no from route).
+            // On subsequent navigations, reset per-page state so stale counts don't carry over.
+            if (!from || from.name === undefined) {
+                return
+            }
+
             renderRegistry.reset()
             ;(provideInjectRegistry as { clear?: () => void }).clear?.()
             composableRegistry.clear()
         })
 
         // afterEach fires after the new route is fully committed and rendered.
-        // Safe to stamp the route and broadcast the fresh snapshot.
+        // Use nextTick so persistent component updated() hooks have flushed
+        // before we broadcast — otherwise rerenders shows 0 on navigation.
         router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
             composableRegistry.setRoute(to.path ?? '/')
-            renderRegistry.markNavigation()
-            broadcastAll()
+            nextTick(() => broadcastAll())
         })
     }
 
