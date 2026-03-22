@@ -4,7 +4,7 @@ Nuxt DevTools extension providing five missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology with missing-provider detection
-- **Composable Tracker** — live view of active composables, their reactive state, and leak detection
+- **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, and inline value editing
 - **Render Heatmap** — component tree colour-coded by render frequency and duration
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 
@@ -58,16 +58,12 @@ client over the HMR WebSocket.
 
 ### provide/inject Graph
 
-[![provide/inject Graph](./docs/screenshots/provide-inject-graph.png)](./docs/screenshots/provide-inject-graph.png)
+[![provide/inject Graph](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/provide-inject-graph.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/provide-inject-graph.png)
 
 A Vite plugin wraps `provide()` and `inject()` calls with annotated versions that
 carry file and line metadata. At runtime, a `findProvider()` function walks
 `instance.parent` chains to identify which ancestor provided each key.
-Any `inject()` that resolves to `undefined` is flagged immediately.
-
-**Current state:** The graph shows the full provider/injector topology and highlights
-missing providers as red nodes. Clickable keys display their associated value; deep
-object expand/collapse is under active development.
+Any `inject()` that resolves to `undefined` is flagged immediately as a red node.
 
 **Known gaps:**
 
@@ -80,43 +76,56 @@ object expand/collapse is under active development.
 
 ### Composable Tracker
 
-[![Composable Tracker](./docs/screenshots/composable-tracker.png)](./docs/screenshots/composable-tracker.png)
+[![Composable Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/composable-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/composable-tracker.png)
 
 A Vite plugin detects all `useXxx()` calls matching Vue's naming convention and
-wraps them with a tracking proxy that:
+wraps them with a tracking shim (`__trackComposable`) that:
 
 1. Temporarily replaces `window.setInterval`/`clearInterval` during setup to capture
    any intervals started inside the composable
-2. Wraps `watch()` calls to track whether stop functions are called on unmount
-3. Snapshots returned `ref` and `computed` values for the live state panel
-4. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
+2. Tracks new Vue effects (watchers) added to the component scope during setup
+3. Snapshots returned `ref`, `computed`, and `reactive` values for the live state panel,
+   keeping live references so values update in real time without polling
+4. Detects shared (global) state by comparing object identity across multiple instances
+   of the same composable — keys backed by the same reference are marked as global
+5. Records a change history (capped at 50 events) via `watchEffect`, capturing which
+   key changed, its new value, and a `performance.now()` timestamp
+6. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
 
-**Current state:** `ref` and `computed` snapshots, watcher tracking, interval tracking,
-and leak detection are all working. The panel shows active composable instances with
-their current reactive values.
+The panel provides:
+
+- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search
+  across composable name, source file, ref key names, and ref values
+- **Inline ref chip preview** — up to three reactive values shown on the card without
+  expanding, with distinct styling for `ref`, `computed`, and `reactive` types
+- **Global state badges** — keys shared across instances are highlighted in amber with
+  a `global` badge and an explanatory banner when expanded
+- **Change history** — a scrollable log of the last 50 value mutations, showing the key,
+  new value, and relative timestamp
+- **Lifecycle summary** — shows whether `onMounted`/`onUnmounted` were registered and
+  whether watchers and intervals were properly cleaned up
+- **Context section** — source file, component UID, route, watcher count, and interval count
+- **Reverse lookup** — clicking any ref key opens a panel listing every other composable
+  instance that exposes a key with the same name, with its composable name, file, and route
+- **Inline value editing** — writable `ref` values have an `edit` button; clicking opens
+  a JSON textarea that applies the new value directly to the live ref in the running app,
+  with the change reflected immediately in the history log
 
 **Known gaps:**
 
-- `reactive()` objects are not yet included in state snapshots
-- No per-instance parent component/page link in the UI (tracking data exists but isn't surfaced)
-- No value change history or timeline — values show current state only
-- No global-vs-local state distinction on composable entries
-- No search or filter by composable name or reactive value
-- No reverse lookup: clicking a value does not yet reveal which components consume it
-- No inline value editing for live testing without recompiling
+- Search covers ref key names and serialised values but does not search inside nested
+  object properties of `reactive` values
+- The reverse lookup matches by key name only, not by object identity — two unrelated
+  composables that both return a key named `count` will appear as consumers of each other
 
 ### Render Heatmap
 
-[![Render Heatmap](./docs/screenshots/render-heatmap.png)](./docs/screenshots/render-heatmap.png)
+[![Render Heatmap](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)
 
 Uses Vue's built-in `renderTriggered` mixin hook and `app.config.performance = true`.
 A `PerformanceObserver` reads Vue's native `vue-component-render-start/end` marks for
 accurate duration measurement. Component bounding boxes are captured via
 `$el.getBoundingClientRect()` for the DOM overlay mode.
-
-**Current state:** Render counts and durations are tracked. Components exceeding
-`heatmapThreshold` renders are highlighted in the overlay. The configurable threshold
-is exposed in `nuxt.config`.
 
 **Known gaps — accuracy (priority):**
 
@@ -136,7 +145,7 @@ is exposed in `nuxt.config`.
 
 ### Transition Tracker
 
-[![Transition Tracker](./docs/screenshots/transition-tracker.png)](./docs/screenshots/transition-tracker.png)
+[![Transition Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)
 
 A Vite plugin intercepts `import ... from 'vue'` in user code and serves a virtual
 proxy module that overrides the `Transition` export with an instrumented wrapper.
@@ -179,9 +188,6 @@ const result = useMyComposable()
 
 ## Roadmap
 
-The following improvements are planned across the three main panels. Contributions
-are welcome — see [Development](#development) below.
-
 ### provide/inject Graph
 
 - [ ] Clickable key → expand/collapse deep object values
@@ -194,13 +200,8 @@ are welcome — see [Development](#development) below.
 
 ### Composable Tracker
 
-- [ ] Include `reactive()` objects in state snapshots
-- [ ] Link each instance to its parent component/page in the UI
-- [ ] Value change history and timeline for debugging reactivity over time
-- [ ] Global-vs-local state indicator per composable entry
-- [ ] Search and filter by composable name or reactive value
-- [ ] Reverse lookup: click a value to see which components consume it
-- [ ] Inline value editing for live testing without recompiling
+- [ ] Reverse lookup by object identity rather than key name only
+- [ ] Deep search inside nested `reactive` object properties
 
 ### Render Heatmap
 
