@@ -81,6 +81,14 @@ export interface ComposableEntry {
     route?: string
 }
 
+export interface RenderEvent {
+    kind: 'mount' | 'update'
+    t: number
+    durationMs: number
+    triggerKey?: string
+    route: string
+}
+
 export interface RenderEntry {
     uid: number
     name: string
@@ -91,10 +99,12 @@ export interface RenderEntry {
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
+    timeline: RenderEvent[]
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
     parentUid?: number
     isPersistent: boolean
     isHydrationMount: boolean
+    route: string
 }
 
 export interface TransitionEntry {

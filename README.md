@@ -4,8 +4,8 @@ Nuxt DevTools extension providing five missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology with missing-provider detection
-- **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, and inline value editing
-- **Render Heatmap** — component tree colour-coded by render frequency and duration
+- **Composable Tracker** — live view of active composables, their reactive state, and leak detection
+- **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 
 ## Installation
@@ -58,12 +58,16 @@ client over the HMR WebSocket.
 
 ### provide/inject Graph
 
-[![provide/inject Graph](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/provide-inject-graph.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/provide-inject-graph.png)
+[![provide/inject Graph](./docs/screenshots/provide-inject-graph.png)](./docs/screenshots/provide-inject-graph.png)
 
 A Vite plugin wraps `provide()` and `inject()` calls with annotated versions that
 carry file and line metadata. At runtime, a `findProvider()` function walks
 `instance.parent` chains to identify which ancestor provided each key.
-Any `inject()` that resolves to `undefined` is flagged immediately as a red node.
+Any `inject()` that resolves to `undefined` is flagged immediately.
+
+**Current state:** The graph shows the full provider/injector topology and highlights
+missing providers as red nodes. Clickable keys display their associated value; deep
+object expand/collapse is under active development.
 
 **Known gaps:**
 
@@ -76,76 +80,84 @@ Any `inject()` that resolves to `undefined` is flagged immediately as a red node
 
 ### Composable Tracker
 
-[![Composable Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/composable-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/composable-tracker.png)
+[![Composable Tracker](./docs/screenshots/composable-tracker.png)](./docs/screenshots/composable-tracker.png)
 
 A Vite plugin detects all `useXxx()` calls matching Vue's naming convention and
-wraps them with a tracking shim (`__trackComposable`) that:
+wraps them with a tracking proxy that:
 
 1. Temporarily replaces `window.setInterval`/`clearInterval` during setup to capture
    any intervals started inside the composable
-2. Tracks new Vue effects (watchers) added to the component scope during setup
-3. Snapshots returned `ref`, `computed`, and `reactive` values for the live state panel,
-   keeping live references so values update in real time without polling
-4. Detects shared (global) state by comparing object identity across multiple instances
-   of the same composable — keys backed by the same reference are marked as global
-5. Records a change history (capped at 50 events) via `watchEffect`, capturing which
-   key changed, its new value, and a `performance.now()` timestamp
-6. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
+2. Wraps `watch()` calls to track whether stop functions are called on unmount
+3. Snapshots returned `ref` and `computed` values for the live state panel
+4. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
 
-The panel provides:
-
-- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search
-  across composable name, source file, ref key names, and ref values
-- **Inline ref chip preview** — up to three reactive values shown on the card without
-  expanding, with distinct styling for `ref`, `computed`, and `reactive` types
-- **Global state badges** — keys shared across instances are highlighted in amber with
-  a `global` badge and an explanatory banner when expanded
-- **Change history** — a scrollable log of the last 50 value mutations, showing the key,
-  new value, and relative timestamp
-- **Lifecycle summary** — shows whether `onMounted`/`onUnmounted` were registered and
-  whether watchers and intervals were properly cleaned up
-- **Context section** — source file, component UID, route, watcher count, and interval count
-- **Reverse lookup** — clicking any ref key opens a panel listing every other composable
-  instance that exposes a key with the same name, with its composable name, file, and route
-- **Inline value editing** — writable `ref` values have an `edit` button; clicking opens
-  a JSON textarea that applies the new value directly to the live ref in the running app,
-  with the change reflected immediately in the history log
+**Current state:** `ref` and `computed` snapshots, watcher tracking, interval tracking,
+and leak detection are all working. The panel shows active composable instances with
+their current reactive values.
 
 **Known gaps:**
 
-- Search covers ref key names and serialised values but does not search inside nested
-  object properties of `reactive` values
-- The reverse lookup matches by key name only, not by object identity — two unrelated
-  composables that both return a key named `count` will appear as consumers of each other
+- `reactive()` objects are not yet included in state snapshots
+- No per-instance parent component/page link in the UI (tracking data exists but isn't surfaced)
+- No value change history or timeline — values show current state only
+- No global-vs-local state distinction on composable entries
+- No search or filter by composable name or reactive value
+- No reverse lookup: clicking a value does not yet reveal which components consume it
+- No inline value editing for live testing without recompiling
 
 ### Render Heatmap
 
-[![Render Heatmap](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)
+[![Render Heatmap](./docs/screenshots/render-heatmap.png)](./docs/screenshots/render-heatmap.png)
 
 Uses Vue's built-in `renderTriggered` mixin hook and `app.config.performance = true`.
-A `PerformanceObserver` reads Vue's native `vue-component-render-start/end` marks for
-accurate duration measurement. Component bounding boxes are captured via
-`$el.getBoundingClientRect()` for the DOM overlay mode.
+Accurate duration is measured by bracketing each `beforeMount`/`mounted` and
+`beforeUpdate`/`updated` cycle with `performance.now()` timestamps.
+Component bounding boxes are captured via `$el.getBoundingClientRect()` for the DOM
+overlay mode.
 
-**Known gaps — accuracy (priority):**
+Each `RenderEntry` carries a `timeline: RenderEvent[]` (capped at 100 events, newest
+last). Every mount and update cycle appends an event recording:
 
-- No unique instance ID per component; navigating back and forth between pages inflates
-  counts for components that did not actually re-render
-- No mechanism to mark persistent or layout components as excluded from
-  navigation-triggered count increments
-- Client-side hydration renders of unchanged SSR components are currently counted
+- `kind` — `mount` or `update`
+- `t` — `performance.now()` timestamp
+- `durationMs` — measured render duration
+- `triggerKey` — the reactive dep that caused the update (when `renderTriggered` fired
+  before `updated`), formatted as `type: key`
+- `route` — the route path at the time of the render
 
-**Known gaps — usability:**
+A `route` field on each entry records which route the component was first seen on.
+`setRoute()` is called by the plugin on every `router.afterEach` so new entries and
+timeline events are always stamped with the correct path.
 
-- No render timeline or history — only the cumulative count is shown
-- No filter by page or component name
-- No jump-to-component shortcut from a heatmap entry
-- The `renderTriggered` event key (which prop/state triggered the render) is captured
-  but not yet surfaced in the UI
+**Persistent component fix:** layout and persistent components (those that survive
+`reset()` and are flagged `isPersistent: true`) previously inflated render counts on
+every navigation because their `beforeMount`/`mounted` cycle fired again as Vue
+re-attached them to the new page. The registry now detects this case and skips both
+the duration recording and the timeline event for the navigation re-attach, while still
+counting and recording genuine reactive updates that fire after navigation.
+
+The panel provides:
+
+- **Route filter** — a dropdown in the toolbar listing every route seen across all
+  component entries and timeline events; selecting one prunes the component tree to
+  only show components that were active on that route
+- **Render timeline** — in the detail panel, the last 30 events for the selected
+  component showing kind, relative timestamp, duration, trigger key, and route
+- **Trigger keys** — surfaced both in the existing triggers list and inline in each
+  timeline event
+- **Persistent and hydration badges** — `isPersistent` and `isHydrationMount` shown
+  as pills in the tree row and the detail panel
+
+**Known gaps:**
+
+- No jump-to-component shortcut from a heatmap entry to the component in the DevTools
+  file tree
+- The route filter shows components active on a route but cannot hide persistent
+  components (they appear on every route by definition)
 
 ### Transition Tracker
 
-[![Transition Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)
+[![Transition Tracker](./docs/screenshots/transition-tracker.png)](./docs/screenshots/transition-tracker.png)
 
 A Vite plugin intercepts `import ... from 'vue'` in user code and serves a virtual
 proxy module that overrides the `Transition` export with an instrumented wrapper.
@@ -188,6 +200,9 @@ const result = useMyComposable()
 
 ## Roadmap
 
+The following improvements are planned across the three main panels. Contributions
+are welcome — see [Development](#development) below.
+
 ### provide/inject Graph
 
 - [ ] Clickable key → expand/collapse deep object values
@@ -205,13 +220,7 @@ const result = useMyComposable()
 
 ### Render Heatmap
 
-- [ ] Per-instance unique ID to avoid double-counting on navigation
-- [ ] Persistent/layout component exclusion flag
-- [ ] Skip counting client-side hydration renders of unchanged SSR components
-- [ ] Render timeline / history view
-- [ ] Filter by page or component name
-- [ ] Jump-to-component shortcut from heatmap entries
-- [ ] Surface the `renderTriggered` key in the UI to show what caused each render
+- [ ] Jump-to-component shortcut from heatmap entries to the DevTools file tree
 
 ## Development
 

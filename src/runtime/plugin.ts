@@ -185,6 +185,7 @@ export default defineNuxtPlugin(() => {
         // before we broadcast — otherwise rerenders shows 0 on navigation.
         router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
             composableRegistry.setRoute(to.path ?? '/')
+            renderRegistry.setRoute(to.path ?? '/')
             nextTick(() => broadcastAll())
         })
     }
