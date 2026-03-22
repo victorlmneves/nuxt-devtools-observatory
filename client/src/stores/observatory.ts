@@ -29,6 +29,8 @@ export interface ProvideEntry {
     isReactive: boolean
     valueSnapshot: unknown
     line: number
+    scope: 'global' | 'layout' | 'component'
+    isShadowing: boolean
 }
 
 export interface InjectEntry {

@@ -5,9 +5,21 @@ import { useObservatoryData, type InjectEntry, type ProvideEntry } from '../stor
 interface TreeNodeData {
     id: string
     label: string
+    componentName: string
     type: 'provider' | 'consumer' | 'both' | 'error'
-    provides: Array<{ key: string; val: string; raw: unknown; reactive: boolean; complex: boolean }>
-    injects: Array<{ key: string; from: string | null; ok: boolean }>
+    provides: Array<{
+        key: string
+        val: string
+        raw: unknown
+        reactive: boolean
+        complex: boolean
+        scope: 'global' | 'layout' | 'component'
+        isShadowing: boolean
+        /** UIDs of components that inject this key */
+        consumerUids: number[]
+        consumerNames: string[]
+    }>
+    injects: Array<{ key: string; from: string | null; fromName: string | null; ok: boolean }>
     children: TreeNodeData[]
 }
 
@@ -43,7 +55,19 @@ function nodeColor(node: TreeNodeData): string {
 function matchesFilter(node: TreeNodeData, filter: string): boolean {
     if (filter === 'all') return true
     if (filter === 'warn') return node.injects.some((entry) => !entry.ok)
+    if (filter === 'shadow') return node.provides.some((entry) => entry.isShadowing)
     return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
+}
+
+function matchesSearch(node: TreeNodeData, query: string): boolean {
+    if (!query) return true
+    const q = query.toLowerCase()
+    return (
+        node.label.toLowerCase().includes(q) ||
+        node.componentName.toLowerCase().includes(q) ||
+        node.provides.some((p) => p.key.toLowerCase().includes(q)) ||
+        node.injects.some((i) => i.key.toLowerCase().includes(q))
+    )
 }
 
 /**
@@ -137,6 +161,7 @@ const nodes = computed<TreeNodeData[]>(() => {
         const created: TreeNodeData = {
             id,
             label: basename(entry.componentFile),
+            componentName: entry.componentName ?? basename(entry.componentFile),
             type: 'consumer',
             provides: [],
             injects: [],
@@ -148,14 +173,36 @@ const nodes = computed<TreeNodeData[]>(() => {
         return created
     }
 
+    // Build a lookup: key → list of inject entries (to compute consumer lists)
+    const injectsByKey = new Map<string, InjectEntry[]>()
+    for (const entry of provideInject.value.injects) {
+        const list = injectsByKey.get(entry.key) ?? []
+        list.push(entry)
+        injectsByKey.set(entry.key, list)
+    }
+
+    // Build a lookup: uid → componentName for resolvedFrom display
+    const nameByUid = new Map<number, string>()
+    for (const entry of provideInject.value.provides) {
+        nameByUid.set(entry.componentUid, entry.componentName)
+    }
+    for (const entry of provideInject.value.injects) {
+        nameByUid.set(entry.componentUid, entry.componentName)
+    }
+
     for (const entry of provideInject.value.provides) {
         const node = ensureNode(entry)
+        const consumers = injectsByKey.get(entry.key) ?? []
         node.provides.push({
             key: entry.key,
             val: formatValuePreview(entry.valueSnapshot),
             raw: entry.valueSnapshot,
             reactive: entry.isReactive,
             complex: isComplexValue(entry.valueSnapshot),
+            scope: entry.scope ?? 'component',
+            isShadowing: entry.isShadowing ?? false,
+            consumerUids: consumers.map((c) => c.componentUid),
+            consumerNames: consumers.map((c) => c.componentName),
         })
     }
 
@@ -164,6 +211,7 @@ const nodes = computed<TreeNodeData[]>(() => {
         node.injects.push({
             key: entry.key,
             from: entry.resolvedFromFile ?? null,
+            fromName: entry.resolvedFromUid !== undefined ? (nameByUid.get(entry.resolvedFromUid) ?? null) : null,
             ok: entry.resolved,
         })
     }
@@ -197,6 +245,7 @@ const nodes = computed<TreeNodeData[]>(() => {
 })
 
 const activeFilter = ref('all')
+const searchQuery = ref('')
 const selectedNode = ref<TreeNodeData | null>(null)
 const expandedProvideValues = ref<Set<string>>(new Set())
 
@@ -251,7 +300,7 @@ const visibleNodes = computed<TreeNodeData[]>(() => {
             const visibleChildren = node.children
                 .map((child) => pruned.get(child) ?? null)
                 .filter((child): child is TreeNodeData => child !== null)
-            const selfMatches = matchesFilter(node, activeFilter.value)
+            const selfMatches = matchesFilter(node, activeFilter.value) && matchesSearch(node, searchQuery.value)
 
             if (!selfMatches && !visibleChildren.length) {
                 pruned.set(node, null)
@@ -368,9 +417,17 @@ const edges = computed<Edge[]>(() => {
             >
                 {{ key }}
             </button>
-            <button style="margin-left: auto" :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = 'warn'">
-                warnings only
+            <button
+                style="margin-left: auto"
+                :class="{ 'danger-active': activeFilter === 'shadow' }"
+                @click="activeFilter = activeFilter === 'shadow' ? 'all' : 'shadow'"
+            >
+                shadowed
             </button>
+            <button :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = activeFilter === 'warn' ? 'all' : 'warn'">
+                warnings
+            </button>
+            <input v-model="searchQuery" type="search" placeholder="search component or key…" style="max-width: 200px" />
         </div>
 
         <div class="split">
@@ -440,6 +497,7 @@ const edges = computed<Edge[]>(() => {
                             <div class="row-main">
                                 <span class="mono text-sm row-key">{{ entry.key }}</span>
                                 <span class="mono text-sm muted row-value-preview" :title="entry.val">{{ entry.val }}</span>
+                                <span class="badge scope-badge" :class="`scope-${entry.scope}`">{{ entry.scope }}</span>
                                 <span class="badge" :class="entry.reactive ? 'badge-ok' : 'badge-gray'">
                                     {{ entry.reactive ? 'reactive' : 'static' }}
                                 </span>
@@ -451,6 +509,15 @@ const edges = computed<Edge[]>(() => {
                                     {{ expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index)) ? 'hide' : 'view' }}
                                 </button>
                             </div>
+                            <!-- Shadowing warning -->
+                            <div v-if="entry.isShadowing" class="row-warning">shadows a parent provide with the same key</div>
+                            <!-- Consumer list -->
+                            <div v-if="entry.consumerNames.length" class="row-consumers">
+                                <span class="muted text-sm">used by:</span>
+                                <span v-for="name in entry.consumerNames" :key="name" class="consumer-chip mono">{{ name }}</span>
+                                <span v-if="!entry.consumerNames.length" class="muted text-sm">no consumers</span>
+                            </div>
+                            <div v-else class="muted text-sm" style="padding: 2px 0; font-size: 11px">no consumers detected</div>
                             <pre
                                 v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
                                 class="value-box"
@@ -476,8 +543,8 @@ const edges = computed<Edge[]>(() => {
                             <span class="mono text-sm row-key">{{ entry.key }}</span>
                             <span v-if="entry.ok" class="badge badge-ok">resolved</span>
                             <span v-else class="badge badge-err">no provider</span>
-                            <span class="mono muted text-sm row-from" :title="entry.from ?? 'undefined'">
-                                {{ entry.from ?? 'undefined' }}
+                            <span class="mono text-sm row-from" :class="entry.fromName ? '' : 'muted'" :title="entry.from ?? 'undefined'">
+                                {{ entry.fromName ?? entry.from ?? 'undefined' }}
                             </span>
                         </div>
                     </div>
@@ -685,11 +752,58 @@ const edges = computed<Edge[]>(() => {
 .provide-row {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     padding: 5px 8px;
     background: var(--bg2);
     border-radius: var(--radius);
     margin-bottom: 3px;
+}
+
+.row-warning {
+    font-size: 11px;
+    color: var(--amber);
+    padding: 2px 0;
+}
+
+.row-consumers {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+}
+
+.consumer-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--blue) 10%, var(--bg3));
+    border: 0.5px solid color-mix(in srgb, var(--blue) 30%, var(--border));
+    color: var(--text2);
+}
+
+.scope-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+.scope-global {
+    background: color-mix(in srgb, var(--amber) 15%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+}
+
+.scope-layout {
+    background: color-mix(in srgb, var(--purple) 15%, transparent);
+    border: 0.5px solid color-mix(in srgb, var(--purple) 40%, var(--border));
+    color: color-mix(in srgb, var(--purple) 80%, var(--text));
+}
+
+.scope-component {
+    background: var(--bg3);
+    border: 0.5px solid var(--border);
+    color: var(--text3);
 }
 
 .row-main {
