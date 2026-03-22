@@ -1,4 +1,4 @@
-import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig } from '#app'
+import { defineNuxtPlugin, useNuxtApp, useRuntimeConfig, useRouter } from '#app'
 import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
 import { setupComposableRegistry } from './composables/composable-registry'
@@ -49,6 +49,7 @@ function toSerializable(value: unknown, seen = new WeakSet<object>()): unknown {
         }
 
         seen.delete(value)
+
         return plain
     }
 
@@ -109,11 +110,13 @@ export default defineNuxtPlugin(() => {
 
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+
                 return
             }
 
             if (type === 'observatory:clear-composables') {
                 composableRegistry.clear()
+
                 // Push a fresh (now empty) snapshot back immediately
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
@@ -123,7 +126,10 @@ export default defineNuxtPlugin(() => {
         // Push a fresh snapshot to the SPA immediately when any tracked
         // composable's reactive state changes — no need to wait for the next poll.
         composableRegistry.onComposableChange(() => {
-            if (!lastMessageSource || !lastMessageOrigin) return
+            if (!lastMessageSource || !lastMessageOrigin) {
+                return
+            }
+
             lastMessageSource.postMessage(
                 {
                     type: 'observatory:snapshot',
@@ -139,23 +145,23 @@ export default defineNuxtPlugin(() => {
         broadcastAll()
     })
 
-    // Broadcast on every route change (client-side navigation)
-    if (import.meta.client && nuxtApp.vueApp.config.globalProperties.$router) {
-        nuxtApp.vueApp.config.globalProperties.$router.beforeEach((_to: unknown, _from: unknown, next: () => void) => {
+    if (import.meta.client) {
+        const router = useRouter()
+
+        // router.beforeEach fires BEFORE Vue renders anything for the new route —
+        // no new setup() has run yet, so clearing here is safe and race-free.
+        // page:start (Suspense.onPending) fires AFTER synchronous setup() runs,
+        // which causes clear() to wipe entries that were just registered.
+        router.beforeEach(() => {
             renderRegistry.reset()
             ;(provideInjectRegistry as { clear?: () => void }).clear?.()
-            // Clear composable history so each page starts with a fresh slate,
-            // matching the render heatmap behaviour. Leak detection still works
-            // because onUnmounted hooks run after beforeEach — any leaked watchers
-            // are detected and flagged before their entries are re-registered on
-            // the incoming route.
             composableRegistry.clear()
-            const toPath = (_to as { path?: string })?.path ?? '/'
-            composableRegistry.setRoute(toPath)
-            next()
         })
 
-        nuxtApp.vueApp.config.globalProperties.$router.afterEach(() => {
+        // afterEach fires after the new route is fully committed and rendered.
+        // Safe to stamp the route and broadcast the fresh snapshot.
+        router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
+            composableRegistry.setRoute(to.path ?? '/')
             renderRegistry.markNavigation()
             broadcastAll()
         })

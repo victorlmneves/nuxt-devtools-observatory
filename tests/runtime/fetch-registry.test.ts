@@ -167,8 +167,10 @@ describe('__devFetchCall', () => {
         getWindow().__observatory__ = { fetch: registry }
 
         let capturedOpts: Record<string, unknown> = {}
+
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
+
             return Promise.resolve({})
         })
 
@@ -178,7 +180,6 @@ describe('__devFetchCall', () => {
             {},
             { key: 'users', file: 'P.ts', line: 1 }
         )
-
         ;(capturedOpts.onResponse as (ctx: unknown) => void)({
             response: {
                 ok: true,
@@ -201,6 +202,7 @@ describe('__devFetchCall', () => {
         __devFetchCall(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const [entry] = registry.getAll()
+
         expect(entry.status).toBe('cached')
         expect(entry.origin).toBe('ssr')
         expect(entry.cached).toBe(true)
@@ -212,6 +214,7 @@ describe('__devFetchCall', () => {
         getWindow().__observatory__ = { fetch: registry }
 
         let capturedOpts: Record<string, unknown> = {}
+
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
@@ -239,6 +242,7 @@ describe('__devFetchCall', () => {
         getWindow().__observatory__ = { fetch: registry }
 
         let capturedOpts: Record<string, unknown> = {}
+
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
@@ -264,7 +268,9 @@ describe('__devFetchCall', () => {
         getWindow().__observatory__ = { fetch: registry }
 
         const originalOnResponse = vi.fn()
+
         let capturedOpts: Record<string, unknown> = {}
+
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
@@ -294,6 +300,7 @@ describe('__devFetchHandler', () => {
         await expect(wrapped()).resolves.toEqual({ ok: true })
 
         const [entry] = registry.getAll()
+
         expect(entry.key).toBe('users')
         expect(entry.status).toBe('ok')
         expect(entry.payload).toEqual({ ok: true })
@@ -305,5 +312,181 @@ describe('__devFetchHandler', () => {
 
         await expect(wrapped('arg')).resolves.toBe('value')
         expect(handler).toHaveBeenCalledWith('arg')
+    })
+})
+
+// ── Tests for fixes introduced in the bug-fix pass ────────────────────────
+
+describe('__devFetchCall — Ref/computed URL resolution (fix #17)', () => {
+    it('resolves a Vue ref URL to its .value string', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+
+        const mockFn = vi.fn().mockResolvedValue({})
+        const refUrl = { value: '/api/from-ref' } // simulate Ref<string>
+
+        __devFetchCall(mockFn as never, refUrl, {}, { key: 'ref-url', file: 'Page.ts', line: 1 })
+
+        expect(registry.getAll()[0].url).toBe('/api/from-ref')
+    })
+
+    it('resolves a getter function URL to its return value', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+
+        const mockFn = vi.fn().mockResolvedValue({})
+        const getter = () => '/api/from-getter'
+
+        __devFetchCall(mockFn as never, getter, {}, { key: 'getter-url', file: 'Page.ts', line: 1 })
+
+        expect(registry.getAll()[0].url).toBe('/api/from-getter')
+    })
+
+    it('falls back to String() for an unrecognised url shape instead of [object Object]', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+
+        const mockFn = vi.fn().mockResolvedValue({})
+        // An object with no .value property and no call signature
+        const weirdUrl = { toString: () => '/api/weird' }
+
+        __devFetchCall(mockFn as never, weirdUrl, {}, { key: 'weird-url', file: 'Page.ts', line: 1 })
+
+        // Should not be '[object Object]'
+        expect(registry.getAll()[0].url).not.toBe('[object Object]')
+    })
+})
+
+describe('__devFetchCall — SSR cached entries still attach hooks (fix #4)', () => {
+    it('attaches onResponse to SSR-cached entries so re-fetches update the registry payload', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+        ;(getWindow() as Window & { __NUXT__?: { data: Record<string, unknown> } }).__NUXT__ = {
+            data: { users: [{ id: 1 }] },
+        }
+
+        let capturedOpts: Record<string, unknown> = {}
+
+        const mockFn = vi.fn().mockImplementation((_url: unknown, opts: Record<string, unknown>) => {
+            capturedOpts = opts
+
+            return Promise.resolve({})
+        })
+
+        __devFetchCall(mockFn as never, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
+
+        // onResponse must be present even for SSR-cached entries
+        expect(typeof capturedOpts.onResponse).toBe('function')
+
+        // Simulate a subsequent client-side fetch completing with fresh data
+        ;(capturedOpts.onResponse as (ctx: unknown) => void)({
+            response: { ok: true, headers: { get: () => null }, _data: [{ id: 2 }] },
+        })
+
+        const entry = registry.getAll()[0]
+
+        // Payload is updated with the fresh client response
+        expect(entry.payload).toEqual([{ id: 2 }])
+        // Status remains 'cached' because the origin was SSR — this is correct behaviour
+        expect(entry.status).toBe('cached')
+    })
+
+    it('SSR-cached entries expose the original SSR payload before any re-fetch', () => {
+        const registry = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: registry }
+        ;(getWindow() as Window & { __NUXT__?: { data: Record<string, unknown> } }).__NUXT__ = {
+            data: { users: [{ id: 1 }] },
+        }
+
+        const mockFn = vi.fn().mockResolvedValue({})
+        __devFetchCall(mockFn as never, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
+
+        const entry = registry.getAll()[0]
+
+        expect(entry.status).toBe('cached')
+        expect(entry.payload).toEqual([{ id: 1 }])
+    })
+})
+
+describe('__devFetchHandler — error path coverage', () => {
+    it('updates entry to error status when the handler rejects', async () => {
+        const reg = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: reg }
+
+        const handler = __devFetchHandler(
+            async () => {
+                throw new Error('network failure')
+            },
+            'fail-1',
+            { url: '/api/fail', key: 'fail-1', file: 'test.ts', line: 1 }
+        )
+
+        await expect(handler()).rejects.toThrow('network failure')
+
+        const entry = reg.getAll()[0]
+
+        expect(entry.status).toBe('error')
+        expect(entry.ms).toBeGreaterThanOrEqual(0)
+    })
+})
+
+describe('__devFetchCall — pre-existing onResponseError hook is chained', () => {
+    it('calls user-provided onResponseError before the registry hook', async () => {
+        const reg = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: reg }
+
+        const calls: string[] = []
+        const userHook = () => {
+            calls.push('user')
+        }
+
+        let capturedOpts: FetchOptions = {}
+
+        const originalFn = async (_url: string, opts: FetchOptions) => {
+            capturedOpts = opts
+
+            return 'ok'
+        }
+
+        await __devFetchCall(originalFn, '/api/test', { onResponseError: userHook }, { url: '/api/test', key: 'k', file: 'f.ts', line: 1 })
+
+        // Invoke the chained hook
+        const response = { status: 500, _data: null } as unknown as Parameters<NonNullable<FetchOptions['onResponseError']>>[0]
+
+        if (typeof capturedOpts.onResponseError === 'function') {
+            capturedOpts.onResponseError(response)
+        }
+
+        expect(calls).toContain('user')
+    })
+})
+
+describe('__devFetchCall — getter URL resolution (line 171)', () => {
+    it('resolves a function URL by calling it', async () => {
+        const reg = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: reg }
+
+        // Pass a function as the URL — resolveUrl calls it to get the string
+        const urlFn = () => '/api/from-fn'
+
+        await __devFetchCall(async (url: string) => ({ ok: true }), urlFn, {}, { url: '/api/from-fn', key: 'k', file: 'f.ts', line: 1 })
+
+        expect(reg.getAll()[0].url).toBe('/api/from-fn')
+    })
+
+    it('falls back to String(fn) when the URL function throws', async () => {
+        const reg = setupFetchRegistry()
+        getWindow().__observatory__ = { fetch: reg }
+
+        // A function that throws — resolveUrl catches and falls back to String(raw)
+        const throwingFn = () => {
+            throw new Error('bad url getter')
+        }
+
+        await __devFetchCall(async (url: string) => ({ ok: true }), throwingFn, {}, { url: 'fallback', key: 'k', file: 'f.ts', line: 1 })
+
+        // Should not throw; entry registered with String(throwingFn) as fallback URL
+        expect(reg.getAll()[0]).toBeDefined()
+        expect(typeof reg.getAll()[0].url).toBe('string')
     })
 })

@@ -513,10 +513,6 @@ function typeBadgeClass(type: string) {
     color: color-mix(in srgb, var(--amber) 80%, var(--text));
     border: 0.5px solid color-mix(in srgb, var(--amber) 40%, var(--border));
 }
-    background: color-mix(in srgb, var(--purple) 15%, transparent);
-    color: var(--purple);
-    border: 0.5px solid color-mix(in srgb, var(--purple) 40%, var(--border));
-}
 
 .history-list {
     display: flex;

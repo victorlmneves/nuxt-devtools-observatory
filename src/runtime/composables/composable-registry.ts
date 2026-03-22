@@ -129,7 +129,18 @@ export function setupComposableRegistry() {
 
         liveRefs.set(id, refs)
         // Initialise the previous-value map so the first run doesn't log everything as "changed"
-        prevValues.set(id, Object.fromEntries(Object.entries(refs).map(([k, r]) => [k, JSON.stringify(unref(r)) ?? ''])))
+        prevValues.set(
+            id,
+            Object.fromEntries(
+                Object.entries(refs).map(([k, r]) => {
+                    try {
+                        return [k, JSON.stringify(unref(r)) ?? '']
+                    } catch {
+                        return [k, '']
+                    }
+                })
+            )
+        )
 
         const stop = watchEffect(() => {
             // Read every ref to subscribe — the effect re-runs when any changes.
@@ -272,38 +283,7 @@ export function setupComposableRegistry() {
         emit('composable:clear', {})
     }
 
-    /**
-     * Called after every navigation. Removes entries from the *previous* route
-     * that unmounted cleanly (no leak). Leaked entries are kept so the developer
-     * can see them even after navigating away from the page they originated on.
-     */
-    function clearPreviousRoute(previousRoute: string) {
-        for (const [id, entry] of entries.value.entries()) {
-            if (entry.route === previousRoute && entry.status === 'unmounted' && !entry.leak) {
-                liveRefWatchers.get(id)?.()
-                liveRefWatchers.delete(id)
-                liveRefs.delete(id)
-                rawRefs.delete(id)
-                prevValues.delete(id)
-                entryHistory.delete(id)
-                entries.value.delete(id)
-            }
-        }
-        emit('composable:clear', {})
-    }
-
-    return {
-        register,
-        registerLiveRefs,
-        registerRawRefs,
-        onComposableChange,
-        clear,
-        clearPreviousRoute,
-        setRoute,
-        getRoute,
-        update,
-        getAll,
-    }
+    return { register, registerLiveRefs, registerRawRefs, onComposableChange, clear, setRoute, getRoute, update, getAll }
 }
 
 // ── Dev shim called by Vite transform ─────────────────────────────────────

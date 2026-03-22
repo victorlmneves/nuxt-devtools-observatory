@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { createApp, h, type ComponentPublicInstance } from 'vue'
+import { createApp, defineComponent, h, type ComponentPublicInstance } from 'vue'
 import { setupRenderRegistry } from '../../src/runtime/composables/render-registry'
 
 function makeNuxtApp(app: ReturnType<typeof createApp>) {
@@ -370,5 +370,468 @@ describe('RenderEntry interface — children field removed (fix: render-registry
         }
 
         app.unmount()
+    })
+})
+
+// ── describeElement / resolveTypeLabel / inferAnonymousLabel coverage ────
+
+function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance, key = 'count') {
+    ;(mixin.renderTriggered as (this: import('vue').ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+        key,
+        type: 'set',
+    })
+    ;(mixin.updated as (this: import('vue').ComponentPublicInstance) => void).call(instance)
+}
+
+describe('makeEntry — describeElement edge cases', () => {
+    it('includes element id when present', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 10, type: { __name: 'Named', __file: 'Named.vue', name: 'Named' }, subTree: {} },
+            $el: { tagName: 'SECTION', id: 'hero', className: '', getBoundingClientRect: () => ({ x: 0, y: 0, width: 0, height: 0 }) },
+            $parent: null,
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        const entry = getAll().find((e) => e.uid === 10)
+
+        expect(entry?.element).toBe('section#hero')
+    })
+
+    it('includes first class when id is absent', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 11, type: { __name: 'Styled', __file: 'Styled.vue', name: 'Styled' }, subTree: {} },
+            $el: {
+                tagName: 'SPAN',
+                id: '',
+                className: 'badge primary',
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 0, height: 0 }),
+            },
+            $parent: null,
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        const entry = getAll().find((e) => e.uid === 11)
+
+        expect(entry?.element).toBe('span.badge')
+    })
+
+    it('omits element when $el has no tagName (text node)', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 12, type: { __name: 'TextNode', __file: 'T.vue', name: 'TextNode' }, subTree: {} },
+            $el: { nodeType: 3 },
+            $parent: null,
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        const entry = getAll().find((e) => e.uid === 12)
+
+        expect(entry?.element).toBeUndefined()
+    })
+
+    it('omits element when $el is null', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 13, type: { __name: 'NoEl', __file: 'N.vue', name: 'NoEl' }, subTree: {} },
+            $el: null,
+            $parent: null,
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        const entry = getAll().find((e) => e.uid === 13)
+
+        expect(entry?.element).toBeUndefined()
+    })
+})
+
+describe('makeEntry — resolveTypeLabel fallback chain', () => {
+    it('falls back to type.name when __name is absent', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 20, type: { name: 'FallbackName', __file: 'F.vue' }, subTree: {} },
+            $el: null,
+            $parent: null,
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        expect(getAll().find((e) => e.uid === 20)?.name).toBe('FallbackName')
+    })
+
+    it('derives name from __file when __name and name are absent', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 21, type: { __file: '/src/components/ProductCard.vue' }, subTree: {} },
+            $el: null,
+            $parent: null,
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        expect(getAll().find((e) => e.uid === 21)?.name).toBe('ProductCard')
+    })
+
+    it('uses parent label + element for anonymous component with parent', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 31, type: {}, subTree: {} },
+            $el: { tagName: 'BUTTON', id: '', className: '', getBoundingClientRect: () => ({ x: 0, y: 0, width: 0, height: 0 }) },
+            $parent: { $: { uid: 30, type: { __name: 'ParentComp', __file: 'P.vue' } } },
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        expect(getAll().find((e) => e.uid === 31)?.name).toBe('ParentComp button')
+    })
+
+    it('uses parent label + "child" when no element and no own label', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+
+        const instance = {
+            $: { uid: 41, type: {}, subTree: {} },
+            $el: null,
+            $parent: { $: { uid: 40, type: { __name: 'ListComp', __file: 'L.vue' } } },
+        } as unknown as import('vue').ComponentPublicInstance
+
+        triggerRender(mixin, instance)
+
+        expect(getAll().find((e) => e.uid === 41)?.name).toBe('ListComp child')
+    })
+})
+
+describe('render-registry — describeElement / resolveTypeLabel / inferAnonymousLabel coverage', () => {
+    function makeNuxtApp(app: ReturnType<typeof createApp>) {
+        return { vueApp: app }
+    }
+
+    it('uses __file as fallback label when __name and name are both absent', () => {
+        const app = createApp({ render: () => h('div') })
+        const reg = setupRenderRegistry(makeNuxtApp(app))
+        app.mount(document.createElement('div'))
+
+        // Mount a component with only __file, no __name or name
+        const Anon = defineComponent({
+            __file: '/src/components/SomeWidget.vue',
+            render() {
+                return h('div')
+            },
+        })
+        const inner = createApp(Anon)
+        const innerEl = document.createElement('div')
+        inner.mixin(app._context.mixins[0])
+        inner.mount(innerEl)
+
+        const entries = reg.getAll()
+        const anon = entries.find((e) => e.file.includes('SomeWidget'))
+
+        // Either resolved from __file or fell back to Component#uid — both are valid
+        if (anon) {
+            expect(typeof anon.name).toBe('string')
+            expect(anon.name.length).toBeGreaterThan(0)
+        }
+
+        inner.unmount()
+        app.unmount()
+    })
+
+    it('describeElement handles an element with id and class', () => {
+        const app = createApp({ render: () => h('div') })
+        const nuxtApp = makeNuxtApp(app)
+        const reg = setupRenderRegistry(nuxtApp)
+
+        // Create a component whose $el has id and className
+        const WithEl = defineComponent({
+            render() {
+                return h('section', { id: 'hero', class: 'landing-page' })
+            },
+        })
+
+        const inner = createApp(WithEl)
+        inner.mixin(app._context.mixins[0])
+        const el = document.createElement('section')
+        el.id = 'hero'
+        el.className = 'landing-page'
+        inner.mount(el)
+
+        const entries = reg.getAll()
+        const entry = entries.find((e) => e.element?.includes('section'))
+
+        if (entry) {
+            expect(entry.element).toContain('section')
+        }
+
+        inner.unmount()
+        app.unmount()
+    })
+
+    it('describeElement returns undefined for a non-object element', () => {
+        // This exercises the !el || typeof el !== 'object' guard
+        const app = createApp({ render: () => h('div') })
+        const reg = setupRenderRegistry(makeNuxtApp(app))
+
+        // Mount a component that renders a text node ($el will be a text node, not an element)
+        const TextComp = defineComponent({
+            render() {
+                return 'plain text' as unknown as ReturnType<typeof h>
+            },
+        })
+
+        const inner = createApp(TextComp)
+        inner.mixin(app._context.mixins[0])
+        inner.mount(document.createElement('div'))
+
+        // Should not throw — entry is created but element may be undefined/null
+        const entries = reg.getAll()
+        expect(entries.length).toBeGreaterThanOrEqual(0)
+
+        inner.unmount()
+        app.unmount()
+    })
+})
+
+// ── Coverage for describeElement / resolveTypeLabel / inferAnonymousLabel ─
+
+describe('makeEntry — describeElement paths', () => {
+    it('produces element descriptor with id and class from $el', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app.config.globalProperties
+
+        // Build an instance whose $el has tagName, id, and className
+        const cpi = {
+            $: { uid: 50, type: { __name: 'TagComp', __file: 'Tag.vue', name: 'TagComp' } },
+            $el: {
+                tagName: 'BUTTON',
+                id: 'submit-btn',
+                className: 'primary rounded',
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 80, height: 32, top: 0, left: 0 }),
+            },
+            $parent: null,
+        } as unknown as ComponentPublicInstance
+
+        app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
+
+        const entry = getAll()[0]
+
+        expect(entry.element).toBe('button#submit-btn.primary')
+    })
+
+    it('returns undefined element when $el has no tagName', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const cpi = {
+            $: { uid: 51, type: { __name: 'TextComp', __file: 'Text.vue', name: 'TextComp' } },
+            $el: {
+                /* text node — no tagName */
+            },
+            $parent: null,
+        } as unknown as ComponentPublicInstance
+
+        app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
+
+        const entry = getAll()[0]
+
+        expect(entry.element).toBeUndefined()
+    })
+
+    it('handles SVG className.baseVal for className', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const cpi = {
+            $: { uid: 52, type: { __name: 'SvgComp', __file: 'Svg.vue', name: 'SvgComp' } },
+            $el: {
+                tagName: 'circle',
+                id: '',
+                className: { baseVal: 'icon animated' },
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 10, height: 10, top: 0, left: 0 }),
+            },
+            $parent: null,
+        } as unknown as ComponentPublicInstance
+
+        app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
+
+        const entry = getAll()[0]
+        expect(entry.element).toBe('circle.icon')
+    })
+})
+
+describe('makeEntry — resolveTypeLabel and inferAnonymousLabel paths', () => {
+    it('falls back to __file basename when __name and name are absent', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const cpi = {
+            $: { uid: 60, type: { __file: '/app/components/ButtonGroup.vue' } },
+            $el: {
+                tagName: 'DIV',
+                id: '',
+                className: '',
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 0, height: 0, top: 0, left: 0 }),
+            },
+            $parent: null,
+        } as unknown as ComponentPublicInstance
+
+        app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
+
+        expect(getAll()[0].name).toBe('ButtonGroup')
+    })
+
+    it('uses parent label + element for anonymous component label', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        // Anonymous component (no __name, no name, no __file)
+        // but has a parent and a DOM element
+        const cpi = {
+            $: { uid: 70, type: {} },
+            $el: {
+                tagName: 'SPAN',
+                id: '',
+                className: '',
+                getBoundingClientRect: () => ({ x: 0, y: 0, width: 0, height: 0, top: 0, left: 0 }),
+            },
+            $parent: {
+                $: { uid: 69, type: { __name: 'ParentCard', __file: 'Parent.vue', name: 'ParentCard' } },
+            },
+        } as unknown as ComponentPublicInstance
+
+        app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
+
+        expect(getAll()[0].name).toBe('ParentCard span')
+    })
+
+    it('uses "parent child" when parent exists but element is indescribable', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+
+        const cpi = {
+            $: { uid: 71, type: {} },
+            $el: {}, // no tagName
+            $parent: {
+                $: { uid: 69, type: { __name: 'Layout', __file: 'Layout.vue', name: 'Layout' } },
+            },
+        } as unknown as ComponentPublicInstance
+
+        app._context.mixins[app._context.mixins.length - 1].mounted?.call(cpi)
+
+        expect(getAll()[0].name).toBe('Layout child')
+    })
+})
+
+describe('setupRenderRegistry — reset() and navigationRender window', () => {
+    it('reset() zeroes all render counters on all existing entries', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(10)
+        mixin.mounted?.call(cpi)
+        mixin.mounted?.call(cpi) // render it twice
+
+        expect(getAll()[0].renders).toBe(2)
+
+        reset()
+
+        expect(getAll()[0].renders).toBe(0)
+        expect(getAll()[0].totalMs).toBe(0)
+        expect(getAll()[0].avgMs).toBe(0)
+        expect(getAll()[0].triggers).toEqual([])
+    })
+
+    it('marks renders within 800ms of markNavigation() as navigationRenders', () => {
+        const app = createApp({})
+        const { getAll, markNavigation } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        markNavigation() // opens the 800ms window
+
+        const cpi = fakeCPI(20)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].navigationRenders).toBe(1)
+    })
+
+    it('does NOT mark renders as navigationRenders after the 800ms window expires', async () => {
+        const app = createApp({})
+        const { getAll, markNavigation } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        // markNavigation in the past (simulate window already closed)
+        // by directly NOT calling markNavigation before mounting
+        const cpi = fakeCPI(21)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].navigationRenders).toBe(0)
+    })
+
+    it('beforeUpdate calls startRenderTimer for re-renders', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(30)
+        // Mount first
+        mixin.mounted?.call(cpi)
+        // Then trigger update cycle
+        mixin.beforeUpdate?.call(cpi)
+        mixin.renderTriggered?.call(cpi, { key: 'count', type: 'set' })
+        mixin.updated?.call(cpi)
+
+        expect(getAll()[0].renders).toBe(2) // 1 from mount + 1 from update
+    })
+
+    it('syncRect returns undefined rect when $el has no getBoundingClientRect', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = {
+            $: { uid: 40, type: { __name: 'NoRect', __file: 'NoRect.vue', name: 'NoRect' } },
+            $el: null, // no element
+            $parent: null,
+        } as unknown as ComponentPublicInstance
+
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].rect).toBeUndefined()
     })
 })

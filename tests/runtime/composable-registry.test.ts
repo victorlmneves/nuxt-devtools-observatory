@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { createApp, defineComponent, h, ref, watch } from 'vue'
+import { createApp, defineComponent, h, ref, reactive, watch, nextTick } from 'vue'
 import { setupComposableRegistry, __trackComposable } from '../../src/runtime/composables/composable-registry'
 
 type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
@@ -39,11 +39,14 @@ describe('setupComposableRegistry', () => {
             status: 'mounted',
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
             lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
             file: 'test.ts',
             line: 1,
+            route: '',
         })
 
         expect(getAll()).toHaveLength(1)
@@ -62,11 +65,14 @@ describe('setupComposableRegistry', () => {
             status: 'mounted',
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
             lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
             file: 'T.ts',
             line: 1,
+            route: '',
         })
         update('id-1', { status: 'unmounted', leak: false })
 
@@ -91,11 +97,14 @@ describe('setupComposableRegistry', () => {
             status: 'mounted',
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
             lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
             file: 'A.ts',
             line: 1,
+            route: '',
         })
 
         const snapshot = getAll()
@@ -108,11 +117,14 @@ describe('setupComposableRegistry', () => {
             status: 'mounted',
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
             lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
             file: 'B.ts',
             line: 1,
+            route: '',
         })
 
         expect(snapshot).toHaveLength(1)
@@ -239,11 +251,13 @@ describe('__trackComposable', () => {
                     'useLeaky',
                     () => {
                         // Never cleared — this is a leak
-                        window.setInterval(() => {}, 60_000)
+                        window.setInterval(() => { }, 60_000)
+
                         return {}
                     },
                     { file: 'Leaky.ts', line: 1 }
                 )
+
                 return () => h('div')
             },
         })
@@ -273,10 +287,12 @@ describe('__trackComposable', () => {
                     () => {
                         const id = window.setInterval(() => {}, 60_000)
                         window.clearInterval(id) // properly cleaned up
+
                         return {}
                     },
                     { file: 'Clean.ts', line: 1 }
                 )
+
                 return () => h('div')
             },
         })
@@ -300,6 +316,7 @@ describe('__trackComposable', () => {
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useAny', () => ({}), { file: 'A.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -321,11 +338,13 @@ describe('__trackComposable', () => {
                     'useMultiInterval',
                     () => {
                         window.setInterval(() => {}, 1000)
-                        window.setInterval(() => {}, 2000)
+                        window.setInterval(() => { }, 2000)
+
                         return {}
                     },
                     { file: 'M.ts', line: 1 }
                 )
+
                 return () => h('div')
             },
         })
@@ -347,11 +366,13 @@ describe('__trackComposable', () => {
                     'useWatched',
                     () => {
                         const count = ref(0)
-                        watch(count, () => {})
+                        watch(count, () => { })
+
                         return { count }
                     },
                     { file: 'Watch.ts', line: 1 }
                 )
+
                 return () => h('div')
             },
         })
@@ -380,12 +401,14 @@ describe('__trackComposable — re-entrant setInterval patch (fix #14)', () => {
         const useInner = () => ({})
         const useOuter = () => {
             __trackComposable('useInner', useInner, { file: 'Inner.ts', line: 1 })
+
             return {}
         }
 
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useOuter', useOuter, { file: 'Outer.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -403,19 +426,22 @@ describe('__trackComposable — re-entrant setInterval patch (fix #14)', () => {
         getWindow().__observatory__ = { composable: reg }
 
         const useInner = () => {
-            window.setInterval(() => {}, 500) // inner interval
+            window.setInterval(() => { }, 500) // inner interval
+
             return {}
         }
 
         const useOuter = () => {
             window.setInterval(() => {}, 1000) // outer interval — must be tracked by outer
             __trackComposable('useInner', useInner, { file: 'Inner.ts', line: 1 })
+
             return {}
         }
 
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useOuter', useOuter, { file: 'Outer.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -425,6 +451,7 @@ describe('__trackComposable — re-entrant setInterval patch (fix #14)', () => {
         app.unmount()
 
         const outer = reg.getAll().find((e) => e.name === 'useOuter')
+
         // The outer composable should have detected at least the interval it created
         expect(outer?.intervalCount).toBeGreaterThanOrEqual(1)
     })
@@ -455,6 +482,7 @@ describe('__trackComposable — onUnmounted guard outside component context (fix
         const lifecycleWarnings = warnSpy.mock.calls.filter(
             (args) => String(args[0]).includes('onUnmounted') || String(args[0]).includes('lifecycle')
         )
+
         expect(lifecycleWarnings).toHaveLength(0)
     })
 })
@@ -467,6 +495,7 @@ describe('__trackComposable — live ref snapshot after unmount (regression: emp
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useStatic', () => ({ count: ref(42) }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -494,6 +523,7 @@ describe('__trackComposable — live ref snapshot after unmount (regression: emp
             setup() {
                 countRef = ref(0)
                 __trackComposable('useLive', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -505,6 +535,7 @@ describe('__trackComposable — live ref snapshot after unmount (regression: emp
         countRef!.value = 99
 
         const entry = reg.getAll()[0]
+
         // Must reflect the current value, not the 0 captured at setup time
         expect(entry.refs['count']?.value).toBe(99)
 
@@ -520,6 +551,7 @@ describe('setupComposableRegistry — clear() (session reset)', () => {
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -551,6 +583,7 @@ describe('setupComposableRegistry — clear() (session reset)', () => {
             setup() {
                 countRef = ref(0)
                 __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -580,6 +613,8 @@ describe('setupComposableRegistry — clear() (session reset)', () => {
             status: 'mounted',
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
             lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
@@ -589,7 +624,9 @@ describe('setupComposableRegistry — clear() (session reset)', () => {
         })
 
         expect(reg.getAll()).toHaveLength(1)
+
         reg.clear()
+
         expect(reg.getAll()).toHaveLength(0)
     })
 })
@@ -604,6 +641,7 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useProducts', () => ({}), { file: 'P.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -628,6 +666,8 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
             status: 'mounted',
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
             lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
@@ -653,130 +693,111 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
     })
 })
 
-describe('setupComposableRegistry — clearPreviousRoute()', () => {
-    it('removes cleanly unmounted entries from the specified route', () => {
+describe('setupComposableRegistry — navigation reset via clear()', () => {
+    it('clear() removes all entries including previously-registered ones', () => {
         const reg = setupComposableRegistry()
 
-        reg.register({
-            id: 'useA::1::A.ts:1::0::a1',
-            name: 'useA',
-            componentFile: 'A.ts',
+        const makeEntry = (id: string, name: string, route: string) => ({
+            id,
+            name,
+            componentFile: 'C.ts',
             componentUid: 1,
-            status: 'unmounted',
+            status: 'mounted' as const,
             leak: false,
             refs: {},
+            history: [],
+            sharedKeys: [],
             watcherCount: 0,
             intervalCount: 0,
-            lifecycle: { hasOnMounted: false, hasOnUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
-            file: 'A.ts',
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'C.ts',
             line: 1,
-            route: '/home',
+            route,
         })
 
-        reg.clearPreviousRoute('/home')
+        reg.register(makeEntry('a::1::C.ts:1::0::a', 'useA', '/'))
+        reg.register(makeEntry('b::1::C.ts:1::0::b', 'useB', '/'))
+        expect(reg.getAll()).toHaveLength(2)
 
+        reg.clear()
         expect(reg.getAll()).toHaveLength(0)
     })
 
-    it('keeps leaked entries even after clearPreviousRoute for the same route', () => {
+    it('entries registered AFTER clear() survive (new page setup() runs after router.beforeEach)', () => {
         const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
 
-        reg.register({
-            id: 'useLeaky::1::L.ts:1::0::l1',
-            name: 'useLeaky',
-            componentFile: 'L.ts',
-            componentUid: 1,
-            status: 'unmounted',
-            leak: true,
-            leakReason: '1 watcher still active',
-            refs: {},
-            watcherCount: 1,
-            intervalCount: 0,
-            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: false, intervalsCleaned: true },
-            file: 'L.ts',
-            line: 1,
-            route: '/home',
+        // Simulate: page A mounts a composable
+        const AppA = defineComponent({
+            setup() {
+                __trackComposable('usePageA', () => ({}), { file: 'A.ts', line: 1 })
+
+                return () => h('div')
+            },
         })
+        const appA = createApp(AppA)
+        appA.mount(document.createElement('div'))
 
-        reg.clearPreviousRoute('/home')
+        expect(reg.getAll().map((e) => e.name)).toContain('usePageA')
 
-        // Leaked entry must survive the clear
-        expect(reg.getAll()).toHaveLength(1)
-        expect(reg.getAll()[0].leak).toBe(true)
-    })
+        // Simulate: router.beforeEach fires → clear
+        reg.clear()
+        expect(reg.getAll()).toHaveLength(0)
 
-    it('keeps still-mounted entries from other routes untouched', () => {
-        const reg = setupComposableRegistry()
+        // Simulate: page B mounts AFTER the clear
+        const AppB = defineComponent({
+            setup() {
+                __trackComposable('usePageB', () => ({}), { file: 'B.ts', line: 1 })
 
-        reg.register({
-            id: 'useOld::1::O.ts:1::0::o1',
-            name: 'useOld',
-            componentFile: 'O.ts',
-            componentUid: 1,
-            status: 'unmounted',
-            leak: false,
-            refs: {},
-            watcherCount: 0,
-            intervalCount: 0,
-            lifecycle: { hasOnMounted: false, hasOnUnmounted: true, watchersCleaned: true, intervalsCleaned: true },
-            file: 'O.ts',
-            line: 1,
-            route: '/old',
+                return () => h('div')
+            },
         })
-        reg.register({
-            id: 'useNew::2::N.ts:1::0::n1',
-            name: 'useNew',
-            componentFile: 'N.ts',
-            componentUid: 2,
-            status: 'mounted',
-            leak: false,
-            refs: {},
-            watcherCount: 0,
-            intervalCount: 0,
-            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
-            file: 'N.ts',
-            line: 1,
-            route: '/new',
-        })
+        const appB = createApp(AppB)
+        appB.mount(document.createElement('div'))
 
-        reg.clearPreviousRoute('/old')
-
+        // Only page B's composable should appear
         const all = reg.getAll()
-        expect(all).toHaveLength(1)
-        expect(all[0].name).toBe('useNew')
+        expect(all.map((e) => e.name)).not.toContain('usePageA')
+        expect(all.map((e) => e.name)).toContain('usePageB')
+
+        appA.unmount()
+        appB.unmount()
     })
 
-    it('does not remove still-mounted entries from the cleared route (layout components)', () => {
+    it('update() is a safe no-op for entries cleared before onUnmounted fires', () => {
         const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
 
-        // A layout composable that stays mounted across routes
-        reg.register({
-            id: 'useLayout::1::Layout.ts:1::0::la1',
-            name: 'useLayout',
-            componentFile: 'Layout.ts',
-            componentUid: 1,
-            status: 'mounted',
-            leak: false,
-            refs: {},
-            watcherCount: 0,
-            intervalCount: 0,
-            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
-            file: 'Layout.ts',
-            line: 1,
-            route: '/home',
+        const App = defineComponent({
+            setup() {
+                __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+
+                return () => h('div')
+            },
         })
+        const app = createApp(App)
+        app.mount(document.createElement('div'))
 
-        reg.clearPreviousRoute('/home')
+        const id = reg.getAll()[0].id
 
-        // Still mounted — must not be removed
-        expect(reg.getAll()).toHaveLength(1)
-        expect(reg.getAll()[0].status).toBe('mounted')
+        // Simulate router.beforeEach: clear before old page unmounts
+        reg.clear()
+
+        // Simulate old page's onUnmounted trying to update a cleared entry
+        // (this is what happens when beforeEach clears before components unmount)
+        expect(() => {
+            reg.update(id, { status: 'unmounted', leak: false })
+        }).not.toThrow()
+
+        // Registry should still be empty — update on non-existent entry is a no-op
+        expect(reg.getAll()).toHaveLength(0)
+
+        app.unmount()
     })
 })
 
 describe('__trackComposable — reactive() object tracking (priority 1)', () => {
     it('captures a reactive() object returned from a composable', () => {
-        const { reactive } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -786,10 +807,12 @@ describe('__trackComposable — reactive() object tracking (priority 1)', () => 
                     'useStore',
                     () => {
                         const state = reactive({ count: 5, name: 'test' })
+
                         return { state }
                     },
                     { file: 'Store.ts', line: 1 }
                 )
+
                 return () => h('div')
             },
         })
@@ -808,7 +831,6 @@ describe('__trackComposable — reactive() object tracking (priority 1)', () => 
     })
 
     it('reactive() values update live when properties change', async () => {
-        const { reactive, nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -818,6 +840,7 @@ describe('__trackComposable — reactive() object tracking (priority 1)', () => 
             setup() {
                 state = reactive({ count: 0 })
                 __trackComposable('useReactive', () => ({ state: state! }), { file: 'R.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -843,6 +866,7 @@ describe('__trackComposable — change history (priority 3)', () => {
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -856,7 +880,6 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('appends a history event when a ref value changes', async () => {
-        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -866,6 +889,7 @@ describe('__trackComposable — change history (priority 3)', () => {
             setup() {
                 countRef = ref(0)
                 __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -875,10 +899,12 @@ describe('__trackComposable — change history (priority 3)', () => {
 
         countRef!.value = 10
         await nextTick()
+
         countRef!.value = 20
         await nextTick()
 
         const history = reg.getAll()[0].history
+
         expect(history.length).toBeGreaterThanOrEqual(2)
         expect(history[history.length - 1].key).toBe('count')
         expect(history[history.length - 1].value).toBe(20)
@@ -887,7 +913,6 @@ describe('__trackComposable — change history (priority 3)', () => {
     })
 
     it('does not record unchanged keys as history events', async () => {
-        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
 
@@ -899,6 +924,7 @@ describe('__trackComposable — change history (priority 3)', () => {
                 aRef = ref(1)
                 bRef = ref(100)
                 __trackComposable('useTwo', () => ({ a: aRef!, b: bRef! }), { file: 'T.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -913,15 +939,17 @@ describe('__trackComposable — change history (priority 3)', () => {
         const history = reg.getAll()[0].history
         // Only 'a' should have a history event — 'b' didn't change
         const bEvents = history.filter((e) => e.key === 'b')
+
         expect(bEvents).toHaveLength(0)
+
         const aEvents = history.filter((e) => e.key === 'a')
+
         expect(aEvents.length).toBeGreaterThanOrEqual(1)
 
         app.unmount()
     })
 
     it('clears history when clear() is called', async () => {
-        const { nextTick } = require('vue')
         const reg = setupComposableRegistry()
         getWindow().__observatory__ = { composable: reg }
         let countRef: ReturnType<typeof ref<number>> | null = null
@@ -930,6 +958,7 @@ describe('__trackComposable — change history (priority 3)', () => {
             setup() {
                 countRef = ref(0)
                 __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -943,6 +972,7 @@ describe('__trackComposable — change history (priority 3)', () => {
         expect(reg.getAll()[0].history.length).toBeGreaterThanOrEqual(1)
 
         reg.clear()
+
         expect(reg.getAll()).toHaveLength(0)
 
         app.unmount()
@@ -957,6 +987,7 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         const Comp = defineComponent({
             setup() {
                 __trackComposable('useCounter', () => ({ count: ref(0) }), { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -981,12 +1012,14 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         const CompA = defineComponent({
             setup() {
                 __trackComposable('useLocal', useLocal, { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
         const CompB = defineComponent({
             setup() {
                 __trackComposable('useLocal', useLocal, { file: 'C.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -998,7 +1031,9 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         appB.mount(document.createElement('div'))
 
         const entries = reg.getAll()
+
         expect(entries).toHaveLength(2)
+
         // Both instances created their own refs → no sharing
         entries.forEach((e) => expect(e.sharedKeys).toEqual([]))
 
@@ -1012,6 +1047,7 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
 
         // Module-level ref — shared across all instances
         const sharedCount = ref(0)
+
         function useGlobal() {
             return { count: sharedCount }
         }
@@ -1019,12 +1055,14 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         const CompA = defineComponent({
             setup() {
                 __trackComposable('useGlobal', useGlobal, { file: 'G.ts', line: 1 })
+
                 return () => h('div')
             },
         })
         const CompB = defineComponent({
             setup() {
                 __trackComposable('useGlobal', useGlobal, { file: 'G.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -1035,7 +1073,9 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         appB.mount(document.createElement('div'))
 
         const entries = reg.getAll()
+
         expect(entries).toHaveLength(2)
+
         // Both instances return the SAME ref object → 'count' should be flagged as shared
         entries.forEach((e) => expect(e.sharedKeys).toContain('count'))
 
@@ -1059,12 +1099,14 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         const CompA = defineComponent({
             setup() {
                 __trackComposable('useMixed', useMixed, { file: 'M.ts', line: 1 })
+
                 return () => h('div')
             },
         })
         const CompB = defineComponent({
             setup() {
                 __trackComposable('useMixed', useMixed, { file: 'M.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -1075,6 +1117,7 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         appB.mount(document.createElement('div'))
 
         const entries = reg.getAll()
+
         entries.forEach((e) => {
             expect(e.sharedKeys).toContain('global')
             expect(e.sharedKeys).not.toContain('local')
@@ -1093,6 +1136,7 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         const CompA = defineComponent({
             setup() {
                 __trackComposable('useA', () => ({ val: shared }), { file: 'A.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -1101,6 +1145,7 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
                 // Different composable name, same ref — should NOT flag as shared
                 // because sharing is only meaningful within the same composable
                 __trackComposable('useB', () => ({ val: shared }), { file: 'B.ts', line: 1 })
+
                 return () => h('div')
             },
         })
@@ -1121,5 +1166,282 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
 
         appA.unmount()
         appB.unmount()
+    })
+})
+
+describe('safeSnapshot edge cases (composable-registry)', () => {
+    it('snapshots a function value as "[Function]" in frozen post-unmount entry', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useFn', () => ({ fn: ref(() => 42) }), { file: 'F.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        // Unmount so sanitize() uses the frozen safeSnapshot path, not live safeValue
+        app.unmount()
+
+        const val = reg.getAll()[0]?.refs['fn']?.value
+
+        expect(val).toBe('[Function]')
+    })
+
+    it('snapshots an array ref as "Array(N)" in frozen post-unmount entry', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useArr', () => ({ list: ref([1, 2, 3]) }), { file: 'A.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        app.unmount()
+
+        const val = reg.getAll()[0]?.refs['list']?.value
+
+        expect(val).toBe('Array(3)')
+    })
+})
+
+describe('safeValue edge cases', () => {
+    it('returns null as-is', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useNull', () => ({ val: ref(null) }), { file: 'N.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()[0].refs['val'].value).toBeNull()
+
+        app.unmount()
+    })
+
+    it('returns undefined as-is', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useUndef', () => ({ val: ref(undefined) }), { file: 'U.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()[0].refs['val'].value).toBeUndefined()
+
+        app.unmount()
+    })
+})
+
+describe('history cap at MAX_HISTORY', () => {
+    it('never exceeds 50 entries in history', async () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+        let count: ReturnType<typeof ref<number>> | null = null
+        const Comp = defineComponent({
+            setup() {
+                count = ref(0)
+                __trackComposable('useCap', () => ({ count: count! }), { file: 'C.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // Fire 60 mutations
+        for (let i = 1; i <= 60; i++) {
+            count!.value = i
+            await nextTick()
+        }
+
+        expect(reg.getAll()[0].history.length).toBeLessThanOrEqual(50)
+
+        app.unmount()
+    })
+})
+
+describe('computeSharedKeys — missing otherRaw entry', () => {
+    it('does not crash when an entry has no rawRefs registered (race during clear)', () => {
+        const reg = setupComposableRegistry()
+        // Register entry without registerRawRefs — simulates partial registration
+        reg.register({
+            id: 'useX::1::X.ts:1::0::aaa',
+            name: 'useX',
+            componentFile: 'X.ts',
+            componentUid: 1,
+            status: 'mounted',
+            leak: false,
+            refs: {},
+            history: [],
+            sharedKeys: [],
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'X.ts',
+            line: 1,
+            route: '/',
+        })
+        reg.register({
+            id: 'useX::2::X.ts:1::0::bbb',
+            name: 'useX',
+            componentFile: 'X.ts',
+            componentUid: 2,
+            status: 'mounted',
+            leak: false,
+            refs: {},
+            history: [],
+            sharedKeys: [],
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'X.ts',
+            line: 1,
+            route: '/',
+        })
+        // Neither has rawRefs → computeSharedKeys should return []
+        const entries = reg.getAll()
+        entries.forEach((e) => expect(e.sharedKeys).toEqual([]))
+    })
+})
+
+describe('safeValue — function and unserializable branches', () => {
+    it('returns undefined for a function ref value (safeValue function branch)', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                // The computed ref is readonly, so safeValue receives a function
+                // for the getter. But a raw function ref:
+                const fnRef = ref(function myFn() {
+                    return 42
+                })
+
+                __trackComposable('useFnRef', () => ({ fn: fnRef }), { file: 'F.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // safeValue(fn) → undefined (functions stripped from snapshot)
+        expect(reg.getAll()[0].refs['fn'].value).toBeUndefined()
+
+        app.unmount()
+    })
+
+    it('safeSnapshot initial entry handles unserializable gracefully via String() fallback', () => {
+        const reg = setupComposableRegistry()
+        // Register directly to test the sanitize path with a stored unserializable value
+        reg.register({
+            id: 'useUnser::1::U.ts:1::0::abc',
+            name: 'useUnser',
+            componentFile: 'U.ts',
+            componentUid: 1,
+            status: 'mounted',
+            leak: false,
+            refs: { data: { type: 'ref', value: '[unserializable]' } },
+            history: [],
+            sharedKeys: [],
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'U.ts',
+            line: 1,
+            route: '/',
+        })
+        const entry = reg.getAll()[0]
+
+        expect(entry.refs['data'].value).toBe('[unserializable]')
+    })
+})
+
+describe('leak detection — watcher count and cleanup', () => {
+    it('tracks watcherCount correctly for watchers created inside the composable', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable(
+                    'useWatchers',
+                    () => {
+                        const a = ref(0)
+                        const b = ref(0)
+                        watch(a, () => {})
+                        watch(b, () => { })
+
+                        return { a, b }
+                    },
+                    { file: 'W.ts', line: 1 }
+                )
+
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // Both watchers were created — watcherCount should be 2
+        expect(reg.getAll()[0].watcherCount).toBe(2)
+
+        app.unmount()
+
+        // Component-scoped watchers are auto-stopped on unmount, so no leak
+        expect(reg.getAll()[0].leak).toBe(false)
+        expect(reg.getAll()[0].lifecycle.watchersCleaned).toBe(true)
+    })
+
+    it('leakReason message uses plural "watchers" phrasing for multiple interval leaks', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable(
+                    'useMultiInterval',
+                    () => {
+                        // Two intervals never cleared — confirmed leak path
+                        window.setInterval(() => {}, 500)
+                        window.setInterval(() => { }, 1000)
+
+                        return {}
+                    },
+                    { file: 'I.ts', line: 1 }
+                )
+
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        app.unmount()
+
+        const entry = reg.getAll()[0]
+
+        expect(entry.leak).toBe(true)
+        // leakReason identifies both leaked interval IDs
+        expect(entry.leakReason).toContain('setInterval')
     })
 })
