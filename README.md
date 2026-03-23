@@ -147,11 +147,13 @@ The panel provides:
   timeline event
 - **Persistent and hydration badges** — `isPersistent` and `isHydrationMount` shown
   as pills in the tree row and the detail panel
+- **Jump to editor** — every tree row shows an `↗` button on hover, and the detail
+  panel's identity section has an `open ↗` button; both call Vite's built-in
+  `/__open-in-editor` endpoint to open the component's source file in the configured
+  editor
 
 **Known gaps:**
 
-- No jump-to-component shortcut from a heatmap entry to the component in the DevTools
-  file tree
 - The route filter shows components active on a route but cannot hide persistent
   components (they appear on every route by definition)
 
@@ -217,10 +219,6 @@ are welcome — see [Development](#development) below.
 
 - [ ] Reverse lookup by object identity rather than key name only
 - [ ] Deep search inside nested `reactive` object properties
-
-### Render Heatmap
-
-- [ ] Jump-to-component shortcut from heatmap entries to the DevTools file tree
 
 ## Development
 

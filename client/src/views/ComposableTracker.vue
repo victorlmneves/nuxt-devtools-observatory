@@ -6,11 +6,7 @@ const { composables: rawEntries, connected, clearComposables } = useObservatoryD
 
 function clearSession() {
     const origin = getObservatoryOrigin()
-
-    if (!origin) {
-        return
-    }
-
+    if (!origin) return
     clearComposables()
     window.top?.postMessage({ type: 'observatory:clear-composables' }, origin)
 }
@@ -21,33 +17,29 @@ function clearSession() {
 // same composable in different components are two separate rows.
 
 function formatVal(v: unknown): string {
-    if (v === null) {
-        return 'null'
-    }
-
-    if (v === undefined) {
-        return 'undefined'
-    }
-
-    if (typeof v === 'string') {
-        return `"${v}"`
-    }
-
+    if (v === null) return 'null'
+    if (v === undefined) return 'undefined'
+    if (typeof v === 'string') return `"${v}"`
     if (typeof v === 'object') {
         try {
             const s = JSON.stringify(v)
-
             return s.length > 80 ? s.slice(0, 80) + '…' : s
         } catch {
             return String(v)
         }
     }
-
     return String(v)
 }
 
 function basename(file: string) {
     return file.split('/').pop() ?? file
+}
+
+function openInEditor(file: string) {
+    if (!file || file === 'unknown') return
+    const origin = getObservatoryOrigin()
+    if (!origin) return
+    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
 }
 
 const filter = ref('all')
@@ -63,20 +55,10 @@ const counts = computed(() => ({
 
 const filtered = computed(() => {
     return entries.value.filter((entry) => {
-        if (filter.value === 'leak' && !entry.leak) {
-            return false
-        }
-
-        if (filter.value === 'mounted' && entry.status !== 'mounted') {
-            return false
-        }
-
-        if (filter.value === 'unmounted' && entry.status !== 'unmounted') {
-            return false
-        }
-
+        if (filter.value === 'leak' && !entry.leak) return false
+        if (filter.value === 'mounted' && entry.status !== 'mounted') return false
+        if (filter.value === 'unmounted' && entry.status !== 'unmounted') return false
         const q = search.value.toLowerCase()
-
         if (q) {
             const matchesName = entry.name.toLowerCase().includes(q)
             const matchesFile = entry.componentFile.toLowerCase().includes(q)
@@ -88,12 +70,8 @@ const filtered = computed(() => {
                     return false
                 }
             })
-
-            if (!matchesName && !matchesFile && !matchesRef && !matchesVal) {
-                return false
-            }
+            if (!matchesName && !matchesFile && !matchesRef && !matchesVal) return false
         }
-
         return true
     })
 })
@@ -124,14 +102,8 @@ function lifecycleRows(entry: RuntimeComposableEntry) {
 }
 
 function typeBadgeClass(type: string) {
-    if (type === 'computed') {
-        return 'badge-info'
-    }
-
-    if (type === 'reactive') {
-        return 'badge-purple'
-    }
-
+    if (type === 'computed') return 'badge-info'
+    if (type === 'reactive') return 'badge-purple'
     return 'badge-gray'
 }
 
@@ -141,12 +113,8 @@ function typeBadgeClass(type: string) {
 const lookupKey = ref<string | null>(null)
 
 const lookupResults = computed(() => {
-    if (!lookupKey.value) {
-        return []
-    }
-
+    if (!lookupKey.value) return []
     const key = lookupKey.value
-
     return entries.value.filter((e) => key in e.refs)
 })
 
@@ -176,9 +144,7 @@ function openEdit(id: string, key: string, currentValue: unknown) {
 }
 
 function applyEdit() {
-    if (!editTarget.value) {
-        return
-    }
+    if (!editTarget.value) return
 
     let parsed: unknown
 
@@ -187,15 +153,11 @@ function applyEdit() {
         editError.value = ''
     } catch (err) {
         editError.value = `Invalid JSON: ${(err as Error).message}`
-
         return
     }
 
     const origin = getObservatoryOrigin()
-
-    if (!origin) {
-        return
-    }
+    if (!origin) return
 
     window.top?.postMessage(
         {
@@ -356,7 +318,10 @@ function applyEdit() {
                     </div>
                     <div class="lc-row">
                         <span class="muted text-sm" style="min-width: 120px">defined in</span>
-                        <span class="mono text-sm muted">{{ entry.file }}:{{ entry.line }}</span>
+                        <span class="mono text-sm muted" style="display: flex; align-items: center; gap: 6px">
+                            {{ entry.file }}:{{ entry.line }}
+                            <button class="jump-btn" title="Open in editor" @click.stop="openInEditor(entry.file)">open ↗</button>
+                        </span>
                     </div>
                     <div class="lc-row">
                         <span class="muted text-sm" style="min-width: 120px">route</span>
@@ -895,5 +860,23 @@ function applyEdit() {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+.jump-btn {
+    font-size: 10px;
+    padding: 1px 6px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    flex-shrink: 0;
+    font-family: var(--mono);
+}
+
+.jump-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal);
+    background: color-mix(in srgb, var(--teal) 8%, transparent);
 }
 </style>

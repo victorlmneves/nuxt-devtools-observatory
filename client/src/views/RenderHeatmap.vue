@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
-import { useObservatoryData, type RenderEntry, type RenderEvent } from '../stores/observatory'
+import { useObservatoryData, getObservatoryOrigin, type RenderEntry, type RenderEvent } from '../stores/observatory'
 
 interface ComponentNode {
     id: string
@@ -130,6 +130,20 @@ const TreeNode = defineComponent({
                                   )
                                 : null,
                             h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
+                            node.file && node.file !== 'unknown'
+                                ? h(
+                                      'button',
+                                      {
+                                          class: 'tree-jump-btn',
+                                          title: `Open ${node.file} in editor`,
+                                          onClick: (e: MouseEvent) => {
+                                              e.stopPropagation()
+                                              openInEditor(node.file)
+                                          },
+                                      },
+                                      '↗'
+                                  )
+                                : null,
                         ]),
                     ]
                 ),
@@ -648,6 +662,13 @@ function basename(file: string) {
     )
 }
 
+function openInEditor(file: string) {
+    if (!file || file === 'unknown') return
+    const origin = getObservatoryOrigin()
+    if (!origin) return
+    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+}
+
 function pathLabel(node: ComponentNode) {
     return node.path.join(' / ')
 }
@@ -788,7 +809,17 @@ function formatTimestamp(t: number): string {
                         <span class="muted text-sm">path</span>
                         <span class="mono text-sm">{{ pathLabel(activeSelected) }}</span>
                         <span class="muted text-sm">file</span>
-                        <span class="mono text-sm muted">{{ activeSelected.file }}</span>
+                        <span class="mono text-sm muted" style="display: flex; align-items: center; gap: 6px">
+                            {{ activeSelected.file }}
+                            <button
+                                v-if="activeSelected.file && activeSelected.file !== 'unknown'"
+                                class="jump-btn"
+                                title="Open in editor"
+                                @click="openInEditor(activeSelected.file)"
+                            >
+                                open ↗
+                            </button>
+                        </span>
                         <span class="muted text-sm">file name</span>
                         <span class="mono text-sm">{{ basename(activeSelected.file) }}</span>
                         <span class="muted text-sm">parent</span>
@@ -1217,6 +1248,45 @@ function formatTimestamp(t: number): string {
     color: var(--text2);
 }
 
+:deep(.tree-jump-btn) {
+    display: none;
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    font-size: 11px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+:deep(.tree-row:hover .tree-jump-btn),
+:deep(.tree-row.selected .tree-jump-btn) {
+    display: inline-flex;
+}
+
+:deep(.tree-jump-btn:hover) {
+    color: var(--teal);
+}
+
+.jump-btn {
+    font-size: 10px;
+    padding: 1px 6px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    flex-shrink: 0;
+    font-family: var(--mono);
+}
+
+.jump-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal);
+    background: color-mix(in srgb, var(--teal) 8%, transparent);
+}
+
 .route-select {
     padding: 3px 7px;
     border: 0.5px solid var(--border);
@@ -1235,7 +1305,6 @@ function formatTimestamp(t: number): string {
     background: var(--bg2);
     border-radius: var(--radius);
     padding: 4px 8px;
-    min-height: fit-content;
     max-height: 200px;
     overflow-y: auto;
 }

@@ -135,6 +135,22 @@ export default defineNuxtPlugin(() => {
                 // The watchEffect inside the registry will call _onChange() which
                 // pushes the updated snapshot automatically — no explicit broadcast needed.
             }
+
+            if (type === 'observatory:open-in-editor') {
+                // Delegate to Vite's built-in /__open-in-editor endpoint which is
+                // present on every Vite dev server and handles VS Code / editor launch.
+                // Vite's transform injects the full module id as the file path.
+                // Strip the /@fs/ prefix (used for files outside the project root)
+                // and any query string Vite appends (e.g. ?t=1234&vue&type=script).
+                const { file } = event.data as { file: string }
+
+                if (file && file !== 'unknown') {
+                    const cleaned = file
+                        .replace(/^\/@fs/, '') // strip Vite's /@fs/ virtual prefix
+                        .replace(/\?.*$/, '') // strip query string
+                    fetch(`/__open-in-editor?file=${encodeURIComponent(cleaned)}`).catch(() => {})
+                }
+            }
         })
 
         // Push a fresh snapshot to the SPA immediately when any tracked
