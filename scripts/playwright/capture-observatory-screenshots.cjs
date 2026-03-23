@@ -113,12 +113,13 @@ const mockData = {
       });
       await page.waitForTimeout(200);
     } else if (tab.name === 'render-heatmap') {
+      // Wait for the .tree-row to appear
+      await page.waitForSelector('.tree-row', { timeout: 2000 });
       await page.evaluate(() => {
-        // Click the first component in the heatmap sidebar (tree-row)
         const firstTreeRow = document.querySelector('.tree-row');
         if (firstTreeRow) firstTreeRow.click();
       });
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(400);
     } else if (tab.name === 'transition-tracker') {
       await page.evaluate(() => {
         const firstRow = document.querySelector('.transition-row, .data-table tbody tr');

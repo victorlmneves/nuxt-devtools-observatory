@@ -305,4 +305,6 @@ playground/
 
 ## License
 
-MIT
+[MIT](https://opensource.org/licenses/MIT)
+
+Copyright (c) 2026, Victor Neves

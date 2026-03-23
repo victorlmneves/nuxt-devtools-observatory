@@ -160,16 +160,35 @@ export function __devFetchCall(
         return originalFn(url, opts)
     }
 
+    // --- Patch: resolve Vue refs and getter functions for url ---
+    // Accepts string, function, or object (possibly a ref)
+    function resolveUrl(u: unknown): string {
+        if (u && typeof u === 'object' && 'value' in u) {
+            return resolveUrl((u as { value: unknown }).value)
+        }
+
+        if (typeof u === 'function') {
+            try {
+                return resolveUrl((u as () => unknown)())
+            } catch {
+                return String(u)
+            }
+        }
+
+        return typeof u === 'string' ? u : String(u)
+    }
+
     const id = `${meta.key}::${Date.now()}`
     const startTime = performance.now()
     const payload = (window as ObservatoryWindow).__NUXT__?.data ?? {}
     const fromPayload = Object.prototype.hasOwnProperty.call(payload, meta.key)
     const origin: 'ssr' | 'csr' = fromPayload ? 'ssr' : 'csr'
+    const resolvedUrl = resolveUrl(url)
 
     registry.register({
         id,
         key: meta.key,
-        url: typeof url === 'string' ? url : String(url),
+        url: resolvedUrl,
         status: fromPayload ? 'cached' : 'pending',
         origin,
         startTime,
@@ -179,8 +198,27 @@ export function __devFetchCall(
         line: meta.line,
     })
 
+    // Patch: SSR cached entries should still attach hooks for re-fetches
     if (fromPayload) {
-        return originalFn(url, opts)
+        // Always attach onResponse/onResponseError hooks to opts for SSR-cached entries
+        const optsWithHooks = {
+            ...opts,
+            onResponse: function(ctx: { response: FetchResponse }) {
+                // Update the registry entry payload with the new client response
+                const entry = registry.getAll().find(e => e.id === id)
+
+                if (entry) {
+                    registry.update(id, { payload: ctx.response._data })
+                }
+
+                if (typeof opts.onResponse === 'function') {
+                    opts.onResponse(ctx)
+                }
+            },
+            onResponseError: typeof opts.onResponseError === 'function' ? opts.onResponseError : () => {},
+        }
+
+        return originalFn(url, optsWithHooks)
     }
 
     return originalFn(url, {
