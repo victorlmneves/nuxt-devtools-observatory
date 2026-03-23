@@ -182,7 +182,8 @@ function onMessage(event: MessageEvent) {
 
     // Always validate the origin of incoming snapshot messages.
     // Accepting '*' would allow any page to inject arbitrary devtools data.
-    if (!parentOrigin || event.origin !== parentOrigin) {
+    // For local screenshots/dev, allow any origin if parentOrigin is empty (SPA running standalone)
+    if (parentOrigin && event.origin !== parentOrigin) {
         return
     }
 

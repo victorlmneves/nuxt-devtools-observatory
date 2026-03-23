@@ -355,6 +355,7 @@ function formatSize(bytes: number) {
     letter-spacing: 0.4px;
     color: var(--text3);
     margin-top: 6px;
+    min-height: fit-content;
 }
 
 .payload-box {
