@@ -63,22 +63,56 @@ export default defineNuxtPlugin(() => {
     }
 
     const nuxtApp = useNuxtApp()
-    const config = useRuntimeConfig().public.observatory as { heatmapThreshold: number; clientOrigin?: string }
 
-    // Enable Vue performance API for render heatmap
-    nuxtApp.vueApp.config.performance = true
+    const config = useRuntimeConfig().public.observatory as {
+        heatmapThreshold: number;
+        clientOrigin?: string;
+        fetchDashboard?: boolean;
+        provideInjectGraph?: boolean;
+        composableTracker?: boolean;
+        renderHeatmap?: boolean;
+        transitionTracker?: boolean;
+    }
 
-    // Each registry attaches to the Vue app and exposes data over the WS channel
-    const fetchRegistry = setupFetchRegistry()
-    const provideInjectRegistry = setupProvideInjectRegistry()
-    const composableRegistry = setupComposableRegistry()
-    const renderRegistry = setupRenderRegistry(nuxtApp, {
-        // Only flag as hydration when the page was actually server-rendered.
-        // nuxtApp.isHydrating is true on ALL initial mounts (including CSR-only),
-        // so we gate on payload.serverRendered to avoid false positives.
-        isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
-    })
-    const transitionRegistry = setupTransitionRegistry()
+    // Enable Vue performance API for render heatmap if enabled
+    if (config.renderHeatmap) {
+        nuxtApp.vueApp.config.performance = true
+    }
+
+    // Only initialize registries for enabled features
+    const registries: Record<string, unknown> = {}
+    let fetchRegistry: ReturnType<typeof setupFetchRegistry> | undefined
+    let provideInjectRegistry: ReturnType<typeof setupProvideInjectRegistry> | undefined
+    let composableRegistry: ReturnType<typeof setupComposableRegistry> | undefined
+    let renderRegistry: ReturnType<typeof setupRenderRegistry> | undefined
+    let transitionRegistry: ReturnType<typeof setupTransitionRegistry> | undefined
+
+    if (config.fetchDashboard) {
+        fetchRegistry = setupFetchRegistry()
+        registries.fetch = fetchRegistry
+    }
+
+    if (config.provideInjectGraph) {
+        provideInjectRegistry = setupProvideInjectRegistry()
+        registries.provideInject = provideInjectRegistry
+    }
+
+    if (config.composableTracker) {
+        composableRegistry = setupComposableRegistry()
+        registries.composable = composableRegistry
+    }
+
+    if (config.renderHeatmap) {
+        renderRegistry = setupRenderRegistry(nuxtApp, {
+            isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
+        })
+        registries.render = renderRegistry
+    }
+
+    if (config.transitionTracker) {
+        transitionRegistry = setupTransitionRegistry()
+        registries.transition = transitionRegistry
+    }
 
     // Expose registries globally so Vite transform shims can reach them.
     // This must happen synchronously — before any component setup() runs —
@@ -87,13 +121,7 @@ export default defineNuxtPlugin(() => {
     if (import.meta.client) {
         // Always clear any previous registry to avoid cross-project state
         delete (window as ObservatoryWindow).__observatory__
-        ;(window as ObservatoryWindow).__observatory__ = {
-            fetch: fetchRegistry,
-            provideInject: provideInjectRegistry,
-            composable: composableRegistry,
-            render: renderRegistry,
-            transition: transitionRegistry,
-        }
+        ;(window as ObservatoryWindow).__observatory__ = registries
 
         // postMessage bridge — the Observatory SPA runs at localhost:4949 (cross-
         // origin). It cannot read window.top properties, but CAN send messages.
@@ -121,7 +149,9 @@ export default defineNuxtPlugin(() => {
             }
 
             if (type === 'observatory:clear-composables') {
-                composableRegistry.clear()
+                if (composableRegistry) {
+                    composableRegistry.clear()
+                }
 
                 // Push a fresh (now empty) snapshot back immediately
                 const source = event.source as Window | null
@@ -130,7 +160,10 @@ export default defineNuxtPlugin(() => {
 
             if (type === 'observatory:edit-composable') {
                 const { id, key, value } = event.data as { id: string; key: string; value: unknown }
-                composableRegistry.editValue(id, key, value)
+
+                if (composableRegistry) {
+                    composableRegistry.editValue(id, key, value)
+                }
 
                 // The watchEffect inside the registry will call _onChange() which
                 // pushes the updated snapshot automatically — no explicit broadcast needed.
@@ -155,19 +188,21 @@ export default defineNuxtPlugin(() => {
 
         // Push a fresh snapshot to the SPA immediately when any tracked
         // composable's reactive state changes — no need to wait for the next poll.
-        composableRegistry.onComposableChange(() => {
-            if (!lastMessageSource || !lastMessageOrigin) {
-                return
-            }
+        if (composableRegistry && composableRegistry.onComposableChange) {
+            composableRegistry.onComposableChange(() => {
+                if (!lastMessageSource || !lastMessageOrigin) {
+                    return
+                }
 
-            lastMessageSource.postMessage(
-                {
-                    type: 'observatory:snapshot',
-                    data: buildSnapshot(),
-                },
-                lastMessageOrigin
-            )
-        })
+                lastMessageSource.postMessage(
+                    {
+                        type: 'observatory:snapshot',
+                        data: buildSnapshot(),
+                    },
+                    lastMessageOrigin
+                )
+            })
+        }
     }
 
     // Broadcast all registry data when devtools tab connects
@@ -190,9 +225,15 @@ export default defineNuxtPlugin(() => {
                     return
                 }
 
-                renderRegistry.reset()
-                ;(provideInjectRegistry as { clear?: () => void }).clear?.()
-                composableRegistry.clear()
+                if (renderRegistry) {
+                    renderRegistry.reset()
+                }
+
+                ;(provideInjectRegistry as { clear?: () => void })?.clear?.()
+
+                if (composableRegistry) {
+                    composableRegistry.clear()
+                }
             }
         )
 
@@ -200,8 +241,14 @@ export default defineNuxtPlugin(() => {
         // Use nextTick so persistent component updated() hooks have flushed
         // before we broadcast — otherwise rerenders shows 0 on navigation.
         router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
-            composableRegistry.setRoute(to.path ?? '/')
-            renderRegistry.setRoute(to.path ?? '/')
+            if (composableRegistry) {
+                composableRegistry.setRoute(to.path ?? '/')
+            }
+
+            if (renderRegistry) {
+                renderRegistry.setRoute(to.path ?? '/')
+            }
+
             nextTick(() => broadcastAll())
         })
     }
@@ -221,13 +268,37 @@ export default defineNuxtPlugin(() => {
     }
 
     function buildSnapshot() {
-        return toSerializable({
-            fetch: fetchRegistry.getAll(),
-            provideInject: provideInjectRegistry.getAll(),
-            composables: composableRegistry.getAll(),
-            renders: renderRegistry.getAll(),
-            transitions: transitionRegistry.getAll(),
-        })
+        const snap: Record<string, unknown> = {}
+
+        if (fetchRegistry) {
+            snap.fetch = fetchRegistry.getAll()
+        }
+
+        if (provideInjectRegistry) {
+            snap.provideInject = provideInjectRegistry.getAll()
+        }
+
+        if (composableRegistry) {
+            snap.composables = composableRegistry.getAll()
+        }
+
+        if (renderRegistry) {
+            snap.renders = renderRegistry.getAll()
+        }
+
+        if (transitionRegistry) {
+            snap.transitions = transitionRegistry.getAll()
+        }
+        // Add features object to indicate which features are enabled
+        snap.features = {
+            fetchDashboard: !!fetchRegistry,
+            provideInjectGraph: !!provideInjectRegistry,
+            composableTracker: !!composableRegistry,
+            renderHeatmap: !!renderRegistry,
+            transitionTracker: !!transitionRegistry,
+        }
+
+        return toSerializable(snap)
     }
 
     function getDevtoolsChannel() {

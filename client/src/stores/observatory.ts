@@ -127,6 +127,13 @@ interface ObservatorySnapshot {
     composables?: ComposableEntry[]
     renders?: RenderEntry[]
     transitions?: TransitionEntry[]
+    features?: {
+        fetchDashboard?: boolean
+        provideInjectGraph?: boolean
+        composableTracker?: boolean
+        renderHeatmap?: boolean
+        transitionTracker?: boolean
+    }
 }
 
 const fetchEntries = ref<FetchEntry[]>([])
@@ -135,6 +142,7 @@ const composables = ref<ComposableEntry[]>([])
 const renders = ref<RenderEntry[]>([])
 const transitions = ref<TransitionEntry[]>([])
 const connected = ref(false)
+const features = ref<ObservatorySnapshot['features']>({})
 
 let started = false
 // parentOrigin is only used for the outgoing postMessage target. We always
@@ -171,7 +179,10 @@ function getParentOrigin(): string {
 }
 
 function requestSnapshot() {
-    if (!parentOrigin) return
+    if (!parentOrigin) {
+        return
+    }
+
     window.top?.postMessage({ type: 'observatory:request' }, parentOrigin)
 }
 
@@ -198,6 +209,7 @@ function onMessage(event: MessageEvent) {
     composables.value = cloneArray(data.composables)
     renders.value = normalizeRenderEntries(data.renders)
     transitions.value = cloneArray(data.transitions)
+    features.value = data.features || {}
     connected.value = true
 }
 
@@ -244,6 +256,7 @@ export function useObservatoryData() {
         composables,
         renders,
         transitions,
+        features,
         connected,
         refresh: requestSnapshot,
         clearComposables,

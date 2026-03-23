@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useObservatoryData } from './stores/observatory'
 import FetchDashboard from './views/FetchDashboard.vue'
 import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
@@ -17,13 +18,19 @@ const pathMap: Record<string, string> = {
 const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
 const activeTab = ref(pathMap[segment] ?? 'fetch')
 
-const tabs = [
-    { id: 'fetch', label: 'useFetch', icon: '⬡' },
-    { id: 'provide', label: 'provide/inject', icon: '⬡' },
-    { id: 'composable', label: 'Composables', icon: '⬡' },
-    { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
-    { id: 'transitions', label: 'Transitions', icon: '⬡' },
-]
+const { features } = useObservatoryData()
+
+const tabs = computed(() => {
+    const f = features.value || {}
+
+    return [
+        f.fetchDashboard && { id: 'fetch', label: 'useFetch', icon: '⬡' },
+        f.provideInjectGraph && { id: 'provide', label: 'provide/inject', icon: '⬡' },
+        f.composableTracker && { id: 'composable', label: 'Composables', icon: '⬡' },
+        f.renderHeatmap && { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
+        f.transitionTracker && { id: 'transitions', label: 'Transitions', icon: '⬡' },
+    ].filter(Boolean)
+})
 </script>
 
 <template>
