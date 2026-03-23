@@ -103,7 +103,15 @@ export default defineNuxtModule<ModuleOptions>({
         }
 
         // ── Runtime plugins ───────────────────────────────────────────────────
-        addPlugin(resolver.resolve('./runtime/plugin'))
+        if (
+            options.fetchDashboard ||
+            options.provideInjectGraph ||
+            options.composableTracker ||
+            options.renderHeatmap ||
+            options.transitionTracker
+        ) {
+            addPlugin(resolver.resolve('./runtime/plugin'))
+        }
 
         // ── Nitro plugin for SSR fetch capture ────────────────────────────────
         if (options.fetchDashboard) {
@@ -193,6 +201,11 @@ export default defineNuxtModule<ModuleOptions>({
         nuxt.options.runtimeConfig.public.observatory = {
             heatmapThreshold: options.heatmapThreshold ?? 5,
             clientOrigin,
+            fetchDashboard: options.fetchDashboard,
+            provideInjectGraph: options.provideInjectGraph,
+            composableTracker: options.composableTracker,
+            renderHeatmap: options.renderHeatmap,
+            transitionTracker: options.transitionTracker,
         }
     },
 })
