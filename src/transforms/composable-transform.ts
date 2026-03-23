@@ -129,7 +129,7 @@ export function composableTrackerPlugin(): Plugin {
                         const args = path.node.arguments
                         const loc = path.node.loc
                         const meta = t.objectExpression([
-                            t.objectProperty(t.identifier('file'), t.stringLiteral(id.split('/').pop() ?? id)),
+                            t.objectProperty(t.identifier('file'), t.stringLiteral(id)),
                             t.objectProperty(t.identifier('line'), t.numericLiteral(loc?.start.line ?? 0)),
                         ])
 

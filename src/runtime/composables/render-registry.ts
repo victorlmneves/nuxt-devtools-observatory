@@ -4,6 +4,19 @@ interface DevtoolsWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
+export interface RenderEvent {
+    /** 'mount' for initial mount, 'update' for reactive re-renders */
+    kind: 'mount' | 'update'
+    /** performance.now() timestamp */
+    t: number
+    /** Duration in ms */
+    durationMs: number
+    /** Reactive dep key that triggered this update, if known */
+    triggerKey?: string
+    /** Route path this render happened on */
+    route: string
+}
+
 export interface RenderEntry {
     uid: number
     name: string
@@ -17,12 +30,16 @@ export interface RenderEntry {
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
+    /** Per-render timeline, capped at MAX_TIMELINE events (newest last) */
+    timeline: RenderEvent[]
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
     parentUid?: number
     /** True if this component survived at least one reset() — indicates a layout/persistent component */
     isPersistent: boolean
     /** True if the first mount of this component happened during SSR hydration */
     isHydrationMount: boolean
+    /** Route path this component was first seen on */
+    route: string
 }
 
 /**
@@ -40,12 +57,19 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     const renderStartTimes = new Map<number, number>()
     // Track uids that existed before the last reset() — used to flag persistent components
     let preResetUids = new Set<number>()
+    // Current route, updated by the plugin on every navigation
+    let currentRoute = '/'
+    const MAX_TIMELINE = 100
+
+    function setRoute(path: string) {
+        currentRoute = path
+    }
 
     function ensureEntry(instance: ComponentPublicInstance) {
         const uid: number = instance.$.uid
 
         if (!entries.value.has(uid)) {
-            entries.value.set(uid, makeEntry(uid, instance))
+            entries.value.set(uid, makeEntry(uid, instance, currentRoute))
         }
 
         return entries.value.get(uid)!
@@ -78,7 +102,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         renderStartTimes.set(uid, performance.now())
     }
 
-    function recordRenderDuration(entry: RenderEntry) {
+    function recordRenderDuration(entry: RenderEntry, kind: 'mount' | 'update') {
         if (typeof performance === 'undefined') {
             return
         }
@@ -90,11 +114,28 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         }
 
         renderStartTimes.delete(entry.uid)
-        entry.totalMs += Math.max(performance.now() - startedAt, 0)
+        const durationMs = Math.max(performance.now() - startedAt, 0)
+        entry.totalMs += durationMs
         // avgMs covers both initial mounts and re-renders since both take real time.
         // Use rerenders + mountCount as the denominator; guard against 0 with max(,1).
         const totalEvents = (entry.rerenders ?? 0) + Math.max(entry.mountCount, 1)
         entry.avgMs = Math.round((entry.totalMs / totalEvents) * 10) / 10
+
+        // Append to per-component timeline
+        const lastTrigger = entry.triggers.length > 0 ? entry.triggers[entry.triggers.length - 1] : undefined
+        const event: RenderEvent = {
+            kind,
+            t: startedAt,
+            durationMs: Math.round(durationMs * 10) / 10,
+            triggerKey: kind === 'update' && lastTrigger ? `${lastTrigger.type}: ${lastTrigger.key}` : undefined,
+            route: currentRoute,
+        }
+
+        entry.timeline.push(event)
+
+        if (entry.timeline.length > MAX_TIMELINE) {
+            entry.timeline.shift()
+        }
     }
 
     function reset() {
@@ -110,6 +151,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             entry.totalMs = 0
             entry.avgMs = 0
             entry.triggers = []
+            entry.timeline = []
             // mountCount intentionally NOT reset — it reflects how many times this
             // component mounted during the current page's lifetime. Resetting it
             // would make the second mount appear to be a first mount and bypass
@@ -142,7 +184,15 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             }
 
             syncRect(entry, this)
-            recordRenderDuration(entry)
+            // Persistent components re-mounting after navigation are NOT new renders —
+            // they kept their DOM. Only record the timeline event for genuine first mounts
+            // and explicit re-mounts (v-if etc.), not navigation-triggered re-attachments.
+            if (!entry.isPersistent || entry.mountCount === 1) {
+                recordRenderDuration(entry, 'mount')
+            } else {
+                // Still clear the start time so it doesn't bleed into the next event
+                renderStartTimes.delete(entry.uid)
+            }
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
 
@@ -172,7 +222,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             entry.rerenders++
 
             syncRect(entry, this)
-            recordRenderDuration(entry)
+            recordRenderDuration(entry, 'update')
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
 
@@ -195,6 +245,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             totalMs: entry.totalMs,
             avgMs: entry.avgMs,
             triggers: entry.triggers,
+            timeline: entry.timeline,
             rect: entry.rect
                 ? {
                       x: entry.rect.x,
@@ -208,6 +259,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             parentUid: entry.parentUid,
             isPersistent: entry.isPersistent,
             isHydrationMount: entry.isHydrationMount,
+            route: entry.route,
         }
     }
     function getAll(): RenderEntry[] {
@@ -227,16 +279,17 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         channel?.send(event, data)
     }
 
-    return { getAll, snapshot, reset }
+    return { getAll, snapshot, reset, setRoute }
 }
 
 /**
  * Creates a new RenderEntry object from a given component instance.
  * @param {number} uid - A unique identifier for the component.
  * @param {ComponentPublicInstance} instance - The component instance.
+ * @param {string} route - The current route path.
  * @returns {RenderEntry} A new RenderEntry object.
  */
-function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry {
+function makeEntry(uid: number, instance: ComponentPublicInstance, route: string): RenderEntry {
     const type = instance.$.type as { __name?: string; __file?: string; name?: string }
     const parentType = instance.$parent?.$?.type as { __name?: string; __file?: string; name?: string } | undefined
     const element = describeElement(instance.$el)
@@ -254,9 +307,11 @@ function makeEntry(uid: number, instance: ComponentPublicInstance): RenderEntry 
         totalMs: 0,
         avgMs: 0,
         triggers: [],
+        timeline: [],
         parentUid: instance.$parent?.$.uid,
         isPersistent: false,
         isHydrationMount: false,
+        route,
     }
 }
 

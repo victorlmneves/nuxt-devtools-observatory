@@ -64,6 +64,13 @@ export default defineNuxtModule<ModuleOptions>({
             return
         }
 
+        // Ensure launch-editor can open files when the user clicks "open in editor".
+        // VS Code is the safe default — it won't override an editor the user already
+        // configured via LAUNCH_EDITOR or VITE_EDITOR env vars.
+        if (!process.env.LAUNCH_EDITOR && !process.env.VITE_EDITOR) {
+            process.env.LAUNCH_EDITOR = 'code'
+        }
+
         const resolver = createResolver(import.meta.url)
 
         // ── Vite aliases for runtime shims (dev resolution) ──────────────────

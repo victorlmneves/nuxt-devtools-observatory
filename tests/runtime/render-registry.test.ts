@@ -73,14 +73,14 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(42)
-            ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-                effect: effect(() => {}).effect,
-                key: 'items',
-                type: TriggerOpTypes.SET,
-            })
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            effect: effect(() => {}).effect,
+            key: 'items',
+            type: TriggerOpTypes.SET,
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
         ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-                effect: effect(() => {}).effect,
+            effect: effect(() => {}).effect,
             key: 'items',
             type: TriggerOpTypes.SET,
         })
@@ -104,7 +104,7 @@ describe('setupRenderRegistry', () => {
         // updated() without renderTriggered — this is how parent-driven re-renders
         // arrive (prop changes, slot re-renders, forced updates).
         // They must be counted, otherwise most real-world re-renders are invisible.
-            ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         expect(getAll()[0].rerenders).toBe(1)
     })
@@ -196,11 +196,11 @@ describe('setupRenderRegistry', () => {
         const instance = fakeCPI(10)
 
         // Fire renderTriggered before updated so the entry exists
-            ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-                effect: effect(() => {}).effect,
-                key: 'count',
-                type: TriggerOpTypes.SET,
-            })
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
+            effect: effect(() => {}).effect,
+            key: 'count',
+            type: TriggerOpTypes.SET,
+        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
@@ -913,5 +913,172 @@ describe('setupRenderRegistry — reset() preserves mountCount', () => {
         // mountCount = 2 means it re-mounted → counts as a rerender
         expect(getAll()[0].mountCount).toBe(2)
         expect(getAll()[0].rerenders).toBe(1)
+    })
+})
+
+describe('setupRenderRegistry — timeline', () => {
+    it('records a mount timeline event on the first mount', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(600)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi)
+
+        const entry = getAll()[0]
+        expect(entry.timeline).toHaveLength(1)
+        expect(entry.timeline[0].kind).toBe('mount')
+        expect(typeof entry.timeline[0].t).toBe('number')
+        expect(typeof entry.timeline[0].durationMs).toBe('number')
+    })
+
+    it('records an update timeline event on rerenders', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(601)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi)
+        mixin.beforeUpdate?.call(cpi)
+        mixin.updated?.call(cpi)
+
+        const entry = getAll()[0]
+        expect(entry.timeline).toHaveLength(2)
+        expect(entry.timeline[1].kind).toBe('update')
+    })
+
+    it('timeline is cleared by reset()', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(602)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi)
+        expect(getAll()[0].timeline).toHaveLength(1)
+
+        reset()
+        expect(getAll()[0].timeline).toHaveLength(0)
+    })
+
+    it('timeline includes the triggerKey when renderTriggered fired before updated', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(603)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi)
+        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(cpi, {
+            key: 'count',
+            type: 'set',
+        })
+        mixin.beforeUpdate?.call(cpi)
+        mixin.updated?.call(cpi)
+
+        const updateEvent = getAll()[0].timeline.find((e) => e.kind === 'update')
+        expect(updateEvent?.triggerKey).toBe('set: count')
+    })
+
+    it('timeline stores the route each event happened on', () => {
+        const app = createApp({})
+        const { getAll, setRoute } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        setRoute('/products')
+        const cpi = fakeCPI(604)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].timeline[0].route).toBe('/products')
+    })
+})
+
+describe('setupRenderRegistry — route and setRoute', () => {
+    it('entry.route is "/" by default', () => {
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(700)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].route).toBe('/')
+    })
+
+    it('entry.route reflects the active route when the component first mounted', () => {
+        const app = createApp({})
+        const { getAll, setRoute } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        setRoute('/about')
+        const cpi = fakeCPI(701)
+        mixin.mounted?.call(cpi)
+
+        expect(getAll()[0].route).toBe('/about')
+    })
+
+    it('setRoute does not change the route field of already-registered entries', () => {
+        const app = createApp({})
+        const { getAll, setRoute } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        setRoute('/home')
+        const cpi = fakeCPI(702)
+        mixin.mounted?.call(cpi)
+
+        setRoute('/profile')
+        // Navigating away should not alter the entry's creation route
+        expect(getAll()[0].route).toBe('/home')
+    })
+})
+
+describe('setupRenderRegistry — persistent component double-count fix', () => {
+    it('persistent component re-mounting after navigation does NOT add a mount timeline event', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(800)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi) // first mount — recorded in timeline
+
+        reset() // simulates navigation — this component survives → isPersistent = true
+
+        mixin.beforeMount?.call(cpi) // re-attach after navigation
+        mixin.mounted?.call(cpi)
+
+        const entry = getAll()[0]
+        // The re-mount after navigation should NOT appear in the timeline
+        expect(entry.isPersistent).toBe(true)
+        expect(entry.timeline).toHaveLength(0) // reset() cleared previous; new mount not recorded
+    })
+
+    it('reactive updates on a persistent component ARE still recorded in the timeline', () => {
+        const app = createApp({})
+        const { getAll, reset } = setupRenderRegistry(makeNuxtApp(app))
+        const mixin = app._context.mixins[app._context.mixins.length - 1]
+
+        const cpi = fakeCPI(801)
+        mixin.beforeMount?.call(cpi)
+        mixin.mounted?.call(cpi)
+        reset()
+        mixin.beforeMount?.call(cpi)
+        // re-attach after navigation — isPersistent is now true, no timeline event recorded,
+        // but mountCount becomes 2 so rerenders gets +1 (existing behaviour preserved)
+        mixin.mounted?.call(cpi)
+
+        // A real reactive update fires after navigation
+        mixin.beforeUpdate?.call(cpi)
+        mixin.updated?.call(cpi)
+
+        const entry = getAll()[0]
+        // timeline has only the reactive update event (not the navigation re-attach)
+        expect(entry.timeline).toHaveLength(1)
+        expect(entry.timeline[0].kind).toBe('update')
+        // rerenders = 1 from re-attach (mountCount > 1) + 1 from reactive update = 2
+        expect(entry.rerenders).toBe(2)
     })
 })

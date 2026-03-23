@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
-import { useObservatoryData, type RenderEntry } from '../stores/observatory'
+import { useObservatoryData, getObservatoryOrigin, type RenderEntry, type RenderEvent } from '../stores/observatory'
 
 interface ComponentNode {
     id: string
@@ -13,11 +13,13 @@ interface ComponentNode {
     mountCount: number
     avgMs: number
     triggers: string[]
+    timeline: RenderEvent[]
     children: ComponentNode[]
     parentId?: string
     parentLabel?: string
     isPersistent: boolean
     isHydrationMount: boolean
+    route: string
 }
 
 const TreeNode = defineComponent({
@@ -128,6 +130,20 @@ const TreeNode = defineComponent({
                                   )
                                 : null,
                             h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
+                            node.file && node.file !== 'unknown'
+                                ? h(
+                                      'button',
+                                      {
+                                          class: 'tree-jump-btn',
+                                          title: `Open ${node.file} in editor`,
+                                          onClick: (e: MouseEvent) => {
+                                              e.stopPropagation()
+                                              openInEditor(node.file)
+                                          },
+                                      },
+                                      '↗'
+                                  )
+                                : null,
                         ]),
                     ]
                 ),
@@ -156,6 +172,8 @@ const TreeNode = defineComponent({
 const { renders, connected } = useObservatoryData()
 
 const activeMode = ref<'count' | 'time'>('count')
+// Route filter — '' means show all routes
+const activeRoute = ref('')
 // Separate thresholds per mode so switching modes doesn't produce nonsense results.
 // Count: flag components that rendered 3+ times (1 hydration mount is normal).
 // Time: flag components averaging 16ms+ (one animation frame budget).
@@ -222,10 +240,12 @@ function buildNodes(entries: RenderEntry[]) {
             mountCount: entry.mountCount ?? 1,
             avgMs: entry.avgMs,
             triggers: entry.triggers.map(formatTrigger),
+            timeline: entry.timeline ?? [],
             children: [],
             parentId: entry.parentUid !== undefined ? String(entry.parentUid) : undefined,
             isPersistent: Boolean(entry.isPersistent),
             isHydrationMount: Boolean(entry.isHydrationMount),
+            route: entry.route ?? '/',
         })
     }
 
@@ -392,11 +412,24 @@ function subtreeHasHotNode(node: ComponentNode): boolean {
     return isHot(node) || node.children.some((child) => subtreeHasHotNode(child))
 }
 
+function nodeMatchesRoute(node: ComponentNode): boolean {
+    if (!activeRoute.value) return true
+    // A component is visible for a route if it was first seen on that route
+    // OR if any of its timeline events happened on that route.
+    if (node.route === activeRoute.value) return true
+    return node.timeline.some((e) => e.route === activeRoute.value)
+}
+
+function subtreeMatchesRoute(node: ComponentNode): boolean {
+    return nodeMatchesRoute(node) || node.children.some((child) => subtreeMatchesRoute(child))
+}
+
 function isVisibleRoot(node: ComponentNode, searchTerm: string): boolean {
     const matchesCurrentSearch = treeMatches(node, searchTerm)
     const matchesCurrentHeat = !activeHotOnly.value || subtreeHasHotNode(node)
+    const matchesCurrentRoute = !activeRoute.value || subtreeMatchesRoute(node)
 
-    return matchesCurrentSearch && matchesCurrentHeat
+    return matchesCurrentSearch && matchesCurrentHeat && matchesCurrentRoute
 }
 
 function pruneVisibleTree(node: ComponentNode, searchTerm: string): ComponentNode | null {
@@ -406,8 +439,9 @@ function pruneVisibleTree(node: ComponentNode, searchTerm: string): ComponentNod
 
     const matchesCurrentSearch = !searchTerm || matchesSearch(node, searchTerm) || visibleChildren.length > 0
     const matchesCurrentHeat = !activeHotOnly.value || isHot(node) || visibleChildren.length > 0
+    const matchesCurrentRoute = !activeRoute.value || nodeMatchesRoute(node) || visibleChildren.length > 0
 
-    if (!matchesCurrentSearch || !matchesCurrentHeat) {
+    if (!matchesCurrentSearch || !matchesCurrentHeat || !matchesCurrentRoute) {
         return null
     }
 
@@ -458,6 +492,17 @@ const appEntries = computed(() =>
         root,
     }))
 )
+
+const knownRoutes = computed(() => {
+    const routes = new Set<string>()
+    for (const node of allComponents.value) {
+        if (node.route) routes.add(node.route)
+        for (const event of node.timeline) {
+            if (event.route) routes.add(event.route)
+        }
+    }
+    return [...routes].sort()
+})
 
 const activeSelected = computed(() => allComponents.value.find((node) => node.id === activeSelectedId.value) ?? null)
 const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.rerenders + node.mountCount, 0))
@@ -617,8 +662,24 @@ function basename(file: string) {
     )
 }
 
+function openInEditor(file: string) {
+    if (!file || file === 'unknown') return
+    const origin = getObservatoryOrigin()
+    if (!origin) return
+    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+}
+
 function pathLabel(node: ComponentNode) {
     return node.path.join(' / ')
+}
+
+function formatMs(ms: number): string {
+    return ms < 1 ? '<1ms' : `${ms.toFixed(1)}ms`
+}
+
+function formatTimestamp(t: number): string {
+    // t is performance.now() — show as relative seconds from page load
+    return `+${(t / 1000).toFixed(2)}s`
 }
 </script>
 
@@ -642,6 +703,10 @@ function pathLabel(node: ComponentNode) {
                 <span class="mono text-sm">{{ activeThreshold }}{{ activeMode === 'count' ? '+ renders' : 'ms+' }}</span>
             </div>
             <button :class="{ active: activeHotOnly }" @click="activeHotOnly = !activeHotOnly">hot only</button>
+            <select v-model="activeRoute" class="route-select mono text-sm" title="Filter by route">
+                <option value="">all routes</option>
+                <option v-for="r in knownRoutes" :key="r" :value="r">{{ r }}</option>
+            </select>
             <button :class="{ active: frozen }" style="margin-left: auto" @click="toggleFreeze">
                 {{ frozen ? 'unfreeze' : 'freeze snapshot' }}
             </button>
@@ -744,7 +809,17 @@ function pathLabel(node: ComponentNode) {
                         <span class="muted text-sm">path</span>
                         <span class="mono text-sm">{{ pathLabel(activeSelected) }}</span>
                         <span class="muted text-sm">file</span>
-                        <span class="mono text-sm muted">{{ activeSelected.file }}</span>
+                        <span class="mono text-sm muted" style="display: flex; align-items: center; gap: 6px">
+                            {{ activeSelected.file }}
+                            <button
+                                v-if="activeSelected.file && activeSelected.file !== 'unknown'"
+                                class="jump-btn"
+                                title="Open in editor"
+                                @click="openInEditor(activeSelected.file)"
+                            >
+                                open ↗
+                            </button>
+                        </span>
                         <span class="muted text-sm">file name</span>
                         <span class="mono text-sm">{{ basename(activeSelected.file) }}</span>
                         <span class="muted text-sm">parent</span>
@@ -778,6 +853,26 @@ function pathLabel(node: ComponentNode) {
                     <div class="section-label">triggers</div>
                     <div v-for="trigger in activeSelected.triggers" :key="trigger" class="trigger-item mono text-sm">{{ trigger }}</div>
                     <div v-if="!activeSelected.triggers.length" class="muted text-sm">no triggers recorded</div>
+
+                    <div class="section-label" style="margin-top: 8px">
+                        render timeline
+                        <span class="muted" style="font-weight: 400; text-transform: none; letter-spacing: 0">
+                            ({{ activeSelected.timeline.length }})
+                        </span>
+                    </div>
+                    <div v-if="!activeSelected.timeline.length" class="muted text-sm">no timeline events yet</div>
+                    <div v-else class="timeline-list">
+                        <div v-for="(event, idx) in [...activeSelected.timeline].reverse().slice(0, 30)" :key="idx" class="timeline-row">
+                            <span class="timeline-kind mono" :class="event.kind">{{ event.kind }}</span>
+                            <span class="timeline-time mono muted">{{ formatTimestamp(event.t) }}</span>
+                            <span class="timeline-dur mono">{{ formatMs(event.durationMs) }}</span>
+                            <span v-if="event.triggerKey" class="timeline-trigger mono muted">{{ event.triggerKey }}</span>
+                            <span class="timeline-route mono muted" style="margin-left: auto">{{ event.route }}</span>
+                        </div>
+                        <div v-if="activeSelected.timeline.length > 30" class="muted text-sm" style="padding: 2px 0">
+                            … {{ activeSelected.timeline.length - 30 }} earlier events
+                        </div>
+                    </div>
                 </template>
                 <div v-else class="detail-empty">click a component to inspect</div>
             </aside>
@@ -1151,6 +1246,123 @@ function pathLabel(node: ComponentNode) {
     padding: 4px 8px;
     margin-bottom: 3px;
     color: var(--text2);
+}
+
+:deep(.tree-jump-btn) {
+    display: none;
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    font-size: 11px;
+    cursor: pointer;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+:deep(.tree-row:hover .tree-jump-btn),
+:deep(.tree-row.selected .tree-jump-btn) {
+    display: inline-flex;
+}
+
+:deep(.tree-jump-btn:hover) {
+    color: var(--teal);
+}
+
+.jump-btn {
+    font-size: 10px;
+    padding: 1px 6px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    flex-shrink: 0;
+    font-family: var(--mono);
+}
+
+.jump-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal);
+    background: color-mix(in srgb, var(--teal) 8%, transparent);
+}
+
+.route-select {
+    padding: 3px 7px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 11px;
+    cursor: pointer;
+    max-width: 140px;
+}
+
+.timeline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--bg2);
+    border-radius: var(--radius);
+    padding: 4px 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    font-size: 11px;
+    border-bottom: 0.5px solid var(--border);
+    min-width: 0;
+}
+
+.timeline-row:last-child {
+    border-bottom: none;
+}
+
+.timeline-kind {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 500;
+    min-width: 40px;
+}
+
+.timeline-kind.mount {
+    color: var(--teal);
+}
+
+.timeline-kind.update {
+    color: var(--amber);
+}
+
+.timeline-time {
+    flex-shrink: 0;
+    min-width: 52px;
+    color: var(--text3);
+}
+
+.timeline-dur {
+    flex-shrink: 0;
+    min-width: 38px;
+    color: var(--text2);
+}
+
+.timeline-trigger {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text3);
+    flex: 1;
+    min-width: 0;
+}
+
+.timeline-route {
+    flex-shrink: 0;
+    color: var(--text3);
+    font-size: 10px;
 }
 
 @media (max-width: 1180px) {
