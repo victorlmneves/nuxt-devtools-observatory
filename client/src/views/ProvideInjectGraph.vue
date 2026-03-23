@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useObservatoryData, type InjectEntry, type ProvideEntry } from '../stores/observatory'
+import { useObservatoryData, getObservatoryOrigin, type InjectEntry, type ProvideEntry } from '../stores/observatory'
 
 interface TreeNodeData {
     id: string
     label: string
     componentName: string
+    componentFile: string
     type: 'provider' | 'consumer' | 'both' | 'error'
     provides: Array<{
         key: string
@@ -46,22 +47,44 @@ const H_GAP = 18
 const { provideInject, connected } = useObservatoryData()
 
 function nodeColor(node: TreeNodeData): string {
-    if (node.injects.some((entry) => !entry.ok)) return 'var(--red)'
-    if (node.type === 'both') return 'var(--blue)'
-    if (node.type === 'provider') return 'var(--teal)'
+    if (node.injects.some((entry) => !entry.ok)) {
+        return 'var(--red)'
+    }
+
+    if (node.type === 'both') {
+        return 'var(--blue)'
+    }
+
+    if (node.type === 'provider') {
+        return 'var(--teal)'
+    }
+
     return 'var(--text3)'
 }
 
 function matchesFilter(node: TreeNodeData, filter: string): boolean {
-    if (filter === 'all') return true
-    if (filter === 'warn') return node.injects.some((entry) => !entry.ok)
-    if (filter === 'shadow') return node.provides.some((entry) => entry.isShadowing)
+    if (filter === 'all') {
+        return true
+    }
+
+    if (filter === 'warn') {
+        return node.injects.some((entry) => !entry.ok)
+    }
+
+    if (filter === 'shadow') {
+        return node.provides.some((entry) => entry.isShadowing)
+    }
+
     return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
 }
 
 function matchesSearch(node: TreeNodeData, query: string): boolean {
-    if (!query) return true
+    if (!query) {
+        return true
+    }
+
     const q = query.toLowerCase()
+
     return (
         node.label.toLowerCase().includes(q) ||
         node.componentName.toLowerCase().includes(q) ||
@@ -74,18 +97,24 @@ function matchesSearch(node: TreeNodeData, query: string): boolean {
  * Count leaf nodes in a subtree iteratively to avoid stack overflow on
  * pathologically deep provide/inject trees (e.g. every component re-providing
  * the same key creates a chain as long as the component tree itself).
+ *
+ * @param {TreeNodeData} root - The root node of the subtree to count leaves for.
+ * @returns {number} The number of leaf nodes in the subtree.
  */
 function countLeaves(root: TreeNodeData): number {
     let count = 0
     const stack: TreeNodeData[] = [root]
+
     while (stack.length) {
         const node = stack.pop()!
+
         if (node.children.length === 0) {
             count++
         } else {
             stack.push(...node.children)
         }
     }
+
     return count
 }
 
@@ -116,6 +145,7 @@ function formatValuePreview(value: unknown) {
 
     if (typeof value === 'object') {
         const keys = Object.keys(value as Record<string, unknown>)
+
         return keys.length ? `{ ${keys.join(', ')} }` : '{}'
     }
 
@@ -142,6 +172,17 @@ function basename(file: string) {
     return file.split('/').pop() ?? file
 }
 
+function openInEditor(file: string) {
+    if (!file || file === 'unknown') {
+        return
+    }
+    const origin = getObservatoryOrigin()
+    if (!origin) {
+        return
+    }
+    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+}
+
 function componentId(entry: ProvideEntry | InjectEntry) {
     return String(entry.componentUid)
 }
@@ -162,6 +203,7 @@ const nodes = computed<TreeNodeData[]>(() => {
             id,
             label: basename(entry.componentFile),
             componentName: entry.componentName ?? basename(entry.componentFile),
+            componentFile: entry.componentFile,
             type: 'consumer',
             provides: [],
             injects: [],
@@ -278,16 +320,22 @@ const allKeys = computed(() => {
 })
 
 const visibleNodes = computed<TreeNodeData[]>(() => {
-    // Iterative post-order prune — avoids stack overflow on deep trees.
-    // We process nodes bottom-up so each parent can inspect its children's
-    // already-computed visibility before deciding its own.
+    /**
+     * Iterative post-order prune — avoids stack overflow on deep trees.
+     * Processes nodes bottom-up so each parent can inspect its children's
+     * already-computed visibility before deciding its own.
+     * @param {TreeNodeData} root - The root node of the tree to prune.
+     * @returns {TreeNodeData | null} The pruned tree node or null if the node is not visible.
+     */
     function pruneIterative(root: TreeNodeData): TreeNodeData | null {
         // Phase 1: collect nodes in pre-order (parent before children)
         const order: TreeNodeData[] = []
         const stack: TreeNodeData[] = [root]
+
         while (stack.length) {
             const node = stack.pop()!
             order.push(node)
+
             for (let i = node.children.length - 1; i >= 0; i--) {
                 stack.push(node.children[i])
             }
@@ -295,6 +343,7 @@ const visibleNodes = computed<TreeNodeData[]>(() => {
 
         // Phase 2: process in reverse pre-order (children before parents)
         const pruned = new Map<TreeNodeData, TreeNodeData | null>()
+
         for (let i = order.length - 1; i >= 0; i--) {
             const node = order[i]
             const visibleChildren = node.children
@@ -322,6 +371,7 @@ watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
 
     const ids = new Set<string>()
     const stack = [...currentNodes]
+
     while (stack.length) {
         const node = stack.pop()!
         ids.add(node.id)
@@ -366,11 +416,13 @@ const layout = computed<LayoutNode[]>(() => {
             // Push children in reverse so leftmost child is processed first
             let childLeft = slotLeft
             const childWork: WorkItem[] = []
+
             for (const child of node.children) {
                 const childLeaves = countLeaves(child)
                 childWork.push({ node: child, depth: depth + 1, slotLeft: childLeft, parentId: node.id })
                 childLeft += childLeaves * (NODE_W + H_GAP)
             }
+
             for (let i = childWork.length - 1; i >= 0; i--) {
                 stack.push(childWork[i])
             }
@@ -483,6 +535,14 @@ const edges = computed<Edge[]>(() => {
             <div v-if="selectedNode" class="detail-panel">
                 <div class="detail-header">
                     <span class="mono bold" style="font-size: 12px">{{ selectedNode.label }}</span>
+                    <button
+                        v-if="selectedNode.componentFile && selectedNode.componentFile !== 'unknown'"
+                        class="jump-btn"
+                        title="Open in editor"
+                        @click="openInEditor(selectedNode.componentFile)"
+                    >
+                        open ↗
+                    </button>
                     <button @click="selectedNode = null">×</button>
                 </div>
 
@@ -865,5 +925,23 @@ const edges = computed<Edge[]>(() => {
 
 .inject-miss {
     background: rgb(226 75 74 / 8%);
+}
+
+.jump-btn {
+    font-size: 10px;
+    padding: 1px 6px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    flex-shrink: 0;
+    font-family: var(--mono);
+}
+
+.jump-btn:hover {
+    border-color: var(--teal);
+    color: var(--teal);
+    background: color-mix(in srgb, var(--teal) 8%, transparent);
 }
 </style>

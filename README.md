@@ -3,8 +3,8 @@
 Nuxt DevTools extension providing five missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
-- **provide/inject Graph** — interactive tree showing the full injection topology with missing-provider detection
-- **Composable Tracker** — live view of active composables, their reactive state, and leak detection
+- **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
+- **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 
@@ -45,7 +45,7 @@ transforms are skipped entirely — zero runtime overhead.
 
 ### useFetch Dashboard
 
-[![useFetch Dashboard](./docs/screenshots/fetch-dashboard.png)](./docs/screenshots/fetch-dashboard.png)
+[![useFetch Dashboard](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/fetch-dashboard.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/fetch-dashboard.png)
 
 A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim that records:
 
@@ -58,56 +58,78 @@ client over the HMR WebSocket.
 
 ### provide/inject Graph
 
-[![provide/inject Graph](./docs/screenshots/provide-inject-graph.png)](./docs/screenshots/provide-inject-graph.png)
+[![provide/inject Graph](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/provide-inject-graph.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/provide-inject-graph.png)
 
 A Vite plugin wraps `provide()` and `inject()` calls with annotated versions that
 carry file and line metadata. At runtime, a `findProvider()` function walks
 `instance.parent` chains to identify which ancestor provided each key.
-Any `inject()` that resolves to `undefined` is flagged immediately.
+Any `inject()` that resolves to `undefined` is flagged immediately as a red node.
 
-**Current state:** The graph shows the full provider/injector topology and highlights
-missing providers as red nodes. Clickable keys display their associated value; deep
-object expand/collapse is under active development.
+The panel provides:
 
-**Known gaps:**
-
-- No grouping or count badge when multiple components share the same key
-- No inline value preview before expanding
-- No scope label (global / layout / component-scoped) on provider nodes
-- No warning when a child component overrides a key already provided by an ancestor
-- No search or filter by key or component name
-- No jump-to-component shortcut from a graph node
+- **Interactive SVG graph** — component tree with curved edges; nodes colour-coded by
+  role (teal = provides, blue = both, grey = injects, red = missing provider)
+- **Value inspection** — each provided key shows an inline preview (e.g. `{ user, isLoggedIn }`)
+  with a `view` button to expand the full JSON for complex objects
+- **Scope labels** — every provided key carries a `global`, `layout`, or `component`
+  badge derived from the providing component's position in the tree
+- **Shadow detection** — when a child component re-provides a key already provided by
+  an ancestor, the entry is flagged with an amber warning and a `shadowed` filter button
+  appears in the toolbar
+- **Consumer list** — each provided key shows which components inject it, with chip badges
+- **Missing-provider warnings** — unresolved `inject()` calls are shown with a red
+  `no provider` badge and the component node turns red in the graph
+- **Filter by key** — per-key filter buttons in the toolbar narrow the graph to only
+  components involved with a specific key
+- **Search** — free-text search across component names and key names
+- **Jump to editor** — clicking `open ↗` in the detail panel header opens the selected
+  component's source file in the configured editor
 
 ### Composable Tracker
 
-[![Composable Tracker](./docs/screenshots/composable-tracker.png)](./docs/screenshots/composable-tracker.png)
+[![Composable Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/composable-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/composable-tracker.png)
 
 A Vite plugin detects all `useXxx()` calls matching Vue's naming convention and
-wraps them with a tracking proxy that:
+wraps them with a tracking shim (`__trackComposable`) that:
 
 1. Temporarily replaces `window.setInterval`/`clearInterval` during setup to capture
    any intervals started inside the composable
-2. Wraps `watch()` calls to track whether stop functions are called on unmount
-3. Snapshots returned `ref` and `computed` values for the live state panel
-4. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
+2. Tracks new Vue effects (watchers) added to the component scope during setup
+3. Snapshots returned `ref`, `computed`, and `reactive` values for the live state panel,
+   keeping live references so values update in real time without polling
+4. Detects shared (global) state by comparing object identity across multiple instances
+   of the same composable — keys backed by the same reference are marked as global
+5. Records a change history (capped at 50 events) via `watchEffect`, capturing which
+   key changed, its new value, and a `performance.now()` timestamp
+6. Flags any watcher or interval still active after `onUnmounted` fires as a **leak**
 
-**Current state:** `ref` and `computed` snapshots, watcher tracking, interval tracking,
-and leak detection are all working. The panel shows active composable instances with
-their current reactive values.
+The panel provides:
+
+- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search
+  across composable name, source file, ref key names, and ref values
+- **Inline ref chip preview** — up to three reactive values shown on the card without
+  expanding, with distinct styling for `ref`, `computed`, and `reactive` types
+- **Global state badges** — keys shared across instances are highlighted in amber with
+  a `global` badge and an explanatory banner when expanded
+- **Change history** — a scrollable log of the last 50 value mutations with key, new
+  value, and relative timestamp
+- **Lifecycle summary** — shows whether `onMounted`/`onUnmounted` were registered and
+  whether watchers and intervals were properly cleaned up
+- **Reverse lookup** — clicking any ref key opens a panel listing every other composable
+  instance that exposes a key with the same name, with its composable name, file, and route
+- **Inline value editing** — writable `ref` values have an `edit` button; clicking opens
+  a JSON textarea that applies the new value directly to the live ref in the running app
+- **Jump to editor** — an `open ↗` button in the context section opens the composable's
+  source file in the configured editor
 
 **Known gaps:**
 
-- `reactive()` objects are not yet included in state snapshots
-- No per-instance parent component/page link in the UI (tracking data exists but isn't surfaced)
-- No value change history or timeline — values show current state only
-- No global-vs-local state distinction on composable entries
-- No search or filter by composable name or reactive value
-- No reverse lookup: clicking a value does not yet reveal which components consume it
-- No inline value editing for live testing without recompiling
+- Reverse lookup matches by key name only, not by object identity
+- Search does not look inside nested `reactive` object properties
 
 ### Render Heatmap
 
-[![Render Heatmap](./docs/screenshots/render-heatmap.png)](./docs/screenshots/render-heatmap.png)
+[![Render Heatmap](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)
 
 Uses Vue's built-in `renderTriggered` mixin hook and `app.config.performance = true`.
 Accurate duration is measured by bracketing each `beforeMount`/`mounted` and
@@ -159,7 +181,7 @@ The panel provides:
 
 ### Transition Tracker
 
-[![Transition Tracker](./docs/screenshots/transition-tracker.png)](./docs/screenshots/transition-tracker.png)
+[![Transition Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)
 
 A Vite plugin intercepts `import ... from 'vue'` in user code and serves a virtual
 proxy module that overrides the `Transition` export with an instrumented wrapper.
@@ -201,19 +223,6 @@ const result = useMyComposable()
 ```
 
 ## Roadmap
-
-The following improvements are planned across the three main panels. Contributions
-are welcome — see [Development](#development) below.
-
-### provide/inject Graph
-
-- [ ] Clickable key → expand/collapse deep object values
-- [ ] Group components sharing the same key with an occurrence count badge
-- [ ] Inline value preview (e.g. `{ user: {…}, isLoggedIn: true }`) before expanding
-- [ ] Scope label on provider nodes: global / layout / component-scoped
-- [ ] Warning when a child overrides a key already provided by an ancestor
-- [ ] Filter panel by key or component name
-- [ ] Jump-to-component shortcut from graph nodes
 
 ### Composable Tracker
 
