@@ -573,6 +573,7 @@ describe('setupComposableRegistry — clear() (session reset)', () => {
         getWindow().__observatory__ = { composable: reg }
 
         let changeCount = 0
+
         reg.onComposableChange(() => {
             changeCount++
         })
@@ -688,6 +689,7 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
         reg.register(entryB)
 
         const all = reg.getAll()
+
         expect(all.find((e) => e.name === 'useHome')?.route).toBe('/home')
         expect(all.find((e) => e.name === 'useAbout')?.route).toBe('/about')
     })
@@ -717,9 +719,11 @@ describe('setupComposableRegistry — navigation reset via clear()', () => {
 
         reg.register(makeEntry('a::1::C.ts:1::0::a', 'useA', '/'))
         reg.register(makeEntry('b::1::C.ts:1::0::b', 'useB', '/'))
+
         expect(reg.getAll()).toHaveLength(2)
 
         reg.clear()
+
         expect(reg.getAll()).toHaveLength(0)
     })
 
@@ -742,6 +746,7 @@ describe('setupComposableRegistry — navigation reset via clear()', () => {
 
         // Simulate: router.beforeEach fires → clear
         reg.clear()
+
         expect(reg.getAll()).toHaveLength(0)
 
         // Simulate: page B mounts AFTER the clear
@@ -757,6 +762,7 @@ describe('setupComposableRegistry — navigation reset via clear()', () => {
 
         // Only page B's composable should appear
         const all = reg.getAll()
+
         expect(all.map((e) => e.name)).not.toContain('usePageA')
         expect(all.map((e) => e.name)).toContain('usePageB')
 
@@ -852,6 +858,7 @@ describe('__trackComposable — reactive() object tracking (priority 1)', () => 
         await nextTick()
 
         const entry = reg.getAll()[0]
+
         expect((entry.refs['state'].value as Record<string, unknown>)?.count).toBe(42)
 
         app.unmount()
@@ -1443,5 +1450,100 @@ describe('leak detection — watcher count and cleanup', () => {
         expect(entry.leak).toBe(true)
         // leakReason identifies both leaked interval IDs
         expect(entry.leakReason).toContain('setInterval')
+    })
+})
+
+describe('onComposableChange — rAF debounce', () => {
+    it('coalesces multiple rapid ref changes into a single _onChange call per frame', async () => {
+        // Use fake timers so we control when rAF fires
+        vi.useFakeTimers()
+
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let callCount = 0
+        reg.onComposableChange(() => {
+            callCount++
+        })
+
+        let countRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                countRef = ref(0)
+                __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'D.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        // Let the initial watchEffect run
+        await nextTick()
+
+        const callsAfterMount = callCount
+
+        // Fire 10 rapid changes in the same synchronous block
+        for (let i = 1; i <= 10; i++) {
+            countRef!.value = i
+        }
+
+        // watchEffects have queued but rAF hasn't fired yet —
+        // _onChange should NOT have been called yet
+        await nextTick()
+        expect(callCount).toBe(callsAfterMount)
+
+        // Advance timers so rAF fires — all 10 changes should produce exactly 1 call
+        vi.runAllTimers()
+        expect(callCount).toBe(callsAfterMount + 1)
+
+        vi.useRealTimers()
+        app.unmount()
+    })
+
+    it('schedules a new frame after the previous one fires', async () => {
+        vi.useFakeTimers()
+
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        let callCount = 0
+        reg.onComposableChange(() => {
+            callCount++
+        })
+
+        let countRef: ReturnType<typeof ref<number>> | null = null
+
+        const Comp = defineComponent({
+            setup() {
+                countRef = ref(0)
+                __trackComposable('useCounter', () => ({ count: countRef! }), { file: 'E.ts', line: 1 })
+                return () => h('div')
+            },
+        })
+
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+        await nextTick()
+
+        const callsAfterMount = callCount
+
+        // First batch of changes
+        countRef!.value = 1
+        await nextTick()
+        vi.runAllTimers() // first frame fires
+
+        expect(callCount).toBe(callsAfterMount + 1)
+
+        // Second batch — a new frame should be scheduled
+        countRef!.value = 2
+        await nextTick()
+        vi.runAllTimers() // second frame fires
+
+        expect(callCount).toBe(callsAfterMount + 2)
+
+        vi.useRealTimers()
+        app.unmount()
     })
 })
