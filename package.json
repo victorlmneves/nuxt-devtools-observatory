@@ -2,6 +2,12 @@
     "name": "nuxt-devtools-observatory",
     "version": "0.1.18",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/victorlmneves/nuxt-devtools-observatory.git"
+    },
+    "homepage": "https://github.com/victorlmneves/nuxt-devtools-observatory#readme",
     "type": "module",
     "main": "./dist/module.mjs",
     "module": "./dist/module.mjs",
