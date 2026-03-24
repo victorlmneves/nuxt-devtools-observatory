@@ -251,7 +251,7 @@ describe('__trackComposable', () => {
                     'useLeaky',
                     () => {
                         // Never cleared — this is a leak
-                        window.setInterval(() => { }, 60_000)
+                        window.setInterval(() => {}, 60_000)
 
                         return {}
                     },
@@ -338,7 +338,7 @@ describe('__trackComposable', () => {
                     'useMultiInterval',
                     () => {
                         window.setInterval(() => {}, 1000)
-                        window.setInterval(() => { }, 2000)
+                        window.setInterval(() => {}, 2000)
 
                         return {}
                     },
@@ -366,7 +366,7 @@ describe('__trackComposable', () => {
                     'useWatched',
                     () => {
                         const count = ref(0)
-                        watch(count, () => { })
+                        watch(count, () => {})
 
                         return { count }
                     },
@@ -426,7 +426,7 @@ describe('__trackComposable — re-entrant setInterval patch (fix #14)', () => {
         getWindow().__observatory__ = { composable: reg }
 
         const useInner = () => {
-            window.setInterval(() => { }, 500) // inner interval
+            window.setInterval(() => {}, 500) // inner interval
 
             return {}
         }
@@ -1388,7 +1388,7 @@ describe('leak detection — watcher count and cleanup', () => {
                         const a = ref(0)
                         const b = ref(0)
                         watch(a, () => {})
-                        watch(b, () => { })
+                        watch(b, () => {})
 
                         return { a, b }
                     },
@@ -1423,7 +1423,7 @@ describe('leak detection — watcher count and cleanup', () => {
                     () => {
                         // Two intervals never cleared — confirmed leak path
                         window.setInterval(() => {}, 500)
-                        window.setInterval(() => { }, 1000)
+                        window.setInterval(() => {}, 1000)
 
                         return {}
                     },

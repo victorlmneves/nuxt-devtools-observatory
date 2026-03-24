@@ -8,7 +8,9 @@ function makePlugin() {
     const ctx = {
         resolve: async (id: string) => ({ id: `/real/${id}` }),
     }
-    const resolveId = (plugin.resolveId as (id: string, importer?: string) => Promise<string | null | undefined> | string | null | undefined).bind(ctx)
+    const resolveId = (
+        plugin.resolveId as (id: string, importer?: string) => Promise<string | null | undefined> | string | null | undefined
+    ).bind(ctx)
     const load = (plugin.load as (id: string) => Promise<string | null | undefined> | string | null | undefined).bind(ctx)
 
     return { resolveId, load, plugin }

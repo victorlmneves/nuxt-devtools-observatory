@@ -203,9 +203,9 @@ export function __devFetchCall(
         // Always attach onResponse/onResponseError hooks to opts for SSR-cached entries
         const optsWithHooks = {
             ...opts,
-            onResponse: function(ctx: { response: FetchResponse }) {
+            onResponse: function (ctx: { response: FetchResponse }) {
                 // Update the registry entry payload with the new client response
-                const entry = registry.getAll().find(e => e.id === id)
+                const entry = registry.getAll().find((e) => e.id === id)
 
                 if (entry) {
                     registry.update(id, { payload: ctx.response._data })

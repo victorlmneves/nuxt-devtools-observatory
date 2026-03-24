@@ -178,7 +178,7 @@ export function setupComposableRegistry() {
                     // This key changed — append a history event
                     const history = entryHistory.get(id) ?? []
                     history.push({ t, key: k, value: safeValue(val) })
-    
+
                     if (history.length > MAX_HISTORY) {
                         history.shift()
                     }

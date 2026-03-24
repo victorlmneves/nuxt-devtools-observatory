@@ -65,13 +65,13 @@ export default defineNuxtPlugin(() => {
     const nuxtApp = useNuxtApp()
 
     const config = useRuntimeConfig().public.observatory as {
-        heatmapThreshold: number;
-        clientOrigin?: string;
-        fetchDashboard?: boolean;
-        provideInjectGraph?: boolean;
-        composableTracker?: boolean;
-        renderHeatmap?: boolean;
-        transitionTracker?: boolean;
+        heatmapThreshold: number
+        clientOrigin?: string
+        fetchDashboard?: boolean
+        provideInjectGraph?: boolean
+        composableTracker?: boolean
+        renderHeatmap?: boolean
+        transitionTracker?: boolean
     }
 
     // Enable Vue performance API for render heatmap if enabled
