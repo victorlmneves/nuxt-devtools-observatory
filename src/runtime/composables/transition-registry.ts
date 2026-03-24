@@ -79,6 +79,10 @@ export function setupTransitionRegistry() {
 // ── Tracked <Transition> wrapper ─────────────────────────────────────────
 type ElementHook = ((el: Element) => void) | undefined
 
+// Monotonically increasing counter used to make transition IDs unique even
+// when multiple transitions fire within the same performance.now() millisecond.
+let _transitionSeq = 0
+
 function mergeHook(original: ElementHook, ours: (el: Element) => void): (el: Element) => void {
     return (el: Element) => {
         ours(el)
@@ -121,7 +125,7 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
 
                     onBeforeEnter: mergeHook(attrs.onBeforeEnter as ElementHook, () => {
                         const now = performance.now()
-                        const id = `${transitionName}::enter::${now}`
+                        const id = `${transitionName}::enter::${now}::${++_transitionSeq}`
                         enterEntryId = id
                         registry.register({
                             id,
@@ -152,7 +156,7 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
 
                     onBeforeLeave: mergeHook(attrs.onBeforeLeave as ElementHook, () => {
                         const now = performance.now()
-                        const id = `${transitionName}::leave::${now}`
+                        const id = `${transitionName}::leave::${now}::${++_transitionSeq}`
                         leaveEntryId = id
                         registry.register({
                             id,

@@ -1,6 +1,6 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.17",
+    "version": "0.1.18",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "type": "module",
     "main": "./dist/module.mjs",
@@ -33,7 +33,7 @@
         "build": "npm run build:client && nuxt-module-build build",
         "prepack": "npm run build",
         "lint": "eslint .",
-        "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .gitignore && stylelint '**/*.{css,vue}' --ignore-pattern '.nuxt/**' --ignore-pattern '.output/**' --ignore-pattern 'coverage/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern 'coverage/**'",
+        "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .prettierignore && stylelint '**/*.{css,vue}' --ignore-pattern '.nuxt/**' --ignore-pattern '.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**'",
         "typecheck": "vue-tsc --noEmit",
         "test": "vitest run",
         "test:watch": "vitest",
@@ -91,10 +91,5 @@
     ],
     "peerDependencies": {
         "@nuxt/kit": "^3.0.0 || ^4.0.0"
-    },
-    "pnpm": {
-        "patchedDependencies": {
-            "unimport@6.0.1": "patches/unimport@6.0.1.patch"
-        }
     }
 }

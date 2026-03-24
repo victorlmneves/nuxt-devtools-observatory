@@ -178,7 +178,7 @@ export function setupComposableRegistry() {
                     // This key changed — append a history event
                     const history = entryHistory.get(id) ?? []
                     history.push({ t, key: k, value: safeValue(val) })
-    
+
                     if (history.length > MAX_HISTORY) {
                         history.shift()
                     }
@@ -188,7 +188,7 @@ export function setupComposableRegistry() {
             }
 
             prevValues.set(id, now)
-            _onChange?.()
+            _scheduleOnChange()
         })
 
         liveRefWatchers.set(id, stop)
@@ -201,6 +201,28 @@ export function setupComposableRegistry() {
     // Callback invoked by the plugin whenever live ref values change.
     // The plugin sets this after mounting so it can trigger a postMessage push.
     let _onChange: (() => void) | null = null
+
+    // rAF handle used to coalesce rapid-fire watcher notifications into a single
+    // snapshot send per animation frame. Without this, a single user interaction
+    // that touches a shared reactive store triggers one _onChange() call per
+    // composable watchEffect — flooding the postMessage channel with dozens of
+    // full deep-clone snapshots in the same microtask batch.
+    let _pendingFrame: number | null = null
+
+    function _scheduleOnChange() {
+        if (_pendingFrame !== null) {
+            // Already scheduled for this frame — skip.
+            return
+        }
+
+        // requestAnimationFrame coalesces all changes within the same frame and
+        // automatically pauses when the tab is hidden, avoiding pointless
+        // serialisation when the devtools panel is not visible.
+        _pendingFrame = requestAnimationFrame(() => {
+            _pendingFrame = null
+            _onChange?.()
+        })
+    }
 
     function onComposableChange(cb: () => void) {
         _onChange = cb

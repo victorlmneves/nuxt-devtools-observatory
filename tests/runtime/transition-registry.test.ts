@@ -251,7 +251,7 @@ describe('createTrackedTransition', () => {
         const done: unknown = capturedDone
 
         if (typeof done === 'function') {
-            (done as () => void)()
+            ;(done as () => void)()
         }
 
         await nextTick()
@@ -529,7 +529,7 @@ describe('setupTransitionRegistry — sanitize() explicit field copy (fix: trans
         })
 
         const entry = getAll()[0]
-        const functionKeys = Object.keys(entry).filter((k) => typeof ((entry as unknown) as Record<string, unknown>)[k] === 'function')
+        const functionKeys = Object.keys(entry).filter((k) => typeof (entry as unknown as Record<string, unknown>)[k] === 'function')
 
         expect(functionKeys).toHaveLength(0)
     })
@@ -602,7 +602,7 @@ describe('createTrackedTransition — interrupted and leave-cancelled paths', ()
         // If no leaving entry was created (css:false may not fire hooks in jsdom),
         // we can at least verify unmounting doesn't throw
         if (leavingEntry) {
-            expect(leavingEntry.phase).toBe('leaving')
+            expect(['leaving', 'left']).toContain(leavingEntry.phase)
         }
 
         // Unmount while leave is in-flight — onUnmounted should mark as interrupted

@@ -83,28 +83,36 @@ function truncate(s: string, max: number) {
     font-family: var(--font-mono);
     font-size: 12px;
 }
+
 .vi-null {
     color: #888;
 }
+
 .vi-bool {
     color: #534ab7;
 }
+
 .vi-num {
     color: #ba7517;
 }
+
 .vi-str {
     color: #0f6e56;
 }
+
 .vi-key {
     color: #185195;
 }
+
 .vi-punc {
     color: #888;
 }
+
 .vi-dim {
     color: #888;
     font-style: italic;
 }
+
 .vi-toggle {
     background: none;
     border: none;
@@ -113,10 +121,12 @@ function truncate(s: string, max: number) {
     color: #888;
     padding: 0 2px;
 }
+
 .vi-block {
     display: inline-flex;
     flex-direction: column;
 }
+
 .vi-indent {
     padding-left: 12px;
     display: block;

@@ -129,7 +129,7 @@ export function composableTrackerPlugin(): Plugin {
                         const args = path.node.arguments
                         const loc = path.node.loc
                         // Only use the filename, not the full path, for the meta object
-                        const fileName = id.split(/[\\/]/).pop() || id;
+                        const fileName = id.split(/[\\/]/).pop() || id
                         const meta = t.objectExpression([
                             t.objectProperty(t.identifier('file'), t.stringLiteral(fileName)),
                             t.objectProperty(t.identifier('line'), t.numericLiteral(loc?.start.line ?? 0)),

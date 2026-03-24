@@ -1307,6 +1307,7 @@ function formatTimestamp(t: number): string {
     padding: 4px 8px;
     max-height: 200px;
     overflow-y: auto;
+    min-height: fit-content;
 }
 
 .timeline-row {
@@ -1317,6 +1318,7 @@ function formatTimestamp(t: number): string {
     font-size: 11px;
     border-bottom: 0.5px solid var(--border);
     min-width: 0;
+    min-height: fit-content;
 }
 
 .timeline-row:last-child {
@@ -1365,7 +1367,7 @@ function formatTimestamp(t: number): string {
     font-size: 10px;
 }
 
-@media (max-width: 1180px) {
+@media (width <= 1180px) {
     .inspector {
         grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
     }

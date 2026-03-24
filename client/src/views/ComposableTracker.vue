@@ -781,7 +781,7 @@ function applyEdit() {
 .edit-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgb(0 0 0 / 40%);
     z-index: 100;
     display: flex;
     align-items: center;
@@ -798,7 +798,7 @@ function applyEdit() {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 32px rgb(0 0 0 / 30%);
 }
 
 .edit-dialog-header {

@@ -336,7 +336,14 @@ describe('setupProvideInjectRegistry — deduplication and clear() (fix #16)', (
     it('registerProvide() keeps separate entries for different keys on the same component', () => {
         const reg = setupProvideInjectRegistry()
 
-        const base = { componentName: 'App', componentFile: 'App.vue', componentUid: 1, isReactive: false, scope: 'component', isShadowing: false } as const
+        const base = {
+            componentName: 'App',
+            componentFile: 'App.vue',
+            componentUid: 1,
+            isReactive: false,
+            scope: 'component',
+            isShadowing: false,
+        } as const
 
         reg.registerProvide({ ...base, key: 'theme', valueSnapshot: 'dark', line: 5 })
         reg.registerProvide({ ...base, key: 'locale', valueSnapshot: 'en', line: 6 })

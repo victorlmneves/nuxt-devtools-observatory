@@ -20,14 +20,23 @@ describe('fetchInstrumentPlugin', () => {
         it('transforms all four target functions', () => {
             const fetchResult = transform(`useFetch('/api/test')`)
             const lazyFetchResult = transform(`useLazyFetch('/api/test')`)
-            const asyncDataResult = transform(`useAsyncData('/api/test')`)
-            const lazyAsyncDataResult = transform(`useLazyAsyncData('/api/test')`)
+            // useAsyncData / useLazyAsyncData require a handler function — a lone
+            // string literal is not a valid call shape and must be left untouched.
+            const asyncDataResult = transform(`useAsyncData(() => $fetch('/api/test'))`)
+            const lazyAsyncDataResult = transform(`useLazyAsyncData('my-key', () => $fetch('/api/test'))`)
 
             expect(fetchResult).not.toBeNull()
             expect(fetchResult!.code).toContain('__devFetchCall(useFetch,')
             expect(lazyFetchResult!.code).toContain('__devFetchCall(useLazyFetch,')
-            expect(asyncDataResult!.code).toContain('__devFetchCall(useAsyncData,')
-            expect(lazyAsyncDataResult!.code).toContain('__devFetchCall(useLazyAsyncData,')
+            expect(asyncDataResult!.code).toContain('__devFetchHandler')
+            expect(lazyAsyncDataResult!.code).toContain('__devFetchHandler')
+        })
+
+        it('leaves useAsyncData with no handler untouched (unrecognised call shape)', () => {
+            // useAsyncData('/api/test') has no handler — not a valid instrumentation target.
+            // The transform must return null rather than silently wrapping with __devFetchCall.
+            const result = transform(`useAsyncData('/api/test')`)
+            expect(result).toBeNull()
         })
 
         it('injects only the fetch-call helper import for useFetch', () => {
