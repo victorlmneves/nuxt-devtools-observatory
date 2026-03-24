@@ -122,10 +122,10 @@ export function fetchInstrumentPlugin(): Plugin {
                                 handlerArg = getExpr(args[1])
                                 optsArg = getExpr(args[2]) ?? t.objectExpression([])
                             } else {
-                                // Fallback for non-standard or invalid call shapes.
-                                keyArg = getExpr(args[0]) ?? t.stringLiteral('')
-                                optsArg = getExpr(args[1]) ?? t.objectExpression([])
-                                handlerArg = undefined
+                                // Unrecognised call shape (e.g. spread args, computed key with no handler).
+                                // Falling through to __devFetchCall would pass the wrong arguments —
+                                // leave the call completely untouched rather than corrupt it silently.
+                                return
                             }
                         } else {
                             // useFetch(url, opts?)
@@ -165,43 +165,47 @@ export function fetchInstrumentPlugin(): Plugin {
 
                         // Replace with correct signature
                         if ((originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') && handlerArg) {
-                            if (handlerArg) {
-                                const wrappedHandler = t.arrowFunctionExpression(
-                                    [t.restElement(t.identifier('args'))],
-                                    t.conditionalExpression(
-                                        t.logicalExpression(
-                                            '&&',
-                                            t.memberExpression(t.identifier('process'), t.identifier('dev')),
-                                            t.memberExpression(t.identifier('process'), t.identifier('client'))
-                                        ),
-                                        t.callExpression(
-                                            t.callExpression(t.identifier('__devFetchHandler'), [handlerArg, keyArg ?? t.stringLiteral(key), meta]),
-                                            [t.spreadElement(t.identifier('args'))]
-                                        ),
-                                        t.callExpression(handlerArg, [t.spreadElement(t.identifier('args'))])
-                                    )
+                            const wrappedHandler = t.arrowFunctionExpression(
+                                [t.restElement(t.identifier('args'))],
+                                t.conditionalExpression(
+                                    t.logicalExpression(
+                                        '&&',
+                                        t.memberExpression(t.identifier('process'), t.identifier('dev')),
+                                        t.memberExpression(t.identifier('process'), t.identifier('client'))
+                                    ),
+                                    t.callExpression(
+                                        t.callExpression(t.identifier('__devFetchHandler'), [
+                                            handlerArg,
+                                            keyArg ?? t.stringLiteral(key),
+                                            meta,
+                                        ]),
+                                        [t.spreadElement(t.identifier('args'))]
+                                    ),
+                                    t.callExpression(handlerArg, [t.spreadElement(t.identifier('args'))])
                                 )
-                                ;(wrappedHandler as t.ArrowFunctionExpression & { __observatoryTransformed?: boolean }).__observatoryTransformed = true
-                                needsFetchHandlerHelper = true
+                            )
+                            ;(
+                                wrappedHandler as t.ArrowFunctionExpression & { __observatoryTransformed?: boolean }
+                            ).__observatoryTransformed = true
+                            needsFetchHandlerHelper = true
 
-                                if (keyArg) {
-                                    // useAsyncData(key, handler, opts?)
-                                    const newCall = t.callExpression(t.identifier(originalName), [
-                                        keyArg,
-                                        wrappedHandler,
-                                        optsArg ?? t.objectExpression([]),
-                                    ]) as ObservableCallExpression
-                                    newCall.__observatoryTransformed = true
-                                    path.replaceWith(newCall)
-                                } else {
-                                    // useAsyncData(handler)
-                                    const newCall = t.callExpression(t.identifier(originalName), [wrappedHandler]) as ObservableCallExpression
-                                    newCall.__observatoryTransformed = true
-                                    path.replaceWith(newCall)
-                                }
-
-                                modified = true
+                            if (keyArg) {
+                                // useAsyncData(key, handler, opts?)
+                                const newCall = t.callExpression(t.identifier(originalName), [
+                                    keyArg,
+                                    wrappedHandler,
+                                    optsArg ?? t.objectExpression([]),
+                                ]) as ObservableCallExpression
+                                newCall.__observatoryTransformed = true
+                                path.replaceWith(newCall)
+                            } else {
+                                // useAsyncData(handler)
+                                const newCall = t.callExpression(t.identifier(originalName), [wrappedHandler]) as ObservableCallExpression
+                                newCall.__observatoryTransformed = true
+                                path.replaceWith(newCall)
                             }
+
+                            modified = true
                         } else {
                             // useFetch(url, opts?) and async-data fallbacks
                             const newCall = t.callExpression(t.identifier('__devFetchCall'), [

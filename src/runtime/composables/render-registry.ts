@@ -75,19 +75,60 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         return entries.value.get(uid)!
     }
 
-    function syncRect(entry: RenderEntry, instance: ComponentPublicInstance) {
-        const rect: DOMRect | undefined = instance.$el?.getBoundingClientRect?.()
-        entry.rect = rect
-            ? {
-                  x: Math.round(rect.x),
-                  y: Math.round(rect.y),
-                  width: Math.round(rect.width),
-                  height: Math.round(rect.height),
-                  top: Math.round(rect.top),
-                  left: Math.round(rect.left),
-              }
-            : undefined
+    // UIDs whose rect needs to be refreshed on the next getAll() call.
+    // getBoundingClientRect() forces a layout reflow — we defer it out of the
+    // hot mixin path and batch it lazily when a snapshot is actually requested.
+    const dirtyRects = new Set<number>()
+
+    function markRectDirty(uid: number) {
+        dirtyRects.add(uid)
     }
+
+    function flushDirtyRects() {
+        if (dirtyRects.size === 0) {
+            return
+        }
+
+        for (const uid of dirtyRects) {
+            const entry = entries.value.get(uid)
+
+            if (!entry) {
+                dirtyRects.delete(uid)
+                continue
+            }
+
+            // Instance reference is not stored — re-read from the Vue internals.
+            // app.config.globalProperties.$nuxt gives access, but the simplest
+            // approach is to store the $el reference directly on the entry when
+            // the component mounts, and drop it on unmount.
+            const el = _liveElements.get(uid)
+
+            if (!el) {
+                dirtyRects.delete(uid)
+                continue
+            }
+
+            const rect: DOMRect | undefined = el.getBoundingClientRect?.()
+            entry.rect = rect
+                ? {
+                      x: Math.round(rect.x),
+                      y: Math.round(rect.y),
+                      width: Math.round(rect.width),
+                      height: Math.round(rect.height),
+                      top: Math.round(rect.top),
+                      left: Math.round(rect.left),
+                  }
+                : undefined
+
+            dirtyRects.delete(uid)
+        }
+    }
+
+    // Holds the live $el reference for each mounted component uid.
+    // Populated in mounted(), cleared in unmounted().
+    // Typed as any to avoid importing Element which isn't always available (SSR).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const _liveElements = new Map<number, any>()
 
     function removeEntry(instance: ComponentPublicInstance) {
         const uid = instance.$.uid
@@ -145,6 +186,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         pendingTriggeredRenders.clear()
         renderStartTimes.clear()
+        dirtyRects.clear()
 
         for (const entry of entries.value.values()) {
             entry.rerenders = 0
@@ -177,13 +219,15 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             // Initial mount is NOT a re-render — don't count it.
             // Only count if the component re-mounts on the same page (v-if toggle etc.)
             const isHydration = options.isHydrating?.() ?? false
+
             if (isHydration && entry.mountCount === 1) {
                 entry.isHydrationMount = true
             } else if (entry.mountCount > 1) {
                 entry.rerenders++
             }
 
-            syncRect(entry, this)
+            _liveElements.set(entry.uid, this.$el)
+            markRectDirty(entry.uid)
             // Persistent components re-mounting after navigation are NOT new renders —
             // they kept their DOM. Only record the timeline event for genuine first mounts
             // and explicit re-mounts (v-if etc.), not navigation-triggered re-attachments.
@@ -221,16 +265,19 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             pendingTriggeredRenders.delete(entry.uid)
             entry.rerenders++
 
-            syncRect(entry, this)
+            markRectDirty(entry.uid)
             recordRenderDuration(entry, 'update')
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
 
         unmounted(this: ComponentPublicInstance) {
-            pendingTriggeredRenders.delete(this.$.uid)
-            renderStartTimes.delete(this.$.uid)
+            const uid = this.$.uid
+            pendingTriggeredRenders.delete(uid)
+            renderStartTimes.delete(uid)
+            dirtyRects.delete(uid)
+            _liveElements.delete(uid)
             removeEntry(this)
-            emit('render:remove', { uid: this.$.uid })
+            emit('render:remove', { uid })
         },
     })
 
@@ -263,6 +310,9 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         }
     }
     function getAll(): RenderEntry[] {
+        // Flush any pending getBoundingClientRect() calls now — batched here so
+        // they never run in the hot mixin path during normal rendering.
+        flushDirtyRects()
         return [...entries.value.values()].map(sanitize)
     }
 

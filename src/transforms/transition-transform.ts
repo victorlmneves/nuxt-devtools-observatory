@@ -45,6 +45,11 @@ function _obsMergeHook(original, fn) {
   return function(el) { fn(el); if (original) original(el) }
 }
 
+// Monotonically increasing counter used to make transition IDs unique even
+// when multiple transitions fire within the same performance.now() millisecond
+// (e.g. rapid-toggle stress tests, or simultaneous enter + leave on a swap).
+let _obsSeq = 0
+
 const _ObservedTransition = _obsDefineComponent({
   name: 'Transition',
   inheritAttrs: false,
@@ -71,7 +76,7 @@ const _ObservedTransition = _obsDefineComponent({
       const hookedAttrs = Object.assign({}, attrs, {
         onBeforeEnter: _obsMergeHook(attrs.onBeforeEnter, function() {
           const t = performance.now()
-          const id = transitionName + '::enter::' + t
+          const id = transitionName + '::enter::' + t + '::' + (++_obsSeq)
           enterEntryId = id
           r.register({ id, transitionName, parentComponent, direction: 'enter', phase: 'entering', startTime: t, cancelled: false, appear: isAppear, mode })
         }),
@@ -83,7 +88,7 @@ const _ObservedTransition = _obsDefineComponent({
         }),
         onBeforeLeave: _obsMergeHook(attrs.onBeforeLeave, function() {
           const t = performance.now()
-          const id = transitionName + '::leave::' + t
+          const id = transitionName + '::leave::' + t + '::' + (++_obsSeq)
           leaveEntryId = id
           r.register({ id, transitionName, parentComponent, direction: 'leave', phase: 'leaving', startTime: t, cancelled: false, appear: false, mode })
         }),
