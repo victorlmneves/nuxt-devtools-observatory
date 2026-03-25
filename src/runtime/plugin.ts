@@ -11,52 +11,6 @@ interface ObservatoryWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
-function toSerializable(value: unknown, seen = new WeakSet<object>()): unknown {
-    if (value === null || value === undefined) {
-        return value
-    }
-
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        return value
-    }
-
-    if (typeof value === 'bigint') {
-        return value.toString()
-    }
-
-    if (typeof value === 'function' || typeof value === 'symbol') {
-        return `[${typeof value}]`
-    }
-
-    if (Array.isArray(value)) {
-        return value.map((entry) => toSerializable(entry, seen))
-    }
-
-    if (typeof value === 'object') {
-        if (seen.has(value)) {
-            return '[circular]'
-        }
-
-        seen.add(value)
-
-        if (value instanceof Date) {
-            return value.toISOString()
-        }
-
-        const plain: Record<string, unknown> = {}
-
-        for (const [key, entry] of Object.entries(value)) {
-            plain[key] = toSerializable(entry, seen)
-        }
-
-        seen.delete(value)
-
-        return plain
-    }
-
-    return String(value)
-}
-
 export default defineNuxtPlugin(() => {
     if (!import.meta.dev) {
         return
@@ -130,7 +84,7 @@ export default defineNuxtPlugin(() => {
         let lastMessageSource: Window | null = null
         let lastMessageOrigin = ''
 
-        window.addEventListener('message', (event: MessageEvent) => {
+        const messageHandler = (event: MessageEvent) => {
             if (config.clientOrigin && event.origin !== config.clientOrigin) {
                 return
             }
@@ -184,6 +138,15 @@ export default defineNuxtPlugin(() => {
                     fetch(`/__open-in-editor?file=${encodeURIComponent(cleaned)}`).catch(() => {})
                 }
             }
+        }
+
+        window.addEventListener('message', messageHandler)
+
+        // Remove the listener when the Nuxt app tears down (including HMR-triggered
+        // plugin re-registration), so re-evaluating this plugin never accumulates
+        // duplicate listeners on window.
+        nuxtApp.hook('app:beforeUnmount', () => {
+            window.removeEventListener('message', messageHandler)
         })
 
         // Push a fresh snapshot to the SPA immediately when any tracked
@@ -234,6 +197,8 @@ export default defineNuxtPlugin(() => {
                 if (composableRegistry) {
                     composableRegistry.clear()
                 }
+
+                ;(transitionRegistry as { clear?: () => void })?.clear?.()
             }
         )
 
@@ -298,7 +263,16 @@ export default defineNuxtPlugin(() => {
             transitionTracker: !!transitionRegistry,
         }
 
-        return toSerializable(snap)
+        // JSON round-trip strips undefined values and anything else that cannot
+        // survive structured clone (postMessage requirement). This is cheaper than
+        // the old recursive toSerializable() traversal while achieving the same goal.
+        try {
+            return JSON.parse(JSON.stringify(snap))
+        } catch {
+            // Fallback: return only the features flag so the SPA stays connected
+            // even if one registry produced unserializable data.
+            return { features: snap.features }
+        }
     }
 
     function getDevtoolsChannel() {

@@ -73,43 +73,56 @@ export function setupComposableRegistry() {
     // comparing object identity across instances of the same composable name.
     const rawRefs = new Map<string, Record<string, unknown>>()
 
-    /**
-     * For a given entry, return the set of ref keys whose underlying object is
-     * shared with at least one other live instance of the same composable.
-     * Two instances share a ref when they return the exact same object reference.
-     * @param {string} id - The composable entry ID to check for shared refs.
-     * @param {string} name - The composable name to compare instances against.
-     * @returns {string[]} Array of ref keys that are shared with other instances.
-     */
-    function computeSharedKeys(id: string, name: string): string[] {
-        const ownRaw = rawRefs.get(id)
+    // Cache for sharedKeys — keyed by composable name, maps entry id → shared key array.
+    // Recomputed only when entries are added or removed, never on every getAll() poll tick.
+    const sharedKeysCache = new Map<string, Map<string, string[]>>()
 
-        if (!ownRaw) {
-            return []
+    function invalidateSharedKeysForName(name: string) {
+        sharedKeysCache.delete(name)
+    }
+
+    function getSharedKeys(id: string, name: string): string[] {
+        // Return cached result if available
+        let nameCache = sharedKeysCache.get(name)
+
+        if (nameCache && nameCache.has(id)) {
+            return nameCache.get(id)!
         }
 
-        const shared = new Set<string>()
+        // Recompute for all instances of this composable name at once
+        nameCache = new Map<string, string[]>()
+        sharedKeysCache.set(name, nameCache)
 
-        for (const [otherId, entry] of entries.value.entries()) {
-            if (otherId === id || entry.name !== name) {
-                continue // same instance or not the same composable, continue
-            }
+        // Collect all entries with this name
+        const peers = [...entries.value.entries()].filter(([, e]) => e.name === name)
 
-            const otherRaw = rawRefs.get(otherId)
-
-            if (!otherRaw) {
+        for (const [eid] of peers) {
+            const ownRaw = rawRefs.get(eid)
+            if (!ownRaw) {
+                nameCache.set(eid, [])
                 continue
             }
 
-            for (const [key, obj] of Object.entries(ownRaw)) {
-                if (key in otherRaw && otherRaw[key] === obj) {
-                    shared.add(key)
+            const shared = new Set<string>()
+
+            for (const [otherId] of peers) {
+                if (otherId === eid) continue
+                const otherRaw = rawRefs.get(otherId)
+                if (!otherRaw) continue
+
+                for (const [key, obj] of Object.entries(ownRaw)) {
+                    if (key in otherRaw && otherRaw[key] === obj) {
+                        shared.add(key)
+                    }
                 }
             }
+
+            nameCache.set(eid, [...shared])
         }
 
-        return [...shared]
+        return nameCache.get(id) ?? []
     }
+
     // The current route path — updated by the plugin on every navigation so new
     // entries are stamped with the route they were created on.
     let currentRoute = '/'
@@ -124,6 +137,9 @@ export function setupComposableRegistry() {
 
     function register(entry: ComposableEntry) {
         entries.value.set(entry.id, entry)
+        // Invalidate the sharedKeys cache for this composable name so it is
+        // recomputed fresh the next time getAll() is called.
+        invalidateSharedKeysForName(entry.name)
         emit('composable:register', entry)
     }
 
@@ -297,7 +313,7 @@ export function setupComposableRegistry() {
             leakReason: entry.leakReason,
             refs: freshRefs,
             history: entryHistory.get(entry.id) ?? [],
-            sharedKeys: computeSharedKeys(entry.id, entry.name),
+            sharedKeys: getSharedKeys(entry.id, entry.name),
             watcherCount: entry.watcherCount,
             intervalCount: entry.intervalCount,
             lifecycle: entry.lifecycle,
@@ -321,12 +337,19 @@ export function setupComposableRegistry() {
     }
 
     function clear() {
+        // Cancel any pending rAF so it doesn't fire after clearing and push stale/empty state
+        if (_pendingFrame !== null) {
+            cancelAnimationFrame(_pendingFrame)
+            _pendingFrame = null
+        }
+
         for (const stop of liveRefWatchers.values()) stop()
         liveRefWatchers.clear()
         liveRefs.clear()
         rawRefs.clear()
         prevValues.clear()
         entryHistory.clear()
+        sharedKeysCache.clear()
         entries.value.clear()
         emit('composable:clear', {})
     }
@@ -498,8 +521,15 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     }
 
     registry.register(entry)
-    registry.registerLiveRefs(id, liveRefMap)
-    registry.registerRawRefs(id, rawRefMap)
+
+    // Only register live refs when called inside a component context.
+    // Global composables (instance === null, e.g. from a Nuxt plugin or Pinia store)
+    // have no lifecycle — registering liveRefs starts a watchEffect that runs forever
+    // with no cleanup, leaking memory and spamming postMessage on every reactive change.
+    if (instance) {
+        registry.registerLiveRefs(id, liveRefMap)
+        registry.registerRawRefs(id, rawRefMap)
+    }
 
     // Leak detection: only register onUnmounted when called inside a component
     // context — Vue will warn (and the hook will silently no-op) if called globally.

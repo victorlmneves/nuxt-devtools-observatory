@@ -45,12 +45,46 @@ interface FetchMeta {
  * associated metadata (e.g. duration, size, origin).
  * @returns {object} The fetch registry with `register`, `update`, `getAll`, `clear`, and `entries` members.
  */
+const MAX_FETCH_ENTRIES = 200
+// Maximum payload size to store in memory (10 KB as JSON string)
+const MAX_PAYLOAD_BYTES = 10_000
+
+/**
+ * Truncates a payload to MAX_PAYLOAD_BYTES to avoid storing large API
+ * responses in memory indefinitely.
+ */
+function truncatePayload(payload: unknown): unknown {
+    if (payload === undefined || payload === null) {
+        return payload
+    }
+
+    try {
+        const str = JSON.stringify(payload)
+        if (str.length <= MAX_PAYLOAD_BYTES) {
+            return JSON.parse(str)
+        }
+
+        return str.slice(0, MAX_PAYLOAD_BYTES) + '… (truncated)'
+    } catch {
+        return '[unserializable]'
+    }
+}
+
 export function setupFetchRegistry() {
     const entries = ref<Map<string, FetchEntry>>(new Map())
 
     function register(entry: FetchEntry) {
-        entries.value.set(entry.id, entry)
-        emit('fetch:start', entry)
+        // Evict oldest entry when cap is reached
+        if (entries.value.size >= MAX_FETCH_ENTRIES) {
+            const oldestKey = entries.value.keys().next().value
+            if (oldestKey !== undefined) {
+                entries.value.delete(oldestKey)
+            }
+        }
+
+        const safeEntry = entry.payload !== undefined ? { ...entry, payload: truncatePayload(entry.payload) } : entry
+        entries.value.set(safeEntry.id, safeEntry)
+        emit('fetch:start', safeEntry)
     }
 
     function update(id: string, patch: Partial<FetchEntry>) {
@@ -60,7 +94,8 @@ export function setupFetchRegistry() {
             return
         }
 
-        const updated = { ...existing, ...patch }
+        const safePatch = patch.payload !== undefined ? { ...patch, payload: truncatePayload(patch.payload) } : patch
+        const updated = { ...existing, ...safePatch }
         entries.value.set(id, updated)
         emit('fetch:update', updated)
     }

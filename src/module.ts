@@ -122,15 +122,24 @@ export default defineNuxtModule<ModuleOptions>({
         const CLIENT_PORT = 4949
         const clientOrigin = `http://localhost:${CLIENT_PORT}`
 
+        // Guard: vite:serverCreated can fire more than once in some configurations.
+        // Attempting to bind strictPort: true twice throws EADDRINUSE, so we ensure
+        // the inner server is only ever created once per module lifecycle.
+        let innerServer: import('vite').ViteDevServer | null = null
+
         nuxt.hook('vite:serverCreated', async (_viteServer, env) => {
             if (!env.isClient) {
+                return
+            }
+
+            if (innerServer) {
                 return
             }
 
             const { createServer } = await import('vite')
             const { default: vue } = await import('@vitejs/plugin-vue')
 
-            const inner = await createServer({
+            innerServer = await createServer({
                 root: resolver.resolve('../client'),
                 base: '/',
                 server: { port: CLIENT_PORT, strictPort: true, cors: true },
@@ -140,8 +149,11 @@ export default defineNuxtModule<ModuleOptions>({
                 logLevel: 'warn',
             })
 
-            await inner.listen()
-            nuxt.hook('close', () => inner.close())
+            await innerServer.listen()
+            nuxt.hook('close', () => {
+                innerServer?.close()
+                innerServer = null
+            })
         })
 
         // ── Devtools integration ──────────────────────────────────────────────
@@ -150,7 +162,7 @@ export default defineNuxtModule<ModuleOptions>({
         const base = clientOrigin
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        nuxt.hook('devtools:customTabs', (tabs: any[]) => {
+        nuxt.hook('devtools:customTabs' as any, (tabs: any[]) => {
             if (options.fetchDashboard) {
                 tabs.push({
                     name: 'observatory-fetch',

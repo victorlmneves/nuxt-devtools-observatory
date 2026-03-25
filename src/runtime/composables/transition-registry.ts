@@ -15,12 +15,27 @@ export interface TransitionEntry {
     mode?: string
 }
 
+const MAX_TRANSITIONS = 500
+
 export function setupTransitionRegistry() {
     const entries = ref<Map<string, TransitionEntry>>(new Map())
 
     function register(entry: TransitionEntry) {
+        // Evict the oldest entry when the cap is reached to prevent unbounded growth
+        if (entries.value.size >= MAX_TRANSITIONS) {
+            const oldestKey = entries.value.keys().next().value
+            if (oldestKey !== undefined) {
+                entries.value.delete(oldestKey)
+            }
+        }
+
         entries.value.set(entry.id, entry)
         emit('transition:register', entry)
+    }
+
+    function clear() {
+        entries.value.clear()
+        emit('transition:clear', {})
     }
 
     function update(id: string, patch: Partial<TransitionEntry>) {
@@ -73,7 +88,7 @@ export function setupTransitionRegistry() {
         channel?.send(event, data)
     }
 
-    return { register, update, getAll }
+    return { register, update, getAll, clear }
 }
 
 // ── Tracked <Transition> wrapper ─────────────────────────────────────────
