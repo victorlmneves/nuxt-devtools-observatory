@@ -59,10 +59,6 @@ const MAX_FETCH_ENTRIES = 200
 const MAX_PAYLOAD_BYTES = 10_000
 
 /**
- * Truncates a payload to MAX_PAYLOAD_BYTES to avoid storing large API
- * responses in memory indefinitely.
- */
-/**
  * Truncates a payload to a maximum byte size for safe logging or transport.
  * @param {unknown} payload The data to be truncated.
  * @returns {unknown} The truncated payload, a string if too large, or '[unserializable]' if not serializable.
@@ -277,6 +273,10 @@ export function __devFetchCall(
     // register() runs after originalFn() returns).
     let responseCount = 0
     let lastCallStart = startTime
+    // Set to true after we confirm the entry was registered as SSR-cached.
+    // When true, ANY onResponse is a refresh (no initial CSR response to update),
+    // so every response should add a new row rather than overwrite the cached entry.
+    let initialWasSsr = false
 
     // Call useFetch first so Nuxt can hydrate from SSR payload synchronously.
     const result = originalFn(url, {
@@ -296,12 +296,14 @@ export function __devFetchCall(
             const cached = response.headers?.get('x-nuxt-cache') === 'HIT'
             const status = cached ? 'cached' : response.ok ? 'ok' : ('error' as const)
 
-            if (responseCount === 1) {
-                // First HTTP response — update the existing pending entry in place.
+            if (responseCount === 1 && !initialWasSsr) {
+                // First HTTP response for a CSR fetch — update the pending entry.
                 registry.update(id, { status, endTime, ms, size, cached, payload: response._data })
             } else {
-                // refresh() was called — the original cached/ssr entry is preserved
-                // and the re-fetch appears as a distinct new row.
+                // Either:
+                //   a) refresh() was called on a CSR entry (responseCount > 1), or
+                //   b) refresh() was called on an SSR-cached entry (initialWasSsr, any count)
+                // Either way: add a new row so the original entry is preserved.
                 registry.register({
                     id: `${id}::refresh::${responseCount}`,
                     key: meta.key,
@@ -324,9 +326,6 @@ export function __devFetchCall(
             }
         },
         onResponseError({ response }: { response: FetchResponse }) {
-            // onResponseError fires for 4xx/5xx IN ADDITION to onResponse.
-            // onResponse already stamped endTime and set status to 'error' — nothing
-            // more to do here except forward the user's own hook.
             if (typeof opts.onResponseError === 'function') {
                 opts.onResponseError({ response })
             }
@@ -370,6 +369,13 @@ export function __devFetchCall(
         file: meta.file,
         line: meta.line,
     })
+
+    // Now that we know whether this was SSR, tell the onResponse closure.
+    // Any HTTP response that fires after this point is a refresh(), not the
+    // initial fetch completing — so it should always add a new row.
+    if (isSsrHydrated) {
+        initialWasSsr = true
+    }
 
     // For pending entries that are deduplicated against an in-flight request:
     // onResponse fires on the *original* call's closure, not ours, so our entry

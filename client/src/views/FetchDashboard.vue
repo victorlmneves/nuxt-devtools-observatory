@@ -24,7 +24,7 @@ const entries = computed<FetchViewEntry[]>(() => {
 const selected = computed(() => entries.value.find((entry) => entry.id === selectedId.value) ?? null)
 
 const counts = computed(() => ({
-    ok: entries.value.filter((entry) => entry.status === 'ok').length,
+    ok: entries.value.filter((entry) => entry.status === 'ok' || entry.status === 'cached').length,
     pending: entries.value.filter((entry) => entry.status === 'pending').length,
     error: entries.value.filter((entry) => entry.status === 'error').length,
 }))
