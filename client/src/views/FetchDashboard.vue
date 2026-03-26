@@ -13,11 +13,11 @@ const waterfallOpen = ref(true)
 
 const entries = computed<FetchViewEntry[]>(() => {
     const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
-    const minStart = Math.min(...sorted.map((entry) => entry.startTime), 0)
+    const minStart = sorted.length > 0 ? sorted[0].startTime : 0
 
     return sorted.map((entry) => ({
         ...entry,
-        startOffset: Math.max(0, Math.round(entry.startTime - minStart)),
+        startOffset: Math.max(0, entry.startTime - minStart),
     }))
 })
 
@@ -89,18 +89,37 @@ function barColor(status: string) {
 }
 
 function barWidth(entry: FetchViewEntry) {
-    const maxMs = Math.max(...entries.value.filter((item) => item.ms).map((item) => item.ms!), 1)
+    // Only consider completed entries for the max, so pending entries don't
+    // collapse all bars to a dot while waiting.
+    const completedMs = entries.value.filter((e) => e.ms != null).map((e) => e.ms!)
+    const maxMs = completedMs.length > 0 ? Math.max(...completedMs, 1) : 1
     return entry.ms != null ? Math.max(4, Math.round((entry.ms / maxMs) * 100)) : 4
 }
 
+// Waterfall uses absolute time offsets from the earliest startTime.
+// maxEnd is computed only from completed entries so that a long-running
+// pending request doesn't squash all completed bars to invisible.
+function waterfallScale() {
+    const completed = entries.value.filter((e) => e.ms != null)
+    const maxEnd = completed.length > 0 ? Math.max(...completed.map((e) => e.startOffset + e.ms!), 1) : 1
+    return maxEnd
+}
+
 function wfLeft(entry: FetchViewEntry) {
-    const maxEnd = Math.max(...entries.value.map((item) => item.startOffset + (item.ms ?? 0)), 1)
-    return Math.round((entry.startOffset / maxEnd) * 100)
+    const scale = waterfallScale()
+    return Math.min(98, Math.round((entry.startOffset / scale) * 100))
 }
 
 function wfWidth(entry: FetchViewEntry) {
-    const maxEnd = Math.max(...entries.value.map((item) => item.startOffset + (item.ms ?? 0)), 1)
-    return entry.ms != null ? Math.round((entry.ms / maxEnd) * 100) : 2
+    if (entry.ms == null) {
+        // Pending: render a pulsing 2% bar at its start position instead of
+        // a zero-width invisible bar.
+        return 2
+    }
+    const scale = waterfallScale()
+    const left = wfLeft(entry)
+    // Clamp so bar + left never exceeds 100%
+    return Math.min(100 - left, Math.max(2, Math.round((entry.ms / scale) * 100)))
 }
 
 function formatSize(bytes: number) {
