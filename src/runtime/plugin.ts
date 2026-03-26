@@ -11,52 +11,6 @@ interface ObservatoryWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
-function toSerializable(value: unknown, seen = new WeakSet<object>()): unknown {
-    if (value === null || value === undefined) {
-        return value
-    }
-
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        return value
-    }
-
-    if (typeof value === 'bigint') {
-        return value.toString()
-    }
-
-    if (typeof value === 'function' || typeof value === 'symbol') {
-        return `[${typeof value}]`
-    }
-
-    if (Array.isArray(value)) {
-        return value.map((entry) => toSerializable(entry, seen))
-    }
-
-    if (typeof value === 'object') {
-        if (seen.has(value)) {
-            return '[circular]'
-        }
-
-        seen.add(value)
-
-        if (value instanceof Date) {
-            return value.toISOString()
-        }
-
-        const plain: Record<string, unknown> = {}
-
-        for (const [key, entry] of Object.entries(value)) {
-            plain[key] = toSerializable(entry, seen)
-        }
-
-        seen.delete(value)
-
-        return plain
-    }
-
-    return String(value)
-}
-
 export default defineNuxtPlugin(() => {
     if (!import.meta.dev) {
         return
@@ -127,10 +81,12 @@ export default defineNuxtPlugin(() => {
         // origin). It cannot read window.top properties, but CAN send messages.
         // We register this listener immediately (not in app:mounted) so requests
         // arriving before hydration completes are handled correctly.
-        let lastMessageSource: Window | null = null
+        // WeakRef prevents this closure from keeping the SPA iframe's Window object
+        // alive if the DevTools panel is destroyed and recreated (e.g. on HMR).
+        let lastMessageSourceRef: WeakRef<Window> | null = null
         let lastMessageOrigin = ''
 
-        window.addEventListener('message', (event: MessageEvent) => {
+        const messageHandler = (event: MessageEvent) => {
             if (config.clientOrigin && event.origin !== config.clientOrigin) {
                 return
             }
@@ -139,7 +95,7 @@ export default defineNuxtPlugin(() => {
 
             if (type === 'observatory:request') {
                 // Remember the SPA window so we can push unsolicited updates to it
-                lastMessageSource = event.source as Window | null
+                lastMessageSourceRef = event.source ? new WeakRef(event.source as Window) : null
                 lastMessageOrigin = event.origin
 
                 const source = event.source as Window | null
@@ -184,12 +140,24 @@ export default defineNuxtPlugin(() => {
                     fetch(`/__open-in-editor?file=${encodeURIComponent(cleaned)}`).catch(() => {})
                 }
             }
+        }
+
+        window.addEventListener('message', messageHandler)
+
+        // Remove the listener when the Nuxt app tears down (including HMR-triggered
+        // plugin re-registration), so re-evaluating this plugin never accumulates
+        // duplicate listeners on window.
+        nuxtApp.hook('app:beforeUnmount', () => {
+            window.removeEventListener('message', messageHandler)
+            lastMessageSourceRef = null
         })
 
         // Push a fresh snapshot to the SPA immediately when any tracked
         // composable's reactive state changes — no need to wait for the next poll.
         if (composableRegistry && composableRegistry.onComposableChange) {
             composableRegistry.onComposableChange(() => {
+                const lastMessageSource = lastMessageSourceRef?.deref()
+
                 if (!lastMessageSource || !lastMessageOrigin) {
                     return
                 }
@@ -234,6 +202,8 @@ export default defineNuxtPlugin(() => {
                 if (composableRegistry) {
                     composableRegistry.clear()
                 }
+
+                ;(transitionRegistry as { clear?: () => void })?.clear?.()
             }
         )
 
@@ -298,7 +268,16 @@ export default defineNuxtPlugin(() => {
             transitionTracker: !!transitionRegistry,
         }
 
-        return toSerializable(snap)
+        // JSON round-trip strips undefined values and anything else that cannot
+        // survive structured clone (postMessage requirement). This is cheaper than
+        // the old recursive toSerializable() traversal while achieving the same goal.
+        try {
+            return JSON.parse(JSON.stringify(snap))
+        } catch {
+            // Fallback: return only the features flag so the SPA stays connected
+            // even if one registry produced unserializable data.
+            return { features: snap.features }
+        }
     }
 
     function getDevtoolsChannel() {

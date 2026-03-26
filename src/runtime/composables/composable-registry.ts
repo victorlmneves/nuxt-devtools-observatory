@@ -66,6 +66,9 @@ export function setupComposableRegistry() {
     const liveRefWatchers = new Map<string, () => void>()
     // Per-entry change history: id → array of RefChangeEvent (capped at MAX_HISTORY)
     const MAX_HISTORY = 50
+    // Maximum number of composable entries to keep. Unmounted entries are evicted
+    // first; if all are mounted the oldest entry is dropped to stay within the cap.
+    const MAX_COMPOSABLE_ENTRIES = 300
     const entryHistory = new Map<string, RefChangeEvent[]>()
     // Previous serialised values per ref, used to detect which key actually changed
     const prevValues = new Map<string, Record<string, string>>()
@@ -73,43 +76,81 @@ export function setupComposableRegistry() {
     // comparing object identity across instances of the same composable name.
     const rawRefs = new Map<string, Record<string, unknown>>()
 
-    /**
-     * For a given entry, return the set of ref keys whose underlying object is
-     * shared with at least one other live instance of the same composable.
-     * Two instances share a ref when they return the exact same object reference.
-     * @param {string} id - The composable entry ID to check for shared refs.
-     * @param {string} name - The composable name to compare instances against.
-     * @returns {string[]} Array of ref keys that are shared with other instances.
-     */
-    function computeSharedKeys(id: string, name: string): string[] {
-        const ownRaw = rawRefs.get(id)
+    // Cache for sharedKeys — keyed by composable name, maps entry id → shared key array.
+    // Recomputed only when entries are added or removed, never on every getAll() poll tick.
+    const sharedKeysCache = new Map<string, Map<string, string[]>>()
 
-        if (!ownRaw) {
-            return []
+    function invalidateSharedKeysForName(name: string) {
+        sharedKeysCache.delete(name)
+    }
+
+    // Fully remove an entry and all its associated data from every Map.
+    // Called when evicting old entries to enforce MAX_COMPOSABLE_ENTRIES.
+    function deleteEntry(entryId: string, entryName: string) {
+        // Stop the live watchEffect before releasing everything
+        const stop = liveRefWatchers.get(entryId)
+
+        if (stop) {
+            stop()
+            liveRefWatchers.delete(entryId)
         }
 
-        const shared = new Set<string>()
+        liveRefs.delete(entryId)
+        rawRefs.delete(entryId)
+        prevValues.delete(entryId)
+        entryHistory.delete(entryId)
+        entries.value.delete(entryId)
+        invalidateSharedKeysForName(entryName)
+    }
 
-        for (const [otherId, entry] of entries.value.entries()) {
-            if (otherId === id || entry.name !== name) {
-                continue // same instance or not the same composable, continue
-            }
+    function getSharedKeys(id: string, name: string): string[] {
+        // Return cached result if available
+        let nameCache = sharedKeysCache.get(name)
 
-            const otherRaw = rawRefs.get(otherId)
+        if (nameCache && nameCache.has(id)) {
+            return nameCache.get(id)!
+        }
 
-            if (!otherRaw) {
+        // Recompute for all instances of this composable name at once
+        nameCache = new Map<string, string[]>()
+        sharedKeysCache.set(name, nameCache)
+
+        // Collect all entries with this name
+        const peers = [...entries.value.entries()].filter(([, e]) => e.name === name)
+
+        for (const [eid] of peers) {
+            const ownRaw = rawRefs.get(eid)
+            if (!ownRaw) {
+                nameCache.set(eid, [])
                 continue
             }
 
-            for (const [key, obj] of Object.entries(ownRaw)) {
-                if (key in otherRaw && otherRaw[key] === obj) {
-                    shared.add(key)
+            const shared = new Set<string>()
+
+            for (const [otherId] of peers) {
+                if (otherId === eid) {
+                    continue
+                }
+
+                const otherRaw = rawRefs.get(otherId)
+
+                if (!otherRaw) {
+                    continue
+                }
+
+                for (const [key, obj] of Object.entries(ownRaw)) {
+                    if (key in otherRaw && otherRaw[key] === obj) {
+                        shared.add(key)
+                    }
                 }
             }
+
+            nameCache.set(eid, [...shared])
         }
 
-        return [...shared]
+        return nameCache.get(id) ?? []
     }
+
     // The current route path — updated by the plugin on every navigation so new
     // entries are stamped with the route they were created on.
     let currentRoute = '/'
@@ -123,7 +164,23 @@ export function setupComposableRegistry() {
     }
 
     function register(entry: ComposableEntry) {
+        // Enforce cap: prefer evicting unmounted entries first since they are
+        // historical records the user has already seen. Only evict a mounted
+        // entry if every entry is currently mounted (very unusual).
+        if (entries.value.size >= MAX_COMPOSABLE_ENTRIES) {
+            const unmountedId = [...entries.value.entries()].find(([, e]) => e.status === 'unmounted')?.[0]
+            const evictId = unmountedId ?? entries.value.keys().next().value
+
+            if (evictId !== undefined) {
+                const evictName = entries.value.get(evictId)?.name ?? ''
+                deleteEntry(evictId, evictName)
+            }
+        }
+
         entries.value.set(entry.id, entry)
+        // Invalidate the sharedKeys cache for this composable name so it is
+        // recomputed fresh the next time getAll() is called.
+        invalidateSharedKeysForName(entry.name)
         emit('composable:register', entry)
     }
 
@@ -148,34 +205,39 @@ export function setupComposableRegistry() {
         }
 
         liveRefs.set(id, refs)
-        // Initialise the previous-value map so the first run doesn't log everything as "changed"
-        prevValues.set(
-            id,
-            Object.fromEntries(
-                Object.entries(refs).map(([k, r]) => {
-                    try {
-                        return [k, JSON.stringify(unref(r)) ?? '']
-                    } catch {
-                        return [k, '']
-                    }
-                })
-            )
-        )
 
-        const stop = watchEffect(() => {
-            // Read every ref to subscribe — the effect re-runs when any changes.
-            // Compare against previous values to record which key(s) changed.
-            const prev = prevValues.get(id) ?? {}
-            const now: Record<string, string> = {}
-            const t = typeof performance !== 'undefined' ? performance.now() : Date.now()
+        // One watch() per ref key so only the changed key serializes on each mutation.
+        // The old single watchEffect re-ran JSON.stringify on ALL keys whenever ANY
+        // one changed — O(k) serializations per change regardless of what changed.
+        const stopFns: Array<() => void> = []
 
-            for (const [k, r] of Object.entries(refs)) {
+        for (const [k, r] of Object.entries(refs)) {
+            // Initialise prevValues for this key so the first run doesn't log it as changed
+            if (!prevValues.has(id)) {
+                prevValues.set(id, {})
+            }
+
+            try {
+                prevValues.get(id)![k] = JSON.stringify(unref(r)) ?? ''
+            } catch {
+                prevValues.get(id)![k] = ''
+            }
+
+            const stopK = watchEffect(() => {
                 const val = unref(r)
-                const serialised = JSON.stringify(val) ?? ''
-                now[k] = serialised
+                let serialised = ''
 
-                if (serialised !== prev[k]) {
-                    // This key changed — append a history event
+                try {
+                    serialised = JSON.stringify(val) ?? ''
+                } catch {
+                    /* leave empty */
+                }
+
+                const prev = prevValues.get(id)
+
+                if (prev && serialised !== prev[k]) {
+                    // Only this key changed — record history and update stored value
+                    const t = typeof performance !== 'undefined' ? performance.now() : Date.now()
                     const history = entryHistory.get(id) ?? []
                     history.push({ t, key: k, value: safeValue(val) })
 
@@ -184,13 +246,17 @@ export function setupComposableRegistry() {
                     }
 
                     entryHistory.set(id, history)
+                    prev[k] = serialised
+                    _scheduleOnChange()
                 }
-            }
+            })
 
-            prevValues.set(id, now)
-            _scheduleOnChange()
-        })
+            stopFns.push(stopK)
+        }
 
+        // Combine all per-key stop functions into one so liveRefWatchers stays a
+        // simple Map<id, () => void> with no changes to the rest of the registry.
+        const stop = () => stopFns.forEach((s) => s())
         liveRefWatchers.set(id, stop)
     }
 
@@ -297,7 +363,7 @@ export function setupComposableRegistry() {
             leakReason: entry.leakReason,
             refs: freshRefs,
             history: entryHistory.get(entry.id) ?? [],
-            sharedKeys: computeSharedKeys(entry.id, entry.name),
+            sharedKeys: getSharedKeys(entry.id, entry.name),
             watcherCount: entry.watcherCount,
             intervalCount: entry.intervalCount,
             lifecycle: entry.lifecycle,
@@ -321,12 +387,19 @@ export function setupComposableRegistry() {
     }
 
     function clear() {
+        // Cancel any pending rAF so it doesn't fire after clearing and push stale/empty state
+        if (_pendingFrame !== null) {
+            cancelAnimationFrame(_pendingFrame)
+            _pendingFrame = null
+        }
+
         for (const stop of liveRefWatchers.values()) stop()
         liveRefWatchers.clear()
         liveRefs.clear()
         rawRefs.clear()
         prevValues.clear()
         entryHistory.clear()
+        sharedKeysCache.clear()
         entries.value.clear()
         emit('composable:clear', {})
     }
@@ -498,8 +571,15 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     }
 
     registry.register(entry)
-    registry.registerLiveRefs(id, liveRefMap)
-    registry.registerRawRefs(id, rawRefMap)
+
+    // Only register live refs when called inside a component context.
+    // Global composables (instance === null, e.g. from a Nuxt plugin or Pinia store)
+    // have no lifecycle — registering liveRefs starts a watchEffect that runs forever
+    // with no cleanup, leaking memory and spamming postMessage on every reactive change.
+    if (instance) {
+        registry.registerLiveRefs(id, liveRefMap)
+        registry.registerRawRefs(id, rawRefMap)
+    }
 
     // Leak detection: only register onUnmounted when called inside a component
     // context — Vue will warn (and the hook will silently no-op) if called globally.
@@ -529,9 +609,12 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
                     intervalsCleaned: leakedIntervals.length === 0,
                 },
             })
-            // Release the live ref closures and stop the watchEffect —
-            // the component is gone and we no longer need live updates from it.
+            // Release live ref closures, stop the watchEffect, and drop the
+            // change history — the component is gone, we no longer need live
+            // updates or history for it. entryHistory is released here to
+            // prevent it accumulating indefinitely across v-if toggles.
             registry.registerLiveRefs(id, {})
+            entryHistory.delete(id)
         })
     }
 

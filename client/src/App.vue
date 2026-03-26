@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useObservatoryData } from './stores/observatory'
+import { ref, computed, onUnmounted } from 'vue'
+import { useObservatoryData, stopObservatoryPolling } from './stores/observatory'
 import FetchDashboard from './views/FetchDashboard.vue'
 import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
@@ -20,16 +20,19 @@ const activeTab = ref(pathMap[segment] ?? 'fetch')
 
 const { features } = useObservatoryData()
 
+onUnmounted(() => {
+    stopObservatoryPolling()
+})
+
 const tabs = computed(() => {
     const f = features.value || {}
-
     return [
         f.fetchDashboard && { id: 'fetch', label: 'useFetch', icon: '⬡' },
         f.provideInjectGraph && { id: 'provide', label: 'provide/inject', icon: '⬡' },
         f.composableTracker && { id: 'composable', label: 'Composables', icon: '⬡' },
         f.renderHeatmap && { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
         f.transitionTracker && { id: 'transitions', label: 'Transitions', icon: '⬡' },
-    ].filter(Boolean)
+    ].filter((tab): tab is { id: string; label: string; icon: string } => Boolean(tab))
 })
 </script>
 

@@ -1,4 +1,5 @@
 import { ref, readonly } from 'vue'
+import { getCurrentInstance } from 'vue'
 
 export interface FetchEntry {
     id: string
@@ -27,6 +28,14 @@ interface FetchResponse extends Response {
     _data?: unknown
 }
 
+// The return type of useFetch/useAsyncData — a reactive AsyncData object.
+// Typed loosely to avoid importing Nuxt internals; we only read .status and .data.
+interface FetchResult {
+    status?: { value?: string }
+    data?: { value?: unknown }
+    [key: string]: unknown
+}
+
 interface FetchOptions {
     server?: boolean
     onResponse?: (ctx: { response: FetchResponse }) => void
@@ -45,12 +54,47 @@ interface FetchMeta {
  * associated metadata (e.g. duration, size, origin).
  * @returns {object} The fetch registry with `register`, `update`, `getAll`, `clear`, and `entries` members.
  */
+const MAX_FETCH_ENTRIES = 200
+// Maximum payload size to store in memory (10 KB as JSON string)
+const MAX_PAYLOAD_BYTES = 10_000
+
+/**
+ * Truncates a payload to a maximum byte size for safe logging or transport.
+ * @param {unknown} payload The data to be truncated.
+ * @returns {unknown} The truncated payload, a string if too large, or '[unserializable]' if not serializable.
+ */
+function truncatePayload(payload: unknown): unknown {
+    if (payload === undefined || payload === null) {
+        return payload
+    }
+
+    try {
+        const str = JSON.stringify(payload)
+        if (str.length <= MAX_PAYLOAD_BYTES) {
+            return JSON.parse(str)
+        }
+
+        return str.slice(0, MAX_PAYLOAD_BYTES) + '… (truncated)'
+    } catch {
+        return '[unserializable]'
+    }
+}
+
 export function setupFetchRegistry() {
     const entries = ref<Map<string, FetchEntry>>(new Map())
 
     function register(entry: FetchEntry) {
-        entries.value.set(entry.id, entry)
-        emit('fetch:start', entry)
+        // Evict oldest entry when cap is reached
+        if (entries.value.size >= MAX_FETCH_ENTRIES) {
+            const oldestKey = entries.value.keys().next().value
+            if (oldestKey !== undefined) {
+                entries.value.delete(oldestKey)
+            }
+        }
+
+        const safeEntry = entry.payload !== undefined ? { ...entry, payload: truncatePayload(entry.payload) } : entry
+        entries.value.set(safeEntry.id, safeEntry)
+        emit('fetch:start', safeEntry)
     }
 
     function update(id: string, patch: Partial<FetchEntry>) {
@@ -60,7 +104,8 @@ export function setupFetchRegistry() {
             return
         }
 
-        const updated = { ...existing, ...patch }
+        const safePatch = patch.payload !== undefined ? { ...patch, payload: truncatePayload(patch.payload) } : patch
+        const updated = { ...existing, ...safePatch }
         entries.value.set(id, updated)
         emit('fetch:update', updated)
     }
@@ -104,6 +149,12 @@ export function __devFetchHandler(
 
     const normalizedKey = typeof key === 'string' ? key : 'useAsyncData'
 
+    // __devFetchHandler is called every time useAsyncData's internal handler
+    // executes on the client. It never runs on SSR hydration (process.client
+    // guard in the transform prevents it), so every call here is a real CSR
+    // execution — either the initial fetch or a refresh().
+    //
+    // Each invocation gets its own id so refreshes appear as separate rows.
     return (...args: unknown[]) => {
         const id = `${normalizedKey}::${Date.now()}`
         const startTime = performance.now()
@@ -122,20 +173,22 @@ export function __devFetchHandler(
 
         return Promise.resolve(handler(...args))
             .then((result) => {
+                const endTime = performance.now()
                 registry.update(id, {
                     status: 'ok',
-                    endTime: performance.now(),
-                    ms: Math.round(performance.now() - startTime),
+                    endTime,
+                    ms: Math.round(endTime - startTime),
                     payload: result,
                 })
 
                 return result
             })
             .catch((error: unknown) => {
+                const endTime = performance.now()
                 registry.update(id, {
                     status: 'error',
-                    endTime: performance.now(),
-                    ms: Math.round(performance.now() - startTime),
+                    endTime,
+                    ms: Math.round(endTime - startTime),
                     error,
                 })
 
@@ -145,11 +198,11 @@ export function __devFetchHandler(
 }
 
 export function __devFetchCall(
-    originalFn: (url: string, opts: FetchOptions) => Promise<unknown>,
+    originalFn: (url: string, opts: FetchOptions) => FetchResult,
     url: string,
     opts: FetchOptions,
     meta: FetchMeta
-): Promise<unknown> {
+): FetchResult {
     if (!import.meta.dev || !import.meta.client) {
         return originalFn(url, opts)
     }
@@ -160,8 +213,7 @@ export function __devFetchCall(
         return originalFn(url, opts)
     }
 
-    // --- Patch: resolve Vue refs and getter functions for url ---
-    // Accepts string, function, or object (possibly a ref)
+    // Resolve Vue refs and getter functions for url
     function resolveUrl(u: unknown): string {
         if (u && typeof u === 'object' && 'value' in u) {
             return resolveUrl((u as { value: unknown }).value)
@@ -180,76 +232,198 @@ export function __devFetchCall(
 
     const id = `${meta.key}::${Date.now()}`
     const startTime = performance.now()
-    const payload = (window as ObservatoryWindow).__NUXT__?.data ?? {}
-    const fromPayload = Object.prototype.hasOwnProperty.call(payload, meta.key)
-    const origin: 'ssr' | 'csr' = fromPayload ? 'ssr' : 'csr'
     const resolvedUrl = resolveUrl(url)
 
-    registry.register({
-        id,
-        key: meta.key,
-        url: resolvedUrl,
-        status: fromPayload ? 'cached' : 'pending',
-        origin,
-        startTime,
-        cached: fromPayload,
-        payload: fromPayload ? payload[meta.key] : undefined,
-        file: meta.file,
-        line: meta.line,
-    })
+    // When useFetch is called outside a component's setup() context (e.g. inside a
+    // click handler), Nuxt warns and its deduplication machinery becomes unreliable:
+    // hooks from a prior call's closure fire instead of ours, so entries stay pending.
+    //
+    // Detect this with getCurrentInstance() — returns null outside setup().
+    // When outside setup: let useFetch run untouched, but track the request via a
+    // parallel native fetch() call whose promise we fully control.
+    if (getCurrentInstance() === null) {
+        registry.register({
+            id,
+            key: meta.key,
+            url: resolvedUrl,
+            status: 'pending',
+            origin: 'csr',
+            startTime,
+            cached: false,
+            file: meta.file,
+            line: meta.line,
+        })
 
-    // Patch: SSR cached entries should still attach hooks for re-fetches
-    if (fromPayload) {
-        // Always attach onResponse/onResponseError hooks to opts for SSR-cached entries
-        const optsWithHooks = {
-            ...opts,
-            onResponse: function (ctx: { response: FetchResponse }) {
-                // Update the registry entry payload with the new client response
-                const entry = registry.getAll().find((e) => e.id === id)
+        fetch(resolvedUrl)
+            .then(async (r) => {
+                const endTime = performance.now()
+                const size = Number(r.headers.get('content-length')) || undefined
 
-                if (entry) {
-                    registry.update(id, { payload: ctx.response._data })
+                // Clone before reading body so the original response stream is untouched
+                let payload: unknown
+
+                try {
+                    payload = await r.clone().json()
+                } catch {
+                    // Not JSON (e.g. HTML error page) — leave payload undefined
                 }
 
-                if (typeof opts.onResponse === 'function') {
-                    opts.onResponse(ctx)
-                }
-            },
-            onResponseError: typeof opts.onResponseError === 'function' ? opts.onResponseError : () => {},
-        }
+                registry.update(id, {
+                    status: r.ok ? 'ok' : 'error',
+                    endTime,
+                    ms: Math.round(endTime - startTime),
+                    size,
+                    payload,
+                })
+            })
+            .catch(() => {
+                const endTime = performance.now()
+                registry.update(id, { status: 'error', endTime, ms: Math.round(endTime - startTime) })
+            })
 
-        return originalFn(url, optsWithHooks)
+        return originalFn(url, opts)
     }
 
-    return originalFn(url, {
+    // Track how many times onResponse has fired for this entry in this closure.
+    // - 0 fires: initial fetch not yet responded
+    // - 1st fire: initial HTTP response
+    // - 2nd+ fire: refresh() was called → treat as re-fetch
+    // Using a counter avoids looking up the registry inside the hook (the entry
+    // may not exist yet when the first onResponse fires for a CSR fetch, since
+    // register() runs after originalFn() returns).
+    let responseCount = 0
+    let lastCallStart = startTime
+    // Set to true after we confirm the entry was registered as SSR-cached.
+    // When true, ANY onResponse is a refresh (no initial CSR response to update),
+    // so every response should add a new row rather than overwrite the cached entry.
+    let initialWasSsr = false
+
+    // Call useFetch first so Nuxt can hydrate from SSR payload synchronously.
+    const result = originalFn(url, {
         ...opts,
+        onRequest() {
+            lastCallStart = performance.now()
+
+            if (typeof opts.onRequest === 'function') {
+                ;(opts.onRequest as () => void)()
+            }
+        },
         onResponse({ response }: { response: FetchResponse }) {
-            const ms = Math.round(performance.now() - startTime)
+            responseCount++
+            const endTime = performance.now()
+            const ms = Math.round(endTime - lastCallStart)
             const size = Number(response.headers?.get('content-length')) || undefined
             const cached = response.headers?.get('x-nuxt-cache') === 'HIT'
-            registry.update(id, {
-                status: cached ? 'cached' : response.ok ? 'ok' : 'error',
-                endTime: performance.now(),
-                ms,
-                size,
-                cached,
-                payload: response._data,
-            })
+            const status = cached ? 'cached' : response.ok ? 'ok' : ('error' as const)
+
+            if (responseCount === 1 && !initialWasSsr) {
+                // First HTTP response for a CSR fetch — update the pending entry.
+                registry.update(id, { status, endTime, ms, size, cached, payload: response._data })
+            } else {
+                // Either:
+                //   a) refresh() was called on a CSR entry (responseCount > 1), or
+                //   b) refresh() was called on an SSR-cached entry (initialWasSsr, any count)
+                // Either way: add a new row so the original entry is preserved.
+                registry.register({
+                    id: `${id}::refresh::${responseCount}`,
+                    key: meta.key,
+                    url: resolvedUrl,
+                    status,
+                    origin: 'csr',
+                    startTime: lastCallStart,
+                    endTime,
+                    ms,
+                    size,
+                    cached,
+                    payload: response._data,
+                    file: meta.file,
+                    line: meta.line,
+                })
+            }
 
             if (typeof opts.onResponse === 'function') {
                 opts.onResponse({ response })
             }
         },
         onResponseError({ response }: { response: FetchResponse }) {
-            registry.update(id, {
-                status: 'error',
-                endTime: performance.now(),
-                ms: Math.round(performance.now() - startTime),
-            })
-
             if (typeof opts.onResponseError === 'function') {
                 opts.onResponseError({ response })
             }
         },
     })
+
+    // After useFetch returns, inspect result.status.value to decide how to register:
+    //
+    //   'success' → Nuxt hydrated synchronously from SSR payload — no HTTP request
+    //               will be made, onResponse never fires → register as cached/ssr
+    //
+    //   'error'   → useFetch returned a DEDUPLICATED prior error (Nuxt caches
+    //               AsyncData by its internal hash key). No new HTTP request is
+    //               made, onResponse never fires → register as error immediately
+    //
+    //   'pending' → either a real HTTP fetch is in progress (onResponse will fire),
+    //               OR this call is deduplicated against an in-flight request from
+    //               a prior call (onResponse fires on that prior call's closure,
+    //               NOT ours). Use result.then() to catch the second case: if our
+    //               entry is still 'pending' when the shared AsyncData settles,
+    //               update it from result.status / result.error.
+    //
+    // NOTE: window.__NUXT__.data key-matching cannot be used here — Nuxt stores SSR
+    // data under a hash (e.g. '$fi9hmbe'), not the URL slug in meta.key, so lookups
+    // always miss and every fetch incorrectly appears as CSR pending.
+    const statusValue = result?.status?.value
+    const isSsrHydrated = statusValue === 'success'
+    const isDeduplicatedError = statusValue === 'error'
+
+    registry.register({
+        id,
+        key: meta.key,
+        url: resolvedUrl,
+        status: isSsrHydrated ? 'cached' : isDeduplicatedError ? 'error' : 'pending',
+        origin: isSsrHydrated ? 'ssr' : 'csr',
+        startTime,
+        endTime: isSsrHydrated || isDeduplicatedError ? startTime : undefined,
+        ms: isSsrHydrated || isDeduplicatedError ? 0 : undefined,
+        cached: isSsrHydrated,
+        payload: isSsrHydrated ? result?.data?.value : undefined,
+        file: meta.file,
+        line: meta.line,
+    })
+
+    // Now that we know whether this was SSR, tell the onResponse closure.
+    // Any HTTP response that fires after this point is a refresh(), not the
+    // initial fetch completing — so it should always add a new row.
+    if (isSsrHydrated) {
+        initialWasSsr = true
+    }
+
+    // For pending entries that are deduplicated against an in-flight request:
+    // onResponse fires on the *original* call's closure, not ours, so our entry
+    // would stay 'pending' forever. result.then() resolves when the shared
+    // AsyncData settles (success or error), giving us a reliable fallback hook.
+    // We only act if the entry is still 'pending' at that point — if onResponse
+    // already updated it (normal CSR flow), we leave it alone.
+    if (!isSsrHydrated && !isDeduplicatedError && typeof result?.then === 'function') {
+        result
+            .then(() => {
+                const endTime = performance.now()
+                const existing = registry.getAll().find((e) => e.id === id)
+
+                // Only update if still pending — onResponse already handled it otherwise
+                if (existing?.status === 'pending') {
+                    const settled = result?.status?.value
+                    registry.update(id, {
+                        status: settled === 'success' ? 'ok' : 'error',
+                        endTime,
+                        ms: Math.round(endTime - startTime),
+                        payload: settled === 'success' ? result?.data?.value : undefined,
+                    })
+                }
+            })
+            .catch(() => {
+                // Swallow — the update above handles error state via status check
+            })
+    }
+
+    return result
 }

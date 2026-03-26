@@ -1,4 +1,4 @@
-import { ref, isRef, isReactive, unref, getCurrentInstance, provide, inject } from 'vue'
+import { isRef, isReactive, unref, getCurrentInstance, provide, inject } from 'vue'
 
 export interface ProvideEntry {
     key: string
@@ -47,55 +47,27 @@ export function setupProvideInjectRegistry(): {
     getAll: () => { provides: ProvideEntry[]; injects: InjectEntry[] }
     clear: () => void
 } {
-    const provides = ref<ProvideEntry[]>([])
-    const injects = ref<InjectEntry[]>([])
+    // Plain Maps keyed by `${key}:${componentUid}` — O(1) dedup, no Vue reactive overhead.
+    // Nothing in the runtime watches these collections, so wrapping them in ref() was wasteful.
+    const provides = new Map<string, ProvideEntry>()
+    const injects = new Map<string, InjectEntry>()
 
     function registerProvide(entry: ProvideEntry) {
-        // Deduplicate: replace an existing entry for the same key + component so
+        // O(1) upsert — replaces an existing entry for the same key + component so
         // re-renders don't accumulate duplicate rows in the graph.
-        const idx = provides.value.findIndex((e) => e.key === entry.key && e.componentUid === entry.componentUid)
-        if (idx !== -1) {
-            provides.value[idx] = entry
-        } else {
-            provides.value.push(entry)
-        }
+        provides.set(`${entry.key}:${entry.componentUid}`, entry)
         emit('provide:register', entry)
     }
 
     function registerInject(entry: InjectEntry) {
-        const idx = injects.value.findIndex((e) => e.key === entry.key && e.componentUid === entry.componentUid)
-        if (idx !== -1) {
-            injects.value[idx] = entry
-        } else {
-            injects.value.push(entry)
-        }
+        injects.set(`${entry.key}:${entry.componentUid}`, entry)
         emit('inject:register', entry)
     }
 
     function clear() {
-        provides.value = []
-        injects.value = []
+        provides.clear()
+        injects.clear()
         emit('provide:clear', {})
-    }
-
-    function safeValue(val: unknown): unknown {
-        if (val === undefined || val === null) {
-            return val
-        }
-
-        if (typeof val === 'function') {
-            return undefined
-        }
-
-        if (typeof val === 'object') {
-            try {
-                return JSON.parse(JSON.stringify(val))
-            } catch {
-                return String(val)
-            }
-        }
-
-        return val
     }
 
     function sanitizeProvide(entry: ProvideEntry): ProvideEntry {
@@ -107,7 +79,9 @@ export function setupProvideInjectRegistry(): {
             parentUid: entry.parentUid,
             parentFile: entry.parentFile,
             isReactive: entry.isReactive,
-            valueSnapshot: safeValue(entry.valueSnapshot),
+            // valueSnapshot is already a plain serializable value captured at provide()
+            // time by safeSnapshot() in the shim — no need to deep-clone it again here.
+            valueSnapshot: entry.valueSnapshot,
             line: entry.line,
             scope: entry.scope,
             isShadowing: entry.isShadowing,
@@ -131,8 +105,8 @@ export function setupProvideInjectRegistry(): {
 
     function getAll() {
         return {
-            provides: provides.value.map(sanitizeProvide),
-            injects: injects.value.map(sanitizeInject),
+            provides: [...provides.values()].map(sanitizeProvide),
+            injects: [...injects.values()].map(sanitizeInject),
         }
     }
 

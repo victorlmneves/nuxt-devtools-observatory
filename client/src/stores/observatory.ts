@@ -213,6 +213,23 @@ function onMessage(event: MessageEvent) {
     connected.value = true
 }
 
+function onVisibilityChange() {
+    if (document.visibilityState === 'hidden') {
+        // Tab is no longer visible — pause polling to avoid triggering
+        // buildSnapshot() in the parent app for results nobody is looking at.
+        if (pollIntervalId !== null) {
+            window.clearInterval(pollIntervalId)
+            pollIntervalId = null
+        }
+    } else {
+        // Tab became visible again — resume polling and request immediately.
+        if (pollIntervalId === null && started) {
+            pollIntervalId = window.setInterval(requestSnapshot, POLL_MS)
+            requestSnapshot()
+        }
+    }
+}
+
 function ensureStarted() {
     if (started || typeof window === 'undefined') {
         return
@@ -221,6 +238,7 @@ function ensureStarted() {
     started = true
     parentOrigin = getParentOrigin()
     window.addEventListener('message', onMessage)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     pollIntervalId = window.setInterval(requestSnapshot, POLL_MS)
     requestSnapshot()
 }
@@ -236,6 +254,7 @@ export function stopObservatoryPolling() {
         pollIntervalId = null
     }
     window.removeEventListener('message', onMessage)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
     started = false
 }
 
