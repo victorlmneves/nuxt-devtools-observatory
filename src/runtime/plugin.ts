@@ -81,7 +81,9 @@ export default defineNuxtPlugin(() => {
         // origin). It cannot read window.top properties, but CAN send messages.
         // We register this listener immediately (not in app:mounted) so requests
         // arriving before hydration completes are handled correctly.
-        let lastMessageSource: Window | null = null
+        // WeakRef prevents this closure from keeping the SPA iframe's Window object
+        // alive if the DevTools panel is destroyed and recreated (e.g. on HMR).
+        let lastMessageSourceRef: WeakRef<Window> | null = null
         let lastMessageOrigin = ''
 
         const messageHandler = (event: MessageEvent) => {
@@ -93,7 +95,7 @@ export default defineNuxtPlugin(() => {
 
             if (type === 'observatory:request') {
                 // Remember the SPA window so we can push unsolicited updates to it
-                lastMessageSource = event.source as Window | null
+                lastMessageSourceRef = event.source ? new WeakRef(event.source as Window) : null
                 lastMessageOrigin = event.origin
 
                 const source = event.source as Window | null
@@ -147,12 +149,15 @@ export default defineNuxtPlugin(() => {
         // duplicate listeners on window.
         nuxtApp.hook('app:beforeUnmount', () => {
             window.removeEventListener('message', messageHandler)
+            lastMessageSourceRef = null
         })
 
         // Push a fresh snapshot to the SPA immediately when any tracked
         // composable's reactive state changes — no need to wait for the next poll.
         if (composableRegistry && composableRegistry.onComposableChange) {
             composableRegistry.onComposableChange(() => {
+                const lastMessageSource = lastMessageSourceRef?.deref()
+
                 if (!lastMessageSource || !lastMessageOrigin) {
                     return
                 }

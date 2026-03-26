@@ -70,26 +70,6 @@ export function setupProvideInjectRegistry(): {
         emit('provide:clear', {})
     }
 
-    function safeValue(val: unknown): unknown {
-        if (val === undefined || val === null) {
-            return val
-        }
-
-        if (typeof val === 'function') {
-            return undefined
-        }
-
-        if (typeof val === 'object') {
-            try {
-                return JSON.parse(JSON.stringify(val))
-            } catch {
-                return String(val)
-            }
-        }
-
-        return val
-    }
-
     function sanitizeProvide(entry: ProvideEntry): ProvideEntry {
         return {
             key: entry.key,
@@ -99,7 +79,9 @@ export function setupProvideInjectRegistry(): {
             parentUid: entry.parentUid,
             parentFile: entry.parentFile,
             isReactive: entry.isReactive,
-            valueSnapshot: safeValue(entry.valueSnapshot),
+            // valueSnapshot is already a plain serializable value captured at provide()
+            // time by safeSnapshot() in the shim — no need to deep-clone it again here.
+            valueSnapshot: entry.valueSnapshot,
             line: entry.line,
             scope: entry.scope,
             isShadowing: entry.isShadowing,

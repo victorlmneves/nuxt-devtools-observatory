@@ -55,8 +55,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     const entries = ref<Map<number, RenderEntry>>(new Map())
     const pendingTriggeredRenders = new Set<number>()
     const renderStartTimes = new Map<number, number>()
-    // Track uids that existed before the last reset() — used to flag persistent components
-    let preResetUids = new Set<number>()
     // Current route, updated by the plugin on every navigation
     let currentRoute = '/'
     const MAX_TIMELINE = 100
@@ -180,15 +178,15 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     }
 
     function reset() {
-        // Snapshot current uids before clearing so we can flag persistent components
-        // (those that survive the reset — layouts, global headers, etc.)
-        preResetUids = new Set(entries.value.keys())
-
         pendingTriggeredRenders.clear()
         renderStartTimes.clear()
         dirtyRects.clear()
 
         for (const entry of entries.value.values()) {
+            // Mark every component that survives this reset as persistent now,
+            // rather than snapshotting all UIDs into a new Set and checking later.
+            // This avoids allocating a full Set<number> on every navigation.
+            entry.isPersistent = true
             entry.rerenders = 0
             entry.totalMs = 0
             entry.avgMs = 0
@@ -211,10 +209,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             const entry = ensureEntry(this)
             entry.mountCount++
 
-            // Mark as persistent if this uid survived the last reset()
-            if (preResetUids.has(entry.uid)) {
-                entry.isPersistent = true
-            }
+            // isPersistent is set directly in reset() for any component that
+            // survives a navigation — no uid snapshot needed here.
 
             // Initial mount is NOT a re-render — don't count it.
             // Only count if the component re-mounts on the same page (v-if toggle etc.)

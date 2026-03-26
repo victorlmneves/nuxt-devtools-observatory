@@ -149,6 +149,12 @@ export function __devFetchHandler(
 
     const normalizedKey = typeof key === 'string' ? key : 'useAsyncData'
 
+    // __devFetchHandler is called every time useAsyncData's internal handler
+    // executes on the client. It never runs on SSR hydration (process.client
+    // guard in the transform prevents it), so every call here is a real CSR
+    // execution — either the initial fetch or a refresh().
+    //
+    // Each invocation gets its own id so refreshes appear as separate rows.
     return (...args: unknown[]) => {
         const id = `${normalizedKey}::${Date.now()}`
         const startTime = performance.now()
@@ -167,20 +173,22 @@ export function __devFetchHandler(
 
         return Promise.resolve(handler(...args))
             .then((result) => {
+                const endTime = performance.now()
                 registry.update(id, {
                     status: 'ok',
-                    endTime: performance.now(),
-                    ms: Math.round(performance.now() - startTime),
+                    endTime,
+                    ms: Math.round(endTime - startTime),
                     payload: result,
                 })
 
                 return result
             })
             .catch((error: unknown) => {
+                const endTime = performance.now()
                 registry.update(id, {
                     status: 'error',
-                    endTime: performance.now(),
-                    ms: Math.round(performance.now() - startTime),
+                    endTime,
+                    ms: Math.round(endTime - startTime),
                     error,
                 })
 
@@ -247,13 +255,25 @@ export function __devFetchCall(
         })
 
         fetch(resolvedUrl)
-            .then((r) => {
+            .then(async (r) => {
                 const endTime = performance.now()
+                const size = Number(r.headers.get('content-length')) || undefined
+
+                // Clone before reading body so the original response stream is untouched
+                let payload: unknown
+
+                try {
+                    payload = await r.clone().json()
+                } catch {
+                    // Not JSON (e.g. HTML error page) — leave payload undefined
+                }
+
                 registry.update(id, {
                     status: r.ok ? 'ok' : 'error',
                     endTime,
                     ms: Math.round(endTime - startTime),
-                    size: Number(r.headers.get('content-length')) || undefined,
+                    size,
+                    payload,
                 })
             })
             .catch(() => {
