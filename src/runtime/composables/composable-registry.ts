@@ -55,7 +55,19 @@ interface TrackedInstance {
  * - `update`: Updates an existing composable entry.
  * - `getAll`: Retrieves all composable entries.
  * - `getSnapshot`: Returns a cached pre-serialized JSON string, rebuilt only when dirty.
- * @returns An object with `register`, `update`, `getAll`, `getSnapshot`, and related methods.
+ * @returns {{
+ *   register: (entry: ComposableEntry) => void,
+ *   registerLiveRefs: (id: string, refs: Record<string, import('vue').Ref<unknown>>) => void,
+ *   registerRawRefs: (id: string, refs: Record<string, unknown>) => void,
+ *   onComposableChange: (cb: () => void) => void,
+ *   clear: () => void,
+ *   setRoute: (path: string) => void,
+ *   getRoute: () => string,
+ *   update: (id: string, patch: Partial<ComposableEntry>) => void,
+ *   getAll: () => ComposableEntry[],
+ *   getSnapshot: () => string,
+ *   editValue: (id: string, key: string, value: unknown) => void
+ * }} An object with `register`, `update`, `getAll`, `getSnapshot`, and related methods.
  */
 export function setupComposableRegistry() {
     // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
@@ -395,10 +407,11 @@ export function setupComposableRegistry() {
     }
 
     /**
-     * FIX #2: Returns a cached pre-serialized JSON string of all composable entries.
+     * Returns a cached pre-serialized JSON string of all composable entries.
      * Rebuilds and re-serializes only when the registry has been mutated since the
      * last call (dirty flag). On a clean registry the cached string is returned
      * immediately — O(1) instead of O(n × ref count) on every 500ms poll tick.
+     * @returns {string} The cached or newly serialized JSON string of all composable entries.
      */
     function getSnapshot(): string {
         if (!dirty) {

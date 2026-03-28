@@ -49,7 +49,7 @@ export interface RenderEntry {
  * @param {import('vue').App} nuxtApp.vueApp - The Vue app instance used to register lifecycle hooks.
  * @param {object} [options] - Optional configuration object.
  * @param {function(): boolean} [options.isHydrating] - Function to determine if the current render is during SSR hydration.
- * @returns {object} An object containing the render registry's API methods: `getAll()`, `getSnapshot()`, `snapshot()`, and `reset()`.
+ * @returns {object} An object containing the render registry's API methods: `getAll()`, `getSnapshot()`, `snapshot()`, `reset()`, and `setRoute()`.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
     // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
@@ -331,16 +331,18 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         // Flush any pending getBoundingClientRect() calls now — batched here so
         // they never run in the hot mixin path during normal rendering.
         flushDirtyRects()
+
         return [...entries.values()].map(sanitize)
     }
 
     /**
-     * FIX #2: Returns a cached pre-serialized JSON string of all render entries.
+     * Returns a cached pre-serialized JSON string of all render entries.
      * Rebuilds and re-serializes only when the registry has been mutated since the
      * last call (dirty flag). On a clean registry the cached string is returned
      * immediately — O(1) instead of O(n × timeline length) on every 500ms poll tick.
      * Also flushes any pending getBoundingClientRect() calls before serializing,
      * identical to getAll(), so rect values are always current.
+     * @returns {string} A JSON string representing all render entries.
      */
     function getSnapshot(): string {
         if (!dirty) {
@@ -357,6 +359,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         }
 
         dirty = false
+
         return cachedSnapshot
     }
 
