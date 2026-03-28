@@ -19,7 +19,8 @@ export default defineNuxtPlugin(() => {
     const nuxtApp = useNuxtApp()
 
     const config = useRuntimeConfig().public.observatory as {
-        heatmapThreshold: number
+        heatmapThresholdCount: number
+        heatmapThresholdTime: number
         clientOrigin?: string
         fetchDashboard?: boolean
         provideInjectGraph?: boolean

@@ -1,13 +1,22 @@
 export default defineNuxtConfig({
     modules: ['../src/module'],
 
+    imports: {
+        autoImport: true,
+    },
+
     observatory: {
-        fetchDashboard: true,
-        provideInjectGraph: true,
-        composableTracker: true,
-        renderHeatmap: true,
-        transitionTracker: true,
-        heatmapThreshold: 5,
+        fetchDashboard: import.meta.env.VITE_OBSERVATORY_FETCH_DASHBOARD === 'true',
+        provideInjectGraph: import.meta.env.VITE_OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
+        composableTracker: import.meta.env.VITE_OBSERVATORY_COMPOSABLE_TRACKER === 'true',
+        renderHeatmap: import.meta.env.VITE_OBSERVATORY_RENDER_HEATMAP === 'true',
+        transitionTracker: import.meta.env.VITE_OBSERVATORY_TRANSITION_TRACKER === 'true',
+        heatmapThresholdCount: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT
+            ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
+            : 3,
+        heatmapThresholdTime: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME
+            ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME)
+            : 16,
     },
 
     devtools: { enabled: true },

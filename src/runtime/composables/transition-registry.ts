@@ -15,7 +15,9 @@ export interface TransitionEntry {
     mode?: string
 }
 
-const MAX_TRANSITIONS = 500
+// Allow configuration via .env or Nuxt runtime config
+const MAX_TRANSITIONS =
+    typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500
 
 export function setupTransitionRegistry() {
     // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()

@@ -53,9 +53,12 @@ interface FetchMeta {
  * associated metadata (e.g. duration, size, origin).
  * @returns {object} The fetch registry with `register`, `update`, `getAll`, `clear`, and `entries` members.
  */
-const MAX_FETCH_ENTRIES = 200
+// Allow configuration via .env or Nuxt runtime config
+const MAX_FETCH_ENTRIES =
+    typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200
 // Maximum payload size to store in memory (10 KB as JSON string)
-const MAX_PAYLOAD_BYTES = 10_000
+const MAX_PAYLOAD_BYTES =
+    typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10_000
 
 /**
  * Truncates a payload to a maximum byte size for safe logging or transport.

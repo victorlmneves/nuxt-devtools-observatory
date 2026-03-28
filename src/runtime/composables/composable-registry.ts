@@ -80,10 +80,17 @@ export function setupComposableRegistry() {
     // Stop functions for watchEffect instances tracking each composable's live refs
     const liveRefWatchers = new Map<string, () => void>()
     // Per-entry change history: id → array of RefChangeEvent (capped at MAX_HISTORY)
-    const MAX_HISTORY = 50
+    // Allow configuration via .env or Nuxt runtime config
+    const MAX_HISTORY =
+        typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY
+            ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY)
+            : 50
     // Maximum number of composable entries to keep. Unmounted entries are evicted
     // first; if all are mounted the oldest entry is dropped to stay within the cap.
-    const MAX_COMPOSABLE_ENTRIES = 300
+    const MAX_COMPOSABLE_ENTRIES =
+        typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES
+            ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES)
+            : 300
     const entryHistory = new Map<string, RefChangeEvent[]>()
     // Previous serialised values per ref, used to detect which key actually changed
     const prevValues = new Map<string, Record<string, string>>()

@@ -58,7 +58,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     const renderStartTimes = new Map<number, number>()
     // Current route, updated by the plugin on every navigation
     let currentRoute = '/'
-    const MAX_TIMELINE = 100
+    // Allow configuration via .env or Nuxt runtime config
+    const MAX_TIMELINE =
+        typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_RENDER_TIMELINE
+            ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE)
+            : 100
 
     // FIX #2: dirty flag + cached snapshot string.
     // Set to true whenever any mutation occurs. getSnapshot() rebuilds and

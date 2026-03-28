@@ -25,7 +25,7 @@ export default defineNuxtConfig({
         composableTracker: true,
         renderHeatmap: true,
         transitionTracker: true,
-        heatmapThreshold: 5, // highlight components with 5+ renders
+        heatmapThresholdCount: 5, // highlight components with 5+ renders
     },
 
     devtools: { enabled: true },
