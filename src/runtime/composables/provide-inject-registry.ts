@@ -45,8 +45,16 @@ export function setupProvideInjectRegistry(): {
     registerProvide: (entry: ProvideEntry) => void
     registerInject: (entry: InjectEntry) => void
     getAll: () => { provides: ProvideEntry[]; injects: InjectEntry[] }
+    getSnapshot: () => string
     clear: () => void
 } {
+    let dirty = true
+    let cachedSnapshot = '{"provides":[],"injects":[]}'
+
+    function markDirty() {
+        dirty = true
+    }
+
     // Plain Maps keyed by `${key}:${componentUid}` — O(1) dedup, no Vue reactive overhead.
     // Nothing in the runtime watches these collections, so wrapping them in ref() was wasteful.
     const provides = new Map<string, ProvideEntry>()
@@ -56,17 +64,20 @@ export function setupProvideInjectRegistry(): {
         // O(1) upsert — replaces an existing entry for the same key + component so
         // re-renders don't accumulate duplicate rows in the graph.
         provides.set(`${entry.key}:${entry.componentUid}`, entry)
+        markDirty()
         emit('provide:register', entry)
     }
 
     function registerInject(entry: InjectEntry) {
         injects.set(`${entry.key}:${entry.componentUid}`, entry)
+        markDirty()
         emit('inject:register', entry)
     }
 
     function clear() {
         provides.clear()
         injects.clear()
+        markDirty()
         emit('provide:clear', {})
     }
 
@@ -110,6 +121,26 @@ export function setupProvideInjectRegistry(): {
         }
     }
 
+    function getSnapshot(): string {
+        if (!dirty) {
+            return cachedSnapshot
+        }
+
+        try {
+            cachedSnapshot =
+                JSON.stringify({
+                    provides: [...provides.values()].map(sanitizeProvide),
+                    injects: [...injects.values()].map(sanitizeInject),
+                }) ?? '{"provides":[],"injects":[]}'
+        } catch {
+            cachedSnapshot = '{"provides":[],"injects":[]}'
+        }
+
+        dirty = false
+
+        return cachedSnapshot
+    }
+
     function emit(event: string, data: unknown) {
         if (!import.meta.client) {
             return
@@ -120,7 +151,7 @@ export function setupProvideInjectRegistry(): {
         channel?.send(event, data)
     }
 
-    return { registerProvide, registerInject, getAll, clear }
+    return { registerProvide, registerInject, getAll, getSnapshot, clear }
 }
 
 // ── Dev shims called by Vite transform ────────────────────────────────────

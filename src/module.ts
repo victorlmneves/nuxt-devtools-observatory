@@ -163,48 +163,18 @@ export default defineNuxtModule<ModuleOptions>({
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         nuxt.hook('devtools:customTabs' as any, (tabs: any[]) => {
-            if (options.fetchDashboard) {
+            if (
+                options.fetchDashboard ||
+                options.provideInjectGraph ||
+                options.composableTracker ||
+                options.renderHeatmap ||
+                options.transitionTracker
+            ) {
                 tabs.push({
-                    name: 'observatory-fetch',
-                    title: 'useFetch',
-                    icon: 'carbon:radio-button',
-                    view: { type: 'iframe', src: `${base}/fetch` },
-                })
-            }
-
-            if (options.provideInjectGraph) {
-                tabs.push({
-                    name: 'observatory-provide',
-                    title: 'provide/inject',
-                    icon: 'carbon:branch',
-                    view: { type: 'iframe', src: `${base}/provide` },
-                })
-            }
-
-            if (options.composableTracker) {
-                tabs.push({
-                    name: 'observatory-composables',
-                    title: 'Composables',
-                    icon: 'carbon:function',
-                    view: { type: 'iframe', src: `${base}/composables` },
-                })
-            }
-
-            if (options.renderHeatmap) {
-                tabs.push({
-                    name: 'observatory-heatmap',
-                    title: 'Heatmap',
+                    name: 'observatory-trackers',
+                    title: 'Observatory Trackers',
                     icon: 'carbon:heat-map',
-                    view: { type: 'iframe', src: `${base}/heatmap` },
-                })
-            }
-
-            if (options.transitionTracker) {
-                tabs.push({
-                    name: 'observatory-transitions',
-                    title: 'Transitions',
-                    icon: 'carbon:movement',
-                    view: { type: 'iframe', src: `${base}/transitions` },
+                    view: { type: 'iframe', src: `${base}/trackers` },
                 })
             }
         })

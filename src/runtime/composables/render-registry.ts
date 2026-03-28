@@ -1,4 +1,4 @@
-import { ref, type ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 
 interface DevtoolsWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
@@ -49,15 +49,26 @@ export interface RenderEntry {
  * @param {import('vue').App} nuxtApp.vueApp - The Vue app instance used to register lifecycle hooks.
  * @param {object} [options] - Optional configuration object.
  * @param {function(): boolean} [options.isHydrating] - Function to determine if the current render is during SSR hydration.
- * @returns {object} An object containing the render registry's API methods: `getAll()`, `snapshot()`, and `reset()`.
+ * @returns {object} An object containing the render registry's API methods: `getAll()`, `getSnapshot()`, `snapshot()`, and `reset()`.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
-    const entries = ref<Map<number, RenderEntry>>(new Map())
+    // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
+    const entries = new Map<number, RenderEntry>()
     const pendingTriggeredRenders = new Set<number>()
     const renderStartTimes = new Map<number, number>()
     // Current route, updated by the plugin on every navigation
     let currentRoute = '/'
     const MAX_TIMELINE = 100
+
+    // FIX #2: dirty flag + cached snapshot string.
+    // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
+    // re-serializes only when dirty, returning the cached string otherwise.
+    let dirty = true
+    let cachedSnapshot = '[]'
+
+    function markDirty() {
+        dirty = true
+    }
 
     function setRoute(path: string) {
         currentRoute = path
@@ -66,11 +77,12 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     function ensureEntry(instance: ComponentPublicInstance) {
         const uid: number = instance.$.uid
 
-        if (!entries.value.has(uid)) {
-            entries.value.set(uid, makeEntry(uid, instance, currentRoute))
+        if (!entries.has(uid)) {
+            entries.set(uid, makeEntry(uid, instance, currentRoute))
+            markDirty()
         }
 
-        return entries.value.get(uid)!
+        return entries.get(uid)!
     }
 
     // UIDs whose rect needs to be refreshed on the next getAll() call.
@@ -80,6 +92,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function markRectDirty(uid: number) {
         dirtyRects.add(uid)
+        markDirty()
     }
 
     function flushDirtyRects() {
@@ -88,7 +101,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         }
 
         for (const uid of dirtyRects) {
-            const entry = entries.value.get(uid)
+            const entry = entries.get(uid)
 
             if (!entry) {
                 dirtyRects.delete(uid)
@@ -130,7 +143,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function removeEntry(instance: ComponentPublicInstance) {
         const uid = instance.$.uid
-        entries.value.delete(uid)
+        entries.delete(uid)
+        markDirty()
     }
 
     function startRenderTimer(uid: number) {
@@ -175,6 +189,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         if (entry.timeline.length > MAX_TIMELINE) {
             entry.timeline.shift()
         }
+
+        markDirty()
     }
 
     function reset() {
@@ -182,7 +198,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         renderStartTimes.clear()
         dirtyRects.clear()
 
-        for (const entry of entries.value.values()) {
+        for (const entry of entries.values()) {
             // Mark every component that survives this reset as persistent now,
             // rather than snapshotting all UIDs into a new Set and checking later.
             // This avoids allocating a full Set<number> on every navigation.
@@ -197,6 +213,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             // would make the second mount appear to be a first mount and bypass
             // the re-mount → rerender counting logic.
         }
+
+        markDirty()
     }
 
     // Hook Vue's global mixin for render tracking
@@ -233,6 +251,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 // Still clear the start time so it doesn't bleed into the next event
                 renderStartTimes.delete(entry.uid)
             }
+            markDirty()
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
 
@@ -249,6 +268,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             if (entry.triggers.length > 50) {
                 entry.triggers.shift()
             }
+
+            markDirty()
         },
 
         updated(this: ComponentPublicInstance) {
@@ -305,11 +326,38 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             route: entry.route,
         }
     }
+
     function getAll(): RenderEntry[] {
         // Flush any pending getBoundingClientRect() calls now — batched here so
         // they never run in the hot mixin path during normal rendering.
         flushDirtyRects()
-        return [...entries.value.values()].map(sanitize)
+        return [...entries.values()].map(sanitize)
+    }
+
+    /**
+     * FIX #2: Returns a cached pre-serialized JSON string of all render entries.
+     * Rebuilds and re-serializes only when the registry has been mutated since the
+     * last call (dirty flag). On a clean registry the cached string is returned
+     * immediately — O(1) instead of O(n × timeline length) on every 500ms poll tick.
+     * Also flushes any pending getBoundingClientRect() calls before serializing,
+     * identical to getAll(), so rect values are always current.
+     */
+    function getSnapshot(): string {
+        if (!dirty) {
+            return cachedSnapshot
+        }
+
+        // Flush pending rect reads before serializing — same guarantee as getAll()
+        flushDirtyRects()
+
+        try {
+            cachedSnapshot = JSON.stringify([...entries.values()].map(sanitize)) ?? '[]'
+        } catch {
+            cachedSnapshot = '[]'
+        }
+
+        dirty = false
+        return cachedSnapshot
     }
 
     function snapshot(): RenderEntry[] {
@@ -325,7 +373,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         channel?.send(event, data)
     }
 
-    return { getAll, snapshot, reset, setRoute }
+    return { getAll, getSnapshot, snapshot, reset, setRoute }
 }
 
 /**
