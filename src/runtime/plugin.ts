@@ -19,7 +19,8 @@ export default defineNuxtPlugin(() => {
     const nuxtApp = useNuxtApp()
 
     const config = useRuntimeConfig().public.observatory as {
-        heatmapThreshold: number
+        heatmapThresholdCount: number
+        heatmapThresholdTime: number
         clientOrigin?: string
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
@@ -35,37 +36,27 @@ export default defineNuxtPlugin(() => {
 
     // Only initialize registries for enabled features
     const registries: Record<string, unknown> = {}
-    let fetchRegistry: ReturnType<typeof setupFetchRegistry> | undefined
-    let provideInjectRegistry: ReturnType<typeof setupProvideInjectRegistry> | undefined
-    let composableRegistry: ReturnType<typeof setupComposableRegistry> | undefined
-    let renderRegistry: ReturnType<typeof setupRenderRegistry> | undefined
-    let transitionRegistry: ReturnType<typeof setupTransitionRegistry> | undefined
 
     if (config.fetchDashboard) {
-        fetchRegistry = setupFetchRegistry()
-        registries.fetch = fetchRegistry
+        registries.fetch = setupFetchRegistry()
     }
 
     if (config.provideInjectGraph) {
-        provideInjectRegistry = setupProvideInjectRegistry()
-        registries.provideInject = provideInjectRegistry
+        registries.provideInject = setupProvideInjectRegistry()
     }
 
     if (config.composableTracker) {
-        composableRegistry = setupComposableRegistry()
-        registries.composable = composableRegistry
+        registries.composable = setupComposableRegistry()
     }
 
     if (config.renderHeatmap) {
-        renderRegistry = setupRenderRegistry(nuxtApp, {
+        registries.render = setupRenderRegistry(nuxtApp, {
             isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
         })
-        registries.render = renderRegistry
     }
 
     if (config.transitionTracker) {
-        transitionRegistry = setupTransitionRegistry()
-        registries.transition = transitionRegistry
+        registries.transition = setupTransitionRegistry()
     }
 
     // Expose registries globally so Vite transform shims can reach them.
@@ -154,6 +145,8 @@ export default defineNuxtPlugin(() => {
 
         // Push a fresh snapshot to the SPA immediately when any tracked
         // composable's reactive state changes — no need to wait for the next poll.
+        const composableRegistry = registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
+
         if (composableRegistry && composableRegistry.onComposableChange) {
             composableRegistry.onComposableChange(() => {
                 const lastMessageSource = lastMessageSourceRef?.deref()
@@ -187,23 +180,20 @@ export default defineNuxtPlugin(() => {
         // which causes clear() to wipe entries that were just registered.
         router.beforeEach(
             (_to: ReturnType<typeof useRouter>['currentRoute']['value'], from: ReturnType<typeof useRouter>['currentRoute']['value']) => {
-                // Skip reset on the very first navigation (initial page load has no from route).
-                // On subsequent navigations, reset per-page state so stale counts don't carry over.
                 if (!from || from.name === undefined) {
                     return
                 }
-
-                if (renderRegistry) {
-                    renderRegistry.reset()
-                }
-
-                ;(provideInjectRegistry as { clear?: () => void })?.clear?.()
-
-                if (composableRegistry) {
-                    composableRegistry.clear()
-                }
-
-                ;(transitionRegistry as { clear?: () => void })?.clear?.()
+                const render = registries.render as unknown
+                if (render && typeof (render as { reset?: () => void }).reset === 'function') (render as { reset: () => void }).reset()
+                const provideInject = registries.provideInject as unknown
+                if (provideInject && typeof (provideInject as { clear?: () => void }).clear === 'function')
+                    (provideInject as { clear: () => void }).clear()
+                const composable = registries.composable as unknown
+                if (composable && typeof (composable as { clear?: () => void }).clear === 'function')
+                    (composable as { clear: () => void }).clear()
+                const transition = registries.transition as unknown
+                if (transition && typeof (transition as { clear?: () => void }).clear === 'function')
+                    (transition as { clear: () => void }).clear()
             }
         )
 
@@ -211,12 +201,16 @@ export default defineNuxtPlugin(() => {
         // Use nextTick so persistent component updated() hooks have flushed
         // before we broadcast — otherwise rerenders shows 0 on navigation.
         router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
-            if (composableRegistry) {
-                composableRegistry.setRoute(to.path ?? '/')
+            const composable = registries.composable as unknown
+
+            if (composable && typeof (composable as { setRoute?: (path: string) => void }).setRoute === 'function') {
+                ;(composable as { setRoute: (path: string) => void }).setRoute(to.path ?? '/')
             }
 
-            if (renderRegistry) {
-                renderRegistry.setRoute(to.path ?? '/')
+            const render = registries.render as unknown
+
+            if (render && typeof (render as { setRoute?: (path: string) => void }).setRoute === 'function') {
+                ;(render as { setRoute: (path: string) => void }).setRoute(to.path ?? '/')
             }
 
             nextTick(() => broadcastAll())
@@ -238,46 +232,48 @@ export default defineNuxtPlugin(() => {
     }
 
     function buildSnapshot() {
-        const snap: Record<string, unknown> = {}
-
-        if (fetchRegistry) {
-            snap.fetch = fetchRegistry.getAll()
+        // Always return a consistent object with all tracker keys present.
+        function safeParse<T>(val: unknown, fallback: T): T {
+            if (typeof val === 'string') {
+                try {
+                    return JSON.parse(val) as T
+                } catch {
+                    return fallback
+                }
+            }
+            if (val && typeof val === 'object') {
+                return val as T
+            }
+            return fallback
         }
 
-        if (provideInjectRegistry) {
-            snap.provideInject = provideInjectRegistry.getAll()
+        // Define the expected tracker keys and their fallbacks
+        const trackerDefs = [
+            { key: 'fetch', fallback: [] },
+            { key: 'provideInject', fallback: { provides: [], injects: [] } },
+            { key: 'composable', fallback: [] },
+            { key: 'render', fallback: {} },
+            { key: 'transition', fallback: {} },
+        ] as const
+
+        const snapshot: Record<string, unknown> = {}
+
+        for (const { key, fallback } of trackerDefs) {
+            const reg = registries[key] as unknown
+            const hasGetSnapshot = reg && typeof (reg as { getSnapshot?: () => unknown }).getSnapshot === 'function'
+            snapshot[key === 'composable' ? 'composables' : key === 'render' ? 'renders' : key === 'transition' ? 'transitions' : key] =
+                hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
         }
 
-        if (composableRegistry) {
-            snap.composables = composableRegistry.getAll()
+        snapshot.features = {
+            fetchDashboard: !!registries.fetch,
+            provideInjectGraph: !!registries.provideInject,
+            composableTracker: !!registries.composable,
+            renderHeatmap: !!registries.render,
+            transitionTracker: !!registries.transition,
         }
 
-        if (renderRegistry) {
-            snap.renders = renderRegistry.getAll()
-        }
-
-        if (transitionRegistry) {
-            snap.transitions = transitionRegistry.getAll()
-        }
-        // Add features object to indicate which features are enabled
-        snap.features = {
-            fetchDashboard: !!fetchRegistry,
-            provideInjectGraph: !!provideInjectRegistry,
-            composableTracker: !!composableRegistry,
-            renderHeatmap: !!renderRegistry,
-            transitionTracker: !!transitionRegistry,
-        }
-
-        // JSON round-trip strips undefined values and anything else that cannot
-        // survive structured clone (postMessage requirement). This is cheaper than
-        // the old recursive toSerializable() traversal while achieving the same goal.
-        try {
-            return JSON.parse(JSON.stringify(snap))
-        } catch {
-            // Fallback: return only the features flag so the SPA stays connected
-            // even if one registry produced unserializable data.
-            return { features: snap.features }
-        }
+        return snapshot
     }
 
     function getDevtoolsChannel() {

@@ -1,4 +1,4 @@
-import { ref, isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
+import { isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
 
 export interface RefChangeEvent {
     t: number // performance.now() timestamp
@@ -54,10 +54,25 @@ interface TrackedInstance {
  * - `register`: Registers a new composable entry.
  * - `update`: Updates an existing composable entry.
  * - `getAll`: Retrieves all composable entries.
- * @returns {{ register: (entry: ComposableEntry) => void, update: (id: string, patch: Partial<ComposableEntry>) => void, getAll: () => ComposableEntry[] }} An object with `register`, `update`, and `getAll` methods.
+ * - `getSnapshot`: Returns a cached pre-serialized JSON string, rebuilt only when dirty.
+ * @returns {{
+ *   register: (entry: ComposableEntry) => void,
+ *   registerLiveRefs: (id: string, refs: Record<string, import('vue').Ref<unknown>>) => void,
+ *   registerRawRefs: (id: string, refs: Record<string, unknown>) => void,
+ *   onComposableChange: (cb: () => void) => void,
+ *   clear: () => void,
+ *   setRoute: (path: string) => void,
+ *   getRoute: () => string,
+ *   update: (id: string, patch: Partial<ComposableEntry>) => void,
+ *   getAll: () => ComposableEntry[],
+ *   getSnapshot: () => string,
+ *   editValue: (id: string, key: string, value: unknown) => void
+ * }} An object with `register`, `update`, `getAll`, `getSnapshot`, and related methods.
  */
 export function setupComposableRegistry() {
-    const entries = ref<Map<string, ComposableEntry>>(new Map())
+    // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
+    const entries = new Map<string, ComposableEntry>()
+
     // Stores live Ref/computed objects keyed by entry id so getAll() can
     // re-read current values on every snapshot rather than serving the
     // stale copy captured at setup time.
@@ -65,10 +80,17 @@ export function setupComposableRegistry() {
     // Stop functions for watchEffect instances tracking each composable's live refs
     const liveRefWatchers = new Map<string, () => void>()
     // Per-entry change history: id → array of RefChangeEvent (capped at MAX_HISTORY)
-    const MAX_HISTORY = 50
+    // Allow configuration via .env or Nuxt runtime config
+    const MAX_HISTORY =
+        typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY
+            ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY)
+            : 50
     // Maximum number of composable entries to keep. Unmounted entries are evicted
     // first; if all are mounted the oldest entry is dropped to stay within the cap.
-    const MAX_COMPOSABLE_ENTRIES = 300
+    const MAX_COMPOSABLE_ENTRIES =
+        typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES
+            ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES)
+            : 300
     const entryHistory = new Map<string, RefChangeEvent[]>()
     // Previous serialised values per ref, used to detect which key actually changed
     const prevValues = new Map<string, Record<string, string>>()
@@ -80,8 +102,19 @@ export function setupComposableRegistry() {
     // Recomputed only when entries are added or removed, never on every getAll() poll tick.
     const sharedKeysCache = new Map<string, Map<string, string[]>>()
 
+    // FIX #2: dirty flag + cached snapshot string.
+    // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
+    // re-serializes only when dirty, returning the cached string otherwise.
+    let dirty = true
+    let cachedSnapshot = '[]'
+
+    function markDirty() {
+        dirty = true
+    }
+
     function invalidateSharedKeysForName(name: string) {
         sharedKeysCache.delete(name)
+        markDirty()
     }
 
     // Fully remove an entry and all its associated data from every Map.
@@ -99,7 +132,7 @@ export function setupComposableRegistry() {
         rawRefs.delete(entryId)
         prevValues.delete(entryId)
         entryHistory.delete(entryId)
-        entries.value.delete(entryId)
+        entries.delete(entryId)
         invalidateSharedKeysForName(entryName)
     }
 
@@ -116,7 +149,7 @@ export function setupComposableRegistry() {
         sharedKeysCache.set(name, nameCache)
 
         // Collect all entries with this name
-        const peers = [...entries.value.entries()].filter(([, e]) => e.name === name)
+        const peers = [...entries.entries()].filter(([, e]) => e.name === name)
 
         for (const [eid] of peers) {
             const ownRaw = rawRefs.get(eid)
@@ -167,20 +200,21 @@ export function setupComposableRegistry() {
         // Enforce cap: prefer evicting unmounted entries first since they are
         // historical records the user has already seen. Only evict a mounted
         // entry if every entry is currently mounted (very unusual).
-        if (entries.value.size >= MAX_COMPOSABLE_ENTRIES) {
-            const unmountedId = [...entries.value.entries()].find(([, e]) => e.status === 'unmounted')?.[0]
-            const evictId = unmountedId ?? entries.value.keys().next().value
+        if (entries.size >= MAX_COMPOSABLE_ENTRIES) {
+            const unmountedId = [...entries.entries()].find(([, e]) => e.status === 'unmounted')?.[0]
+            const evictId = unmountedId ?? entries.keys().next().value
 
             if (evictId !== undefined) {
-                const evictName = entries.value.get(evictId)?.name ?? ''
+                const evictName = entries.get(evictId)?.name ?? ''
                 deleteEntry(evictId, evictName)
             }
         }
 
-        entries.value.set(entry.id, entry)
+        entries.set(entry.id, entry)
         // Invalidate the sharedKeys cache for this composable name so it is
         // recomputed fresh the next time getAll() is called.
         invalidateSharedKeysForName(entry.name)
+        markDirty()
         emit('composable:register', entry)
     }
 
@@ -206,7 +240,7 @@ export function setupComposableRegistry() {
 
         liveRefs.set(id, refs)
 
-        // One watch() per ref key so only the changed key serializes on each mutation.
+        // One watchEffect() per ref key so only the changed key serializes on each mutation.
         // The old single watchEffect re-ran JSON.stringify on ALL keys whenever ANY
         // one changed — O(k) serializations per change regardless of what changed.
         const stopFns: Array<() => void> = []
@@ -247,6 +281,7 @@ export function setupComposableRegistry() {
 
                     entryHistory.set(id, history)
                     prev[k] = serialised
+                    markDirty()
                     _scheduleOnChange()
                 }
             })
@@ -295,14 +330,15 @@ export function setupComposableRegistry() {
     }
 
     function update(id: string, patch: Partial<ComposableEntry>) {
-        const existing = entries.value.get(id)
+        const existing = entries.get(id)
 
         if (!existing) {
             return
         }
 
         const updated = { ...existing, ...patch }
-        entries.value.set(id, updated)
+        entries.set(id, updated)
+        markDirty()
         emit('composable:update', updated)
     }
 
@@ -372,8 +408,31 @@ export function setupComposableRegistry() {
             route: entry.route,
         }
     }
+
     function getAll(): ComposableEntry[] {
-        return [...entries.value.values()].map(sanitize)
+        return [...entries.values()].map(sanitize)
+    }
+
+    /**
+     * Returns a cached pre-serialized JSON string of all composable entries.
+     * Rebuilds and re-serializes only when the registry has been mutated since the
+     * last call (dirty flag). On a clean registry the cached string is returned
+     * immediately — O(1) instead of O(n × ref count) on every 500ms poll tick.
+     * @returns {string} The cached or newly serialized JSON string of all composable entries.
+     */
+    function getSnapshot(): string {
+        if (!dirty) {
+            return cachedSnapshot
+        }
+
+        try {
+            cachedSnapshot = JSON.stringify([...entries.values()].map(sanitize)) ?? '[]'
+        } catch {
+            cachedSnapshot = '[]'
+        }
+
+        dirty = false
+        return cachedSnapshot
     }
 
     function emit(event: string, data: unknown) {
@@ -400,7 +459,8 @@ export function setupComposableRegistry() {
         prevValues.clear()
         entryHistory.clear()
         sharedKeysCache.clear()
-        entries.value.clear()
+        entries.clear()
+        markDirty()
         emit('composable:clear', {})
     }
 
@@ -428,7 +488,7 @@ export function setupComposableRegistry() {
             return
         }
 
-        const entry = entries.value.get(id)
+        const entry = entries.get(id)
 
         if (!entry) {
             return
@@ -442,7 +502,19 @@ export function setupComposableRegistry() {
         r.value = value
     }
 
-    return { register, registerLiveRefs, registerRawRefs, onComposableChange, clear, setRoute, getRoute, update, getAll, editValue }
+    return {
+        register,
+        registerLiveRefs,
+        registerRawRefs,
+        onComposableChange,
+        clear,
+        setRoute,
+        getRoute,
+        update,
+        getAll,
+        getSnapshot,
+        editValue,
+    }
 }
 
 // ── Dev shim called by Vite transform ─────────────────────────────────────
@@ -614,7 +686,8 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
             // updates or history for it. entryHistory is released here to
             // prevent it accumulating indefinitely across v-if toggles.
             registry.registerLiveRefs(id, {})
-            entryHistory.delete(id)
+            // entryHistory is managed inside the registry closure, cleared via
+            // deleteEntry() on eviction or clear() on navigation. Nothing to do here.
         })
     }
 

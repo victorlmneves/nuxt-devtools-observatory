@@ -177,14 +177,19 @@ const activeRoute = ref('')
 // Separate thresholds per mode so switching modes doesn't produce nonsense results.
 // Count: flag components that rendered 3+ times (1 hydration mount is normal).
 // Time: flag components averaging 16ms+ (one animation frame budget).
-const countThreshold = ref(3)
-const timeThreshold = ref(16)
+const COUNT_THRESHOLD = import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT ?? 3
+const TIME_THRESHOLD = import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME ?? 1600
+const countThreshold = ref(Number(COUNT_THRESHOLD))
+const timeThreshold = ref(Number(TIME_THRESHOLD))
 // Writable computed so the threshold slider can use v-model directly.
 const activeThreshold = computed({
     get: () => (activeMode.value === 'count' ? countThreshold.value : timeThreshold.value),
     set: (val: number) => {
-        if (activeMode.value === 'count') countThreshold.value = val
-        else timeThreshold.value = val
+        if (activeMode.value === 'count') {
+            countThreshold.value = val
+        } else {
+            timeThreshold.value = val
+        }
     },
 })
 const activeHotOnly = ref(false)
@@ -299,6 +304,7 @@ function countSubtree(node: ComponentNode): number {
 function collectIds(node: ComponentNode, target = new Set<string>()) {
     target.add(node.id)
     node.children.forEach((child) => collectIds(child, target))
+
     return target
 }
 
@@ -344,13 +350,16 @@ function defaultExpandedIds(root: ComponentNode | null) {
     // Expand all nodes that have children — gives a fully-open tree on first load.
     // The user can collapse individual branches as needed.
     const expanded = new Set<string>()
+
     function expandAll(node: ComponentNode) {
         if (node.children.length > 0) {
             expanded.add(node.id)
             node.children.forEach(expandAll)
         }
     }
+
     expandAll(root)
+
     return expanded
 }
 
@@ -413,10 +422,16 @@ function subtreeHasHotNode(node: ComponentNode): boolean {
 }
 
 function nodeMatchesRoute(node: ComponentNode): boolean {
-    if (!activeRoute.value) return true
+    if (!activeRoute.value) {
+        return true
+    }
+
     // A component is visible for a route if it was first seen on that route
     // OR if any of its timeline events happened on that route.
-    if (node.route === activeRoute.value) return true
+    if (node.route === activeRoute.value) {
+        return true
+    }
+
     return node.timeline.some((e) => e.route === activeRoute.value)
 }
 
@@ -495,8 +510,12 @@ const appEntries = computed(() =>
 
 const knownRoutes = computed(() => {
     const routes = new Set<string>()
+
     for (const node of allComponents.value) {
-        if (node.route) routes.add(node.route)
+        if (node.route) {
+            routes.add(node.route)
+        }
+
         for (const event of node.timeline) {
             if (event.route) routes.add(event.route)
         }
@@ -525,6 +544,7 @@ watch(
             activeSelectedId.value = null
             expandedIds.value = new Set()
             expansionReady.value = false
+
             return
         }
 
@@ -544,12 +564,12 @@ watch(
         if (!expansionReady.value) {
             expandedIds.value = defaultExpandedIds(activeRoot.value)
             expansionReady.value = true
+
             return
         }
 
         if (!search.value.trim() && activeSelectedId.value && activeRoot.value) {
             const selectedPath = pathToNode(activeRoot.value, activeSelectedId.value) ?? []
-
             selectedPath.forEach((id) => preserved.add(id))
         }
 
@@ -567,13 +587,14 @@ watch(search, (term) => {
 
     if (normalized) {
         expandedIds.value = searchExpandedIds(activeRoot.value, normalized)
+
         return
     }
 
     if (activeSelectedId.value) {
         const selectedPath = pathToNode(activeRoot.value, activeSelectedId.value)
-
         expandedIds.value = selectedPath ? new Set(selectedPath) : defaultExpandedIds(activeRoot.value)
+
         return
     }
 
@@ -589,6 +610,7 @@ watch([activeHotOnly, activeThreshold, activeMode, filteredRoots], () => {
 
     if (!topLevelRoot) {
         activeSelectedId.value = null
+
         return
     }
 
@@ -596,6 +618,7 @@ watch([activeHotOnly, activeThreshold, activeMode, filteredRoots], () => {
 
     if (!firstHot) {
         activeSelectedId.value = null
+
         return
     }
 
@@ -646,6 +669,7 @@ function toggleFreeze() {
     if (frozen.value) {
         frozen.value = false
         frozenSnapshot.value = []
+
         return
     }
 
@@ -663,9 +687,16 @@ function basename(file: string) {
 }
 
 function openInEditor(file: string) {
-    if (!file || file === 'unknown') return
+    if (!file || file === 'unknown') {
+        return
+    }
+
     const origin = getObservatoryOrigin()
-    if (!origin) return
+
+    if (!origin) {
+        return
+    }
+
     window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
 }
 

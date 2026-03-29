@@ -1,8 +1,7 @@
-import { ref, readonly } from 'vue'
-import { getCurrentInstance } from 'vue'
+import { readonly, getCurrentInstance } from 'vue'
 
 export interface FetchEntry {
-    id: string
+    id: number | string
     key: string
     url: string
     status: 'pending' | 'ok' | 'error' | 'cached'
@@ -54,9 +53,12 @@ interface FetchMeta {
  * associated metadata (e.g. duration, size, origin).
  * @returns {object} The fetch registry with `register`, `update`, `getAll`, `clear`, and `entries` members.
  */
-const MAX_FETCH_ENTRIES = 200
+// Allow configuration via .env or Nuxt runtime config
+const MAX_FETCH_ENTRIES =
+    typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200
 // Maximum payload size to store in memory (10 KB as JSON string)
-const MAX_PAYLOAD_BYTES = 10_000
+const MAX_PAYLOAD_BYTES =
+    typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10_000
 
 /**
  * Truncates a payload to a maximum byte size for safe logging or transport.
@@ -81,24 +83,33 @@ function truncatePayload(payload: unknown): unknown {
 }
 
 export function setupFetchRegistry() {
-    const entries = ref<Map<string, FetchEntry>>(new Map())
+    const entries = new Map<string | number, FetchEntry>()
+
+    let dirty = true // start dirty so first snapshot always builds
+    let cachedSnapshot: FetchEntry[] = []
+
+    function markDirty() {
+        dirty = true
+    }
 
     function register(entry: FetchEntry) {
         // Evict oldest entry when cap is reached
-        if (entries.value.size >= MAX_FETCH_ENTRIES) {
-            const oldestKey = entries.value.keys().next().value
+        if (entries.size >= MAX_FETCH_ENTRIES) {
+            const oldestKey = entries.keys().next().value
+
             if (oldestKey !== undefined) {
-                entries.value.delete(oldestKey)
+                entries.delete(oldestKey)
             }
         }
 
         const safeEntry = entry.payload !== undefined ? { ...entry, payload: truncatePayload(entry.payload) } : entry
-        entries.value.set(safeEntry.id, safeEntry)
+        entries.set(safeEntry.id, safeEntry)
+        markDirty()
         emit('fetch:start', safeEntry)
     }
 
     function update(id: string, patch: Partial<FetchEntry>) {
-        const existing = entries.value.get(id)
+        const existing = entries.get(id)
 
         if (!existing) {
             return
@@ -106,16 +117,36 @@ export function setupFetchRegistry() {
 
         const safePatch = patch.payload !== undefined ? { ...patch, payload: truncatePayload(patch.payload) } : patch
         const updated = { ...existing, ...safePatch }
-        entries.value.set(id, updated)
+        entries.set(id, updated)
+        markDirty()
         emit('fetch:update', updated)
     }
 
     function getAll(): FetchEntry[] {
-        return [...entries.value.values()]
+        if (dirty) {
+            cachedSnapshot = [...entries.values()]
+            dirty = false
+        }
+
+        return cachedSnapshot
+
+        // return [...entries.values()]
+    }
+
+    function getSnapshot(): FetchEntry[] {
+        if (!dirty) {
+            return cachedSnapshot
+        }
+
+        cachedSnapshot = [...entries.values()] // shallow copy is enough — entries are already plain objects
+        dirty = false
+
+        return cachedSnapshot
     }
 
     function clear() {
-        entries.value.clear()
+        entries.clear()
+        markDirty()
         emit('fetch:clear', {})
     }
 
@@ -128,7 +159,7 @@ export function setupFetchRegistry() {
         channel?.send(event, data)
     }
 
-    return { register, update, getAll, clear, entries: readonly(entries) }
+    return { register, update, getAll, getSnapshot, clear, entries: readonly(entries) }
 }
 
 // ── Dev shims called by the Vite transform ────────────────────────────────

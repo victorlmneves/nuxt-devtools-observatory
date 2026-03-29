@@ -1,4 +1,4 @@
-import { ref, h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
+import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
 import type { Slots } from 'vue'
 
 export interface TransitionEntry {
@@ -15,31 +15,46 @@ export interface TransitionEntry {
     mode?: string
 }
 
-const MAX_TRANSITIONS = 500
+// Allow configuration via .env or Nuxt runtime config
+const MAX_TRANSITIONS =
+    typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500
 
 export function setupTransitionRegistry() {
-    const entries = ref<Map<string, TransitionEntry>>(new Map())
+    // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
+    const entries = new Map<string, TransitionEntry>()
+
+    // FIX #2: dirty flag + cached snapshot string.
+    // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
+    // re-serializes only when dirty, returning the cached string otherwise.
+    let dirty = true
+    let cachedSnapshot = '[]'
+
+    function markDirty() {
+        dirty = true
+    }
 
     function register(entry: TransitionEntry) {
         // Evict the oldest entry when the cap is reached to prevent unbounded growth
-        if (entries.value.size >= MAX_TRANSITIONS) {
-            const oldestKey = entries.value.keys().next().value
+        if (entries.size >= MAX_TRANSITIONS) {
+            const oldestKey = entries.keys().next().value
             if (oldestKey !== undefined) {
-                entries.value.delete(oldestKey)
+                entries.delete(oldestKey)
             }
         }
 
-        entries.value.set(entry.id, entry)
+        entries.set(entry.id, entry)
+        markDirty()
         emit('transition:register', entry)
     }
 
     function clear() {
-        entries.value.clear()
+        entries.clear()
+        markDirty()
         emit('transition:clear', {})
     }
 
     function update(id: string, patch: Partial<TransitionEntry>) {
-        const existing = entries.value.get(id)
+        const existing = entries.get(id)
 
         if (!existing) {
             return
@@ -51,7 +66,8 @@ export function setupTransitionRegistry() {
             updated.durationMs = Math.round((patch.endTime - existing.startTime) * 10) / 10
         }
 
-        entries.value.set(id, updated)
+        entries.set(id, updated)
+        markDirty()
         emit('transition:update', updated)
     }
 
@@ -75,7 +91,30 @@ export function setupTransitionRegistry() {
     }
 
     function getAll(): TransitionEntry[] {
-        return [...entries.value.values()].map(sanitize)
+        return [...entries.values()].map(sanitize)
+    }
+
+    /**
+     * Returns a cached pre-serialized JSON string of all transition entries.
+     * Rebuilds and re-serializes only when the registry has been mutated since the
+     * last call (dirty flag). On a clean registry the cached string is returned
+     * immediately — O(1) instead of O(n) on every 500ms poll tick.
+     * @returns {object} The transition registry with `register`, `update`, `getAll`, `getSnapshot`, and `clear` methods.
+     */
+    function getSnapshot(): string {
+        if (!dirty) {
+            return cachedSnapshot
+        }
+
+        try {
+            cachedSnapshot = JSON.stringify([...entries.values()].map(sanitize)) ?? '[]'
+        } catch {
+            cachedSnapshot = '[]'
+        }
+
+        dirty = false
+
+        return cachedSnapshot
     }
 
     function emit(event: string, data: unknown) {
@@ -88,7 +127,7 @@ export function setupTransitionRegistry() {
         channel?.send(event, data)
     }
 
-    return { register, update, getAll, clear }
+    return { register, update, getAll, getSnapshot, clear }
 }
 
 // ── Tracked <Transition> wrapper ─────────────────────────────────────────
