@@ -536,9 +536,15 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     }
 
     const instance = getCurrentInstance() as TrackedInstance | null
-    // Use a counter suffix in addition to Date.now() to prevent ID collisions
-    // when multiple composables are called within the same millisecond.
-    const id = `${name}::${instance?.uid ?? 'global'}::${meta.file}:${meta.line}::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
+
+    // For component instances, generate a unique ID per call (multiple composables
+    // of the same type can be active in the same component at the same time).
+    // For non-component contexts (middleware, plugins, Pinia stores) use a stable
+    // ID derived from name + file + line so that re-executions on every navigation
+    // update the existing entry rather than registering a duplicate.
+    const id = instance
+        ? `${name}::${instance.uid}::${meta.file}:${meta.line}::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
+        : `${name}::global::${meta.file}:${meta.line}`
 
     // ── Interval tracking ────────────────────────────────────────────────────
     // We patch window.setInterval/clearInterval to detect leaked timers.
@@ -642,7 +648,20 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         route: registry.getRoute(),
     }
 
-    registry.register(entry)
+    // For stable-ID (non-component) entries, update the existing entry if it already
+    // exists — middleware and plugins re-run on every navigation and should refresh
+    // their single entry rather than accumulate duplicates in the tracker.
+    if (!instance && registry.getAll().some((e) => e.id === id)) {
+        registry.update(id, {
+            status: 'mounted',
+            refs,
+            watcherCount: trackedWatchers.length,
+            intervalCount: trackedIntervals.length,
+            route: registry.getRoute(),
+        })
+    } else {
+        registry.register(entry)
+    }
 
     // Only register live refs when called inside a component context.
     // Global composables (instance === null, e.g. from a Nuxt plugin or Pinia store)

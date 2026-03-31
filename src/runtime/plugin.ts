@@ -27,6 +27,7 @@ export default defineNuxtPlugin(() => {
         composableTracker?: boolean
         renderHeatmap?: boolean
         transitionTracker?: boolean
+        heatmapHideInternals?: boolean
     }
 
     // Enable Vue performance API for render heatmap if enabled

@@ -11,23 +11,46 @@ const generate = (_generate as typeof _generate & { default?: typeof _generate }
 // Matches useXxx() — Vue composable naming convention
 const COMPOSABLE_RE = /\buse[A-Z]/
 
-// Built-in Vue composables to skip (they have their own tracking)
+// Nuxt/Vue built-in composables that are auto-imported (no import statement in source)
+// and should never be wrapped. For composables that DO have an explicit import statement,
+// we skip them via binding analysis in the transform instead (see isImportedFromPackage).
 const SKIP_LIST = new Set([
+    // useFetch family — tracked by the fetch dashboard
     'useFetch',
     'useAsyncData',
     'useLazyFetch',
     'useLazyAsyncData',
-    'useState',
-    'useRoute',
-    'useRouter',
+    // Nuxt auto-imports
+    'useCookie',
+    'useRequestEvent',
+    'useRequestHeaders',
+    'useRequestURL',
+    'useResponseHeader',
     'useNuxtApp',
     'useRuntimeConfig',
+    'useRoute',
+    'useRouter',
+    'useNuxtData',
+    'useError',
+    'useState',
+    'useAppConfig',
+    // Nuxt head
     'useHead',
     'useSeoMeta',
     'useServerSeoMeta',
-    'useNuxtData',
-    'useError',
-    'useRequestHeaders',
+    'useHeadSafe',
+    // Nuxt i18n (common plugin)
+    'useI18n',
+    'useLocalePath',
+    'useLocaleRoute',
+    // Vue built-ins
+    'useSlots',
+    'useAttrs',
+    'useModel',
+    'useTemplateRef',
+    'useId',
+    'useCssModule',
+    'useCssVars',
 ])
 
 export function composableTrackerPlugin(): Plugin {
@@ -95,6 +118,22 @@ export function composableTrackerPlugin(): Plugin {
 
                         if (SKIP_LIST.has(name)) {
                             return
+                        }
+
+                        // Skip composables that are explicitly imported from a package (node_modules).
+                        // This catches third-party composables (e.g. VueUse, Pinia, any library)
+                        // that aren't in SKIP_LIST without requiring us to enumerate every package.
+                        // Auto-imported Nuxt/Vue composables have no import binding at all, so
+                        // they are handled solely by SKIP_LIST above.
+                        const binding = path.scope.getBinding(name)
+
+                        if (binding?.path.isImportSpecifier() || binding?.path.isImportDefaultSpecifier()) {
+                            const importDecl = binding.path.parentPath?.node as import('@babel/types').ImportDeclaration | undefined
+                            const source = importDecl?.source?.value ?? ''
+
+                            if (source && !source.startsWith('.') && !source.startsWith('/')) {
+                                return
+                            }
                         }
 
                         // Skip if the call is already inside __trackComposable

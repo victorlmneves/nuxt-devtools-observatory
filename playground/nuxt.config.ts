@@ -6,6 +6,7 @@ export default defineNuxtConfig({
     },
 
     observatory: {
+        instrumentServer: import.meta.env.VITE_OBSERVATORY_INSTRUMENT_SERVER === 'true',
         fetchDashboard: import.meta.env.VITE_OBSERVATORY_FETCH_DASHBOARD === 'true',
         provideInjectGraph: import.meta.env.VITE_OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
         composableTracker: import.meta.env.VITE_OBSERVATORY_COMPOSABLE_TRACKER === 'true',
@@ -17,6 +18,7 @@ export default defineNuxtConfig({
         heatmapThresholdTime: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME
             ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME)
             : 16,
+        heatmapHideInternals: import.meta.env.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
     },
 
     devtools: { enabled: true },
