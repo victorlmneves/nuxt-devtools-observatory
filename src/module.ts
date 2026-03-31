@@ -99,6 +99,29 @@ export interface ModuleOptions {
     heatmapThresholdTime?: number
 }
 
+
+const defaults = {
+    instrumentServer: process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true',
+    fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
+    provideInjectGraph: process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
+    composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
+    renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
+    transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
+    heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT
+        ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
+        : 3,
+    heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME
+        ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME)
+        : 1600,
+    maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
+    maxPayloadBytes: process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000,
+    maxTransitions: process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500,
+    maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
+    maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
+    maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
+    heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
+}
+
 export default defineNuxtModule<ModuleOptions>({
     meta: {
         name: 'nuxt-devtools-observatory',
@@ -106,27 +129,7 @@ export default defineNuxtModule<ModuleOptions>({
         compatibility: { nuxt: '^3.0.0 || ^4.0.0' },
     },
 
-    defaults: {
-        instrumentServer: process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true',
-        fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
-        provideInjectGraph: process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
-        composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
-        renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
-        transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
-        heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT
-            ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
-            : 3,
-        heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME
-            ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME)
-            : 1600,
-        maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
-        maxPayloadBytes: process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000,
-        maxTransitions: process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500,
-        maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
-        maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
-        maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
-        heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
-    },
+    defaults,
 
     setup(options, nuxt) {
         // Merge logic: Nuxt config (user) options always take precedence over env/defaults
