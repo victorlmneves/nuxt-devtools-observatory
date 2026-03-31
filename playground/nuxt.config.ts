@@ -6,21 +6,19 @@ export default defineNuxtConfig({
     },
 
     observatory: {
-        instrumentServer: false, // Instrument the server for SSR/Nitro fetch and composable tracking. Enable this when using SSR so server-side composable calls are captured. Disable for SPA projects to avoid double-registration caused by the transform running on both builds.
-        fetchDashboard: true, // Enable useFetch dashboard
-        provideInjectGraph: true, // Enable provide/inject graph
-        composableTracker: true, // Enable composable tracker
-        renderHeatmap: true, // Enable render heatmap
-        transitionTracker: true, // Enable transition tracker
-        heatmapThresholdCount: 3, // Highlight components with 3+ renders
-        heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
-        heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
-        maxFetchEntries: 200, // Max fetch entries to keep in memory
-        maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
-        maxTransitions: 500, // Max transition entries to keep in memory
-        maxComposableHistory: 50, // Max composable history events per entry
-        maxComposableEntries: 300, // Max composable entries to keep in memory
-        maxRenderTimeline: 100, // Max render timeline events per entry
+        instrumentServer: import.meta.env.VITE_OBSERVATORY_INSTRUMENT_SERVER === 'true',
+        fetchDashboard: import.meta.env.VITE_OBSERVATORY_FETCH_DASHBOARD === 'true',
+        provideInjectGraph: import.meta.env.VITE_OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
+        composableTracker: import.meta.env.VITE_OBSERVATORY_COMPOSABLE_TRACKER === 'true',
+        renderHeatmap: import.meta.env.VITE_OBSERVATORY_RENDER_HEATMAP === 'true',
+        transitionTracker: import.meta.env.VITE_OBSERVATORY_TRANSITION_TRACKER === 'true',
+        heatmapThresholdCount: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT
+            ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
+            : 3,
+        heatmapThresholdTime: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME
+            ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME)
+            : 16,
+        heatmapHideInternals: import.meta.env.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
     },
 
     devtools: { enabled: true },
