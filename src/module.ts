@@ -6,15 +6,19 @@ import { transitionTrackerPlugin } from './transforms/transition-transform'
 
 export interface ModuleOptions {
     /**
+     * Instrument composables, provide/inject, fetch, and transitions on the
+     * server build as well as the client build. Enable this when using SSR so
+     * server-side composable calls are captured. Disable for SPA projects to
+     * avoid double-registration caused by the transform running on both builds.
+     * @default false
+     */
+    instrumentServer?: boolean
+
+    /**
      * Maximum number of fetch entries to keep in memory
      * @default 200
      */
     maxFetchEntries?: number
-    /**
-     * Hide internal (node_modules) components in the render heatmap
-     * @default false
-     */
-    heatmapHideInternals?: boolean
 
     /**
      * Maximum payload size (bytes) to store per fetch entry
@@ -45,6 +49,7 @@ export interface ModuleOptions {
      * @default 100
      */
     maxRenderTimeline?: number
+
     /**
      * Enable the useFetch / useAsyncData dashboard tab
      * @default true
@@ -76,6 +81,12 @@ export interface ModuleOptions {
     transitionTracker?: boolean
 
     /**
+     * Hide node_modules/internal components in the render heatmap
+     * @default false
+     */
+    heatmapHideInternals?: boolean
+
+    /**
      * Minimum render count / ms threshold to highlight in the heatmap
      * @default 3
      */
@@ -93,17 +104,15 @@ export default defineNuxtModule<ModuleOptions>({
         name: 'nuxt-devtools-observatory',
         configKey: 'observatory',
         compatibility: { nuxt: '^3.0.0 || ^4.0.0' },
-        heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS
-            ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
-            : false,
     },
 
     defaults: {
-        fetchDashboard: true,
-        provideInjectGraph: true,
-        composableTracker: true,
-        renderHeatmap: true,
-        transitionTracker: true,
+        instrumentServer: process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true',
+        fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
+        provideInjectGraph: process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
+        composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
+        renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
+        transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
         heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT
             ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
             : 3,
@@ -116,6 +125,7 @@ export default defineNuxtModule<ModuleOptions>({
         maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
         maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
         maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
+        heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
     },
 
     setup(options, nuxt) {
@@ -135,9 +145,14 @@ export default defineNuxtModule<ModuleOptions>({
 
         // Explicitly resolve each option: user config > env > default
         const resolved = {
-            heatmapHideInternals:
-                options.heatmapHideInternals ??
-                (process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true' : false),
+                ...defaults,
+                ...options,
+                // Allow runtime overrides via env
+                heatmapHideInternals: typeof process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS !== 'undefined'
+                    ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
+                    : (typeof options.heatmapHideInternals !== 'undefined'
+                        ? options.heatmapHideInternals
+                        : defaults.heatmapHideInternals),
             fetchDashboard:
                 options.fetchDashboard ??
                 (process.env.OBSERVATORY_FETCH_DASHBOARD ? process.env.OBSERVATORY_FETCH_DASHBOARD === 'true' : true),
@@ -153,6 +168,9 @@ export default defineNuxtModule<ModuleOptions>({
             transitionTracker:
                 options.transitionTracker ??
                 (process.env.OBSERVATORY_TRANSITION_TRACKER ? process.env.OBSERVATORY_TRANSITION_TRACKER === 'true' : true),
+            instrumentServer:
+                options.instrumentServer ??
+                (process.env.OBSERVATORY_INSTRUMENT_SERVER ? process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true' : false),
             heatmapThresholdCount:
                 options.heatmapThresholdCount ??
                 (process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3),
@@ -191,20 +209,22 @@ export default defineNuxtModule<ModuleOptions>({
         })
 
         // ── Vite transforms ───────────────────────────────────────────────────
+        const vitePluginScope = resolved.instrumentServer ? { server: true, client: true } : { server: false, client: true }
+
         if (resolved.fetchDashboard) {
-            addVitePlugin(fetchInstrumentPlugin())
+            addVitePlugin(fetchInstrumentPlugin(), vitePluginScope)
         }
 
         if (resolved.provideInjectGraph) {
-            addVitePlugin(provideInjectPlugin())
+            addVitePlugin(provideInjectPlugin(), vitePluginScope)
         }
 
         if (resolved.composableTracker) {
-            addVitePlugin(composableTrackerPlugin())
+            addVitePlugin(composableTrackerPlugin(), vitePluginScope)
         }
 
         if (resolved.transitionTracker) {
-            addVitePlugin(transitionTrackerPlugin())
+            addVitePlugin(transitionTrackerPlugin(), vitePluginScope)
         }
 
         // ── Runtime plugins ───────────────────────────────────────────────────
@@ -295,9 +315,7 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Expose module options to runtime ──────────────────────────────────
         nuxt.options.runtimeConfig.public.observatory = {
-            heatmapHideInternals: resolved.heatmapHideInternals,
-            heatmapThresholdCount: resolved.heatmapThresholdCount,
-            heatmapThresholdTime: resolved.heatmapThresholdTime,
+            instrumentServer: resolved.instrumentServer,
             clientOrigin,
             fetchDashboard: resolved.fetchDashboard,
             provideInjectGraph: resolved.provideInjectGraph,
@@ -310,6 +328,9 @@ export default defineNuxtModule<ModuleOptions>({
             maxComposableHistory: resolved.maxComposableHistory,
             maxComposableEntries: resolved.maxComposableEntries,
             maxRenderTimeline: resolved.maxRenderTimeline,
+            heatmapHideInternals: resolved.heatmapHideInternals,
+            heatmapThresholdCount: resolved.heatmapThresholdCount,
+            heatmapThresholdTime: resolved.heatmapThresholdTime,
         }
     },
 })

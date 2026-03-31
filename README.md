@@ -18,6 +18,7 @@ You can configure all observability features and limits from your consuming proj
 
 **Available options:**
 
+- `instrumentServer` (boolean) — Instrument the server for SSR/Nitro fetch and composable tracking (set via `OBSERVATORY_INSTRUMENT_SERVER` or `VITE_OBSERVATORY_INSTRUMENT_SERVER`)
 - `fetchDashboard` (boolean) — Enable useFetch dashboard
 - `provideInjectGraph` (boolean) — Enable provide/inject graph
 - `composableTracker` (boolean) — Enable composable tracker
@@ -25,7 +26,7 @@ You can configure all observability features and limits from your consuming proj
 - `transitionTracker` (boolean) — Enable transition tracker
 - `heatmapThresholdCount` (number) — Highlight components with N+ renders in heatmap
 - `heatmapThresholdTime` (number) — Highlight components with render time above this (ms)
-- `heatmapHideInternals` (boolean) — Hide node_modules/internal components in heatmap
+- `heatmapHideInternals` (boolean) — Hide node_modules and internal components in the render heatmap for a cleaner view
 - `maxFetchEntries` (number) — Max fetch entries to keep in memory
 - `maxPayloadBytes` (number) — Max payload size (bytes) per fetch entry
 - `maxTransitions` (number) — Max transition entries to keep in memory
@@ -41,6 +42,7 @@ export default defineNuxtConfig({
     modules: ['nuxt-devtools-observatory'],
 
     observatory: {
+        instrumentServer: true, // Instrument the server for SSR/Nitro fetch and composable tracking. Enable this when using SSR so server-side composable calls are captured. Disable for SPA projects to avoid double-registration caused by the transform running on both builds.
         fetchDashboard: true, // Enable useFetch dashboard
         provideInjectGraph: true, // Enable provide/inject graph
         composableTracker: true, // Enable composable tracker
@@ -48,7 +50,7 @@ export default defineNuxtConfig({
         transitionTracker: true, // Enable transition tracker
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
         heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
-        heatmapHideInternals: true, // Hide node_modules/internal components in heatmap
+        heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
         maxFetchEntries: 200, // Max fetch entries to keep in memory
         maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
         maxTransitions: 500, // Max transition entries to keep in memory
