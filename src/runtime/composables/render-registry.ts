@@ -88,12 +88,15 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function nearestTrackedAncestorUid(instance: ComponentPublicInstance): number | undefined {
         let cursor = instance.$parent
+
         while (cursor) {
             if (!isInternalInstance(cursor)) {
                 return cursor.$.uid
             }
+
             cursor = cursor.$parent
         }
+
         return undefined
     }
 
@@ -253,7 +256,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         mounted(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
-            if (!entry) return
+
+            if (!entry) {
+                return
+            }
+
             entry.mountCount++
 
             // isPersistent is set directly in reset() for any component that
@@ -271,6 +278,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
             _liveElements.set(entry.uid, this.$el)
             markRectDirty(entry.uid)
+
             // Persistent components re-mounting after navigation are NOT new renders —
             // they kept their DOM. Only record the timeline event for genuine first mounts
             // and explicit re-mounts (v-if etc.), not navigation-triggered re-attachments.
@@ -280,6 +288,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 // Still clear the start time so it doesn't bleed into the next event
                 renderStartTimes.delete(entry.uid)
             }
+
             markDirty()
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
@@ -290,7 +299,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
             const entry = ensureEntry(this)
-            if (!entry) return
+
+            if (!entry) {
+                return
+            }
+
             entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
             pendingTriggeredRenders.add(entry.uid)
 
@@ -304,7 +317,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         updated(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
-            if (!entry) return
+
+            if (!entry) {
+                return
+            }
 
             // Count every reactive update as a re-render.
             // renderTriggered (above) already captured which deps triggered it.
