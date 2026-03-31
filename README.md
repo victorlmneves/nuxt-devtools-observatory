@@ -14,18 +14,47 @@ Nuxt DevTools extension providing five missing observability features:
 pnpm add nuxt-devtools-observatory
 ```
 
+You can configure all observability features and limits from your consuming project's `nuxt.config.ts` or `.env` file. All options in `.env.example` are supported as either environment variables or as properties under the `observatory` key in your Nuxt config. Options set in `nuxt.config.ts` take precedence over `.env` values.
+
+**Available options:**
+
+- `fetchDashboard` (boolean) — Enable useFetch dashboard
+- `provideInjectGraph` (boolean) — Enable provide/inject graph
+- `composableTracker` (boolean) — Enable composable tracker
+- `renderHeatmap` (boolean) — Enable render heatmap
+- `transitionTracker` (boolean) — Enable transition tracker
+- `heatmapThresholdCount` (number) — Highlight components with N+ renders in heatmap
+- `heatmapThresholdTime` (number) — Highlight components with render time above this (ms)
+- `heatmapHideInternals` (boolean) — Hide node_modules/internal components in heatmap
+- `maxFetchEntries` (number) — Max fetch entries to keep in memory
+- `maxPayloadBytes` (number) — Max payload size (bytes) per fetch entry
+- `maxTransitions` (number) — Max transition entries to keep in memory
+- `maxComposableHistory` (number) — Max composable history events per entry
+- `maxComposableEntries` (number) — Max composable entries to keep in memory
+- `maxRenderTimeline` (number) — Max render timeline events per entry
+
+See `.env.example` for all environment variable names.
+
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
     modules: ['nuxt-devtools-observatory'],
 
     observatory: {
-        fetchDashboard: true,
-        provideInjectGraph: true,
-        composableTracker: true,
-        renderHeatmap: true,
-        transitionTracker: true,
-        heatmapThresholdCount: 5, // highlight components with 5+ renders
+        fetchDashboard: true, // Enable useFetch dashboard
+        provideInjectGraph: true, // Enable provide/inject graph
+        composableTracker: true, // Enable composable tracker
+        renderHeatmap: true, // Enable render heatmap
+        transitionTracker: true, // Enable transition tracker
+        heatmapThresholdCount: 5, // Highlight components with 5+ renders
+        heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
+        heatmapHideInternals: true, // Hide node_modules/internal components in heatmap
+        maxFetchEntries: 200, // Max fetch entries to keep in memory
+        maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
+        maxTransitions: 500, // Max transition entries to keep in memory
+        maxComposableHistory: 50, // Max composable history events per entry
+        maxComposableEntries: 300, // Max composable entries to keep in memory
+        maxRenderTimeline: 100, // Max render timeline events per entry
     },
 
     devtools: { enabled: true },

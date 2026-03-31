@@ -1,4 +1,5 @@
 import type { ComponentPublicInstance } from 'vue'
+import { useRuntimeConfig } from '#app'
 
 interface DevtoolsWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
@@ -58,14 +59,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     const renderStartTimes = new Map<number, number>()
     // Current route, updated by the plugin on every navigation
     let currentRoute = '/'
-    // Allow configuration via .env or Nuxt runtime config
-    const hasEnv = typeof import.meta.env !== 'undefined' && import.meta.env !== undefined
-    const MAX_TIMELINE =
-        hasEnv && import.meta.env?.VITE_OBSERVATORY_MAX_RENDER_TIMELINE ? Number(import.meta.env.VITE_OBSERVATORY_MAX_RENDER_TIMELINE) : 100
-    const HIDE_INTERNALS =
-        hasEnv && import.meta.env?.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS !== undefined
-            ? import.meta.env.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
-            : false
+    // Allow configuration via Nuxt runtime config
+    const config = useRuntimeConfig().public.observatory as { heatmapHideInternals?: boolean; maxRenderTimeline?: number }
+    const MAX_TIMELINE = config.maxRenderTimeline ?? 100
+    const HIDE_INTERNALS = config.heatmapHideInternals ?? false
 
     // FIX #2: dirty flag + cached snapshot string.
     // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
@@ -83,6 +80,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function isInternalInstance(instance: ComponentPublicInstance): boolean {
         const file = (instance.$.type as { __file?: string }).__file
+
         return !file || file.includes('node_modules')
     }
 

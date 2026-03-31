@@ -10,6 +10,11 @@ export interface ModuleOptions {
      * @default 200
      */
     maxFetchEntries?: number
+    /**
+     * Hide internal (node_modules) components in the render heatmap
+     * @default false
+     */
+    heatmapHideInternals?: boolean
 
     /**
      * Maximum payload size (bytes) to store per fetch entry
@@ -88,6 +93,9 @@ export default defineNuxtModule<ModuleOptions>({
         name: 'nuxt-devtools-observatory',
         configKey: 'observatory',
         compatibility: { nuxt: '^3.0.0 || ^4.0.0' },
+        heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS
+            ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
+            : false,
     },
 
     defaults: {
@@ -127,6 +135,9 @@ export default defineNuxtModule<ModuleOptions>({
 
         // Explicitly resolve each option: user config > env > default
         const resolved = {
+            heatmapHideInternals:
+                options.heatmapHideInternals ??
+                (process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true' : false),
             fetchDashboard:
                 options.fetchDashboard ??
                 (process.env.OBSERVATORY_FETCH_DASHBOARD ? process.env.OBSERVATORY_FETCH_DASHBOARD === 'true' : true),
@@ -284,6 +295,7 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Expose module options to runtime ──────────────────────────────────
         nuxt.options.runtimeConfig.public.observatory = {
+            heatmapHideInternals: resolved.heatmapHideInternals,
             heatmapThresholdCount: resolved.heatmapThresholdCount,
             heatmapThresholdTime: resolved.heatmapThresholdTime,
             clientOrigin,
