@@ -155,17 +155,18 @@ export function composableTrackerPlugin(): Plugin {
                 const importLine = `import { __trackComposable } from 'nuxt-devtools-observatory/runtime/composable-registry';\n`
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
-                // Avoid duplicate imports
+                // Avoid duplicate imports — check output.code (the transformed result)
+                // rather than scriptCode (the original source), because scriptCode never
+                // contains __trackComposable and the guard would always be false, causing
+                // the import to be injected on every Vite transform pass (SSR + client, HMR).
+                const alreadyImported = output.code.includes('nuxt-devtools-observatory/runtime/composable-registry')
+                const prefix = alreadyImported ? '' : importLine
                 let finalCode: string
 
                 if (isVue) {
-                    finalCode =
-                        code.slice(0, scriptStart) +
-                        (scriptCode.includes('__trackComposable') ? '' : importLine) +
-                        output.code +
-                        code.slice(scriptStart + scriptCode.length)
+                    finalCode = code.slice(0, scriptStart) + prefix + output.code + code.slice(scriptStart + scriptCode.length)
                 } else {
-                    finalCode = (scriptCode.includes('__trackComposable') ? '' : importLine) + output.code
+                    finalCode = prefix + output.code
                 }
 
                 return { code: finalCode, map: output.map }

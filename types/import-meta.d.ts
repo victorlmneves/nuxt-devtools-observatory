@@ -5,4 +5,5 @@ interface ImportMeta {
         dispose: (callback: () => void) => void
         // Add other HMR methods if needed
     }
+    readonly env?: Record<string, string | undefined>
 }

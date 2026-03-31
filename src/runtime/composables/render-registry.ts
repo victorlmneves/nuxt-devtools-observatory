@@ -59,10 +59,13 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     // Current route, updated by the plugin on every navigation
     let currentRoute = '/'
     // Allow configuration via .env or Nuxt runtime config
+    const hasEnv = typeof import.meta.env !== 'undefined' && import.meta.env !== undefined
     const MAX_TIMELINE =
-        typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_RENDER_TIMELINE
-            ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE)
-            : 100
+        hasEnv && import.meta.env?.VITE_OBSERVATORY_MAX_RENDER_TIMELINE ? Number(import.meta.env.VITE_OBSERVATORY_MAX_RENDER_TIMELINE) : 100
+    const HIDE_INTERNALS =
+        hasEnv && import.meta.env?.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS !== undefined
+            ? import.meta.env.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
+            : false
 
     // FIX #2: dirty flag + cached snapshot string.
     // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
@@ -78,11 +81,35 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         currentRoute = path
     }
 
+    function isInternalInstance(instance: ComponentPublicInstance): boolean {
+        const file = (instance.$.type as { __file?: string }).__file
+        return !file || file.includes('node_modules')
+    }
+
+    function nearestTrackedAncestorUid(instance: ComponentPublicInstance): number | undefined {
+        let cursor = instance.$parent
+
+        while (cursor) {
+            if (!isInternalInstance(cursor)) {
+                return cursor.$.uid
+            }
+
+            cursor = cursor.$parent
+        }
+
+        return undefined
+    }
+
     function ensureEntry(instance: ComponentPublicInstance) {
         const uid: number = instance.$.uid
 
         if (!entries.has(uid)) {
-            entries.set(uid, makeEntry(uid, instance, currentRoute))
+            if (HIDE_INTERNALS && isInternalInstance(instance)) {
+                return null
+            }
+
+            const parentUid = HIDE_INTERNALS ? nearestTrackedAncestorUid(instance) : instance.$parent?.$.uid
+            entries.set(uid, makeEntry(uid, instance, currentRoute, parentUid))
             markDirty()
         }
 
@@ -229,6 +256,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         mounted(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
+
+            if (!entry) {
+                return
+            }
+
             entry.mountCount++
 
             // isPersistent is set directly in reset() for any component that
@@ -246,6 +278,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
             _liveElements.set(entry.uid, this.$el)
             markRectDirty(entry.uid)
+
             // Persistent components re-mounting after navigation are NOT new renders —
             // they kept their DOM. Only record the timeline event for genuine first mounts
             // and explicit re-mounts (v-if etc.), not navigation-triggered re-attachments.
@@ -255,6 +288,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 // Still clear the start time so it doesn't bleed into the next event
                 renderStartTimes.delete(entry.uid)
             }
+
             markDirty()
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
         },
@@ -265,6 +299,11 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
             const entry = ensureEntry(this)
+
+            if (!entry) {
+                return
+            }
+
             entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
             pendingTriggeredRenders.add(entry.uid)
 
@@ -278,6 +317,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
         updated(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
+
+            if (!entry) {
+                return
+            }
 
             // Count every reactive update as a re-render.
             // renderTriggered (above) already captured which deps triggered it.
@@ -388,9 +431,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
  * @param {number} uid - A unique identifier for the component.
  * @param {ComponentPublicInstance} instance - The component instance.
  * @param {string} route - The current route path.
+ * @param {number} [parentUid] - The unique identifier of the parent component, if any.
  * @returns {RenderEntry} A new RenderEntry object.
  */
-function makeEntry(uid: number, instance: ComponentPublicInstance, route: string): RenderEntry {
+function makeEntry(uid: number, instance: ComponentPublicInstance, route: string, parentUid?: number): RenderEntry {
     const type = instance.$.type as { __name?: string; __file?: string; name?: string }
     const parentType = instance.$parent?.$?.type as { __name?: string; __file?: string; name?: string } | undefined
     const element = describeElement(instance.$el)
@@ -409,7 +453,7 @@ function makeEntry(uid: number, instance: ComponentPublicInstance, route: string
         avgMs: 0,
         triggers: [],
         timeline: [],
-        parentUid: instance.$parent?.$.uid,
+        parentUid,
         isPersistent: false,
         isHydrationMount: false,
         route,

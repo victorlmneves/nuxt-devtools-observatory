@@ -4,4 +4,5 @@ interface ImportMeta {
     readonly dev: boolean
     readonly client: boolean
     readonly server: boolean
+    readonly env?: Record<string, string | undefined>
 }
