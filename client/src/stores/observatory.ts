@@ -131,6 +131,7 @@ interface ObservatorySnapshot {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
         composableTracker?: boolean
+        composableNavigationMode?: 'route' | 'session'
         renderHeatmap?: boolean
         transitionTracker?: boolean
     }

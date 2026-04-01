@@ -51,6 +51,14 @@ export interface ModuleOptions {
     maxRenderTimeline?: number
 
     /**
+     * Composable tracker navigation mode.
+     * - `route`: clear composable entries on every page navigation
+     * - `session`: keep entries across navigations until manually cleared
+     * @default 'route'
+     */
+    composableNavigationMode?: 'route' | 'session'
+
+    /**
      * Enable the useFetch / useAsyncData dashboard tab
      * @default true
      */
@@ -114,6 +122,8 @@ const defaults = {
     maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
     maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
     maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
+    composableNavigationMode:
+        process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : ('route' as 'route' | 'session'),
     heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
 }
 
@@ -193,6 +203,9 @@ export default defineNuxtModule<ModuleOptions>({
             maxRenderTimeline:
                 options.maxRenderTimeline ??
                 (process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100),
+            composableNavigationMode:
+                options.composableNavigationMode ??
+                (process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : 'route'),
         }
 
         // ── Vite aliases for runtime shims (dev resolution) ──────────────────
@@ -327,6 +340,7 @@ export default defineNuxtModule<ModuleOptions>({
             maxComposableHistory: resolved.maxComposableHistory,
             maxComposableEntries: resolved.maxComposableEntries,
             maxRenderTimeline: resolved.maxRenderTimeline,
+            composableNavigationMode: resolved.composableNavigationMode,
             heatmapHideInternals: resolved.heatmapHideInternals,
             heatmapThresholdCount: resolved.heatmapThresholdCount,
             heatmapThresholdTime: resolved.heatmapThresholdTime,

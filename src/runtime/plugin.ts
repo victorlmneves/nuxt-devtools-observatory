@@ -22,6 +22,7 @@ export default defineNuxtPlugin(() => {
         heatmapThresholdCount: number
         heatmapThresholdTime: number
         clientOrigin?: string
+        composableNavigationMode?: 'route' | 'session'
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
         composableTracker?: boolean
@@ -29,6 +30,8 @@ export default defineNuxtPlugin(() => {
         transitionTracker?: boolean
         heatmapHideInternals?: boolean
     }
+
+    let composableNavigationMode: 'route' | 'session' = config.composableNavigationMode === 'session' ? 'session' : 'route'
 
     // Enable Vue performance API for render heatmap if enabled
     if (config.renderHeatmap) {
@@ -102,6 +105,19 @@ export default defineNuxtPlugin(() => {
                 }
 
                 // Push a fresh (now empty) snapshot back immediately
+                const source = event.source as Window | null
+                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+
+                return
+            }
+
+            if (type === 'observatory:set-composable-mode') {
+                const mode = event.data?.mode
+
+                if (mode === 'route' || mode === 'session') {
+                    composableNavigationMode = mode
+                }
+
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
             }
@@ -190,7 +206,11 @@ export default defineNuxtPlugin(() => {
                 if (provideInject && typeof (provideInject as { clear?: () => void }).clear === 'function')
                     (provideInject as { clear: () => void }).clear()
                 const composable = registries.composable as unknown
-                if (composable && typeof (composable as { clear?: () => void }).clear === 'function')
+                if (
+                    composableNavigationMode === 'route' &&
+                    composable &&
+                    typeof (composable as { clear?: () => void }).clear === 'function'
+                )
                     (composable as { clear: () => void }).clear()
                 const transition = registries.transition as unknown
                 if (transition && typeof (transition as { clear?: () => void }).clear === 'function')
@@ -270,6 +290,7 @@ export default defineNuxtPlugin(() => {
             fetchDashboard: !!registries.fetch,
             provideInjectGraph: !!registries.provideInject,
             composableTracker: !!registries.composable,
+            composableNavigationMode,
             renderHeatmap: !!registries.render,
             transitionTracker: !!registries.transition,
         }
