@@ -1,6 +1,6 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.23",
+    "version": "0.1.24",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "license": "MIT",
     "repository": {
@@ -45,6 +45,7 @@
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "test:screenshots": "playwright test scripts/playwright/screenshot-trackers.spec.ts",
+        "test:e2e": "playwright test scripts/playwright/playground-pages.spec.ts",
         "capture:screenshots": "node scripts/playwright/capture-observatory-screenshots.cjs"
     },
     "dependencies": {
@@ -59,6 +60,7 @@
         "@nuxt/kit": "^3.0.0",
         "@nuxt/module-builder": "^1.0.2",
         "@nuxt/schema": "^3.0.0",
+        "@pinia/nuxt": "^0.11.3",
         "@playwright/test": "^1.58.2",
         "@types/babel__generator": "^7.27.0",
         "@types/babel__traverse": "^7.28.0",
@@ -74,6 +76,7 @@
         "globals": "^17.3.0",
         "happy-dom": "^20.8.4",
         "nuxt": "^3.0.0 || ^4.0.0",
+        "pinia": "^3.0.4",
         "playwright": "^1.58.2",
         "postcss-html": "^1.8.1",
         "prettier": "^3.8.1",

@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { ref, provide } from 'vue'
+import { ref } from 'vue'
 
-// ── provide/inject ──────────────────────────────────────────────────────────
-provide('theme', ref('dark'))
-provide('authContext', ref({ user: { id: 'u_1', name: 'Dev User' }, isLoggedIn: true }))
-// Note: 'cartContext' is intentionally NOT provided — MissingProviderConsumer will fail
+// Shared theme/auth providers now come from layouts/default.vue.
+// Note: 'cartContext' is intentionally NOT provided here — MissingProviderConsumer will fail.
 
 // ── Composable tracker ──────────────────────────────────────────────────────
 const { counter, increment } = useCounter()
@@ -30,6 +28,20 @@ async function triggerError() {
         <header>
             <h1>Observatory Playground</h1>
             <p>This page exercises all five devtools features. Open the devtools panel to inspect.</p>
+            <div class="page-links">
+                <NuxtLink to="/shop" class="page-link">
+                    → Shop
+                    <span class="page-link-sub">fetch · provide/inject · useCart · transitions</span>
+                </NuxtLink>
+                <NuxtLink to="/dashboard" class="page-link">
+                    → Dashboard
+                    <span class="page-link-sub">polling · parallel fetch · heatmap</span>
+                </NuxtLink>
+                <NuxtLink to="/settings" class="page-link">
+                    → Settings
+                    <span class="page-link-sub">async composable · theme shadow</span>
+                </NuxtLink>
+            </div>
         </header>
 
         <main>
@@ -88,35 +100,42 @@ async function triggerError() {
     </div>
 </template>
 
-<style>
-body {
-    font-family: -apple-system, sans-serif;
-    margin: 0;
-    padding: 0;
-    background: #f8f7f4;
-    color: #1a1a18;
-}
-
+<style scoped>
 header {
     padding: 24px 32px;
     border-bottom: 1px solid #e0ded8;
 }
 
-h1 {
-    font-size: 20px;
+.page-links {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.page-link {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
     font-weight: 600;
-    margin-bottom: 4px;
+    color: #1a1a18;
+    text-decoration: none;
+    background: white;
+    border: 1px solid #e0ded8;
+    border-radius: 8px;
+    padding: 10px 14px;
+    transition: border-color 0.12s;
 }
 
-p {
-    font-size: 14px;
-    color: #444;
-    margin-bottom: 8px;
+.page-link:hover {
+    border-color: #1a1a18;
 }
 
-header p {
-    color: #888780;
-    font-size: 14px;
+.page-link-sub {
+    font-size: 11px;
+    font-weight: 400;
+    color: #aaa;
 }
 
 main {
@@ -133,10 +152,27 @@ section {
     padding: 20px 24px;
 }
 
+h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
 h2 {
     font-size: 15px;
     font-weight: 600;
     margin-bottom: 12px;
+}
+
+p {
+    font-size: 14px;
+    color: #444;
+    margin-bottom: 8px;
+}
+
+header p {
+    color: #888780;
+    font-size: 14px;
 }
 
 button {
