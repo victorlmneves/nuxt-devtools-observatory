@@ -3,6 +3,7 @@ import { ref, provide, computed } from 'vue'
 
 const theme = ref('dark')
 const authContext = ref({ user: { id: 'u_1', name: 'Dev User' }, isLoggedIn: true })
+const cartSummary = usePersistentCartSummary()
 
 provide('theme', theme)
 provide('authContext', authContext)
@@ -22,6 +23,12 @@ provide(
                 <NuxtLink to="/dashboard" class="nav-link">Dashboard</NuxtLink>
                 <NuxtLink to="/settings" class="nav-link">Settings</NuxtLink>
             </div>
+            <div class="nav-spacer" />
+            <NuxtLink to="/shop" class="cart-pill" title="Persistent cart summary from layout-level composable">
+                <span>Cart</span>
+                <span class="mono">{{ cartSummary.itemCount }}</span>
+                <span class="mono">${{ cartSummary.total }}</span>
+            </NuxtLink>
         </nav>
 
         <slot />
@@ -60,6 +67,10 @@ provide(
     gap: 4px;
 }
 
+.nav-spacer {
+    flex: 1;
+}
+
 .nav-link {
     font-size: 13px;
     color: #666;
@@ -79,5 +90,23 @@ provide(
 .nav-link.router-link-active {
     background: #1a1a18;
     color: white;
+}
+
+.cart-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: 7px;
+    border: 1px solid #d3d1c7;
+    background: #f7f5f1;
+    color: #3f3d38;
+    text-decoration: none;
+    font-size: 12px;
+}
+
+.cart-pill:hover {
+    border-color: #b9b6ab;
+    background: #efece7;
 }
 </style>

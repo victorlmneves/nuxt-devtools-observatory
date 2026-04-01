@@ -79,6 +79,10 @@ export interface ComposableEntry {
     file: string
     line: number
     route?: string
+    /** File path of the component that called this composable. */
+    callerComponentFile?: string
+    /** Whether this composable is called from a layout component (persists across pages). */
+    isLayoutComposable?: boolean
 }
 
 export interface RenderEvent {
@@ -131,6 +135,7 @@ interface ObservatorySnapshot {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
         composableTracker?: boolean
+        composableNavigationMode?: 'route' | 'session'
         renderHeatmap?: boolean
         transitionTracker?: boolean
     }

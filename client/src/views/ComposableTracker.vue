@@ -2,7 +2,20 @@
 import { ref, computed } from 'vue'
 import { useObservatoryData, getObservatoryOrigin, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
 
-const { composables: rawEntries, connected, clearComposables } = useObservatoryData()
+const { composables: rawEntries, connected, features, clearComposables } = useObservatoryData()
+
+const composableMode = computed<'route' | 'session'>(() => (features.value?.composableNavigationMode === 'session' ? 'session' : 'route'))
+
+function toggleComposableMode() {
+    const origin = getObservatoryOrigin()
+
+    if (!origin) {
+        return
+    }
+
+    const nextMode = composableMode.value === 'route' ? 'session' : 'route'
+    window.top?.postMessage({ type: 'observatory:set-composable-mode', mode: nextMode }, origin)
+}
 
 function clearSession() {
     const origin = getObservatoryOrigin()
@@ -17,17 +30,28 @@ function clearSession() {
 // same composable in different components are two separate rows.
 
 function formatVal(v: unknown): string {
-    if (v === null) return 'null'
-    if (v === undefined) return 'undefined'
-    if (typeof v === 'string') return `"${v}"`
+    if (v === null) {
+        return 'null'
+    }
+
+    if (v === undefined) {
+        return 'undefined'
+    }
+
+    if (typeof v === 'string') {
+        return `"${v}"`
+    }
+
     if (typeof v === 'object') {
         try {
             const s = JSON.stringify(v)
+
             return s.length > 80 ? s.slice(0, 80) + '…' : s
         } catch {
             return String(v)
         }
     }
+
     return String(v)
 }
 
@@ -90,7 +114,11 @@ const counts = computed(() => ({
 }))
 
 const filtered = computed(() => {
-    return entries.value.filter((entry) => {
+    // Newest entries are appended by the runtime registry, so reverse for recency-first UI.
+    const reversed = [...entries.value].reverse()
+
+    // Apply all filters first
+    const filtered = reversed.filter((entry) => {
         if (filter.value === 'leak' && !entry.leak) {
             return false
         }
@@ -124,6 +152,21 @@ const filtered = computed(() => {
 
         return true
     })
+
+    // Partition into layout-level (pinned to top) and regular entries
+    const layoutEntries: RuntimeComposableEntry[] = []
+    const regularEntries: RuntimeComposableEntry[] = []
+
+    for (const entry of filtered) {
+        if (entry.isLayoutComposable) {
+            layoutEntries.push(entry)
+        } else {
+            regularEntries.push(entry)
+        }
+    }
+
+    // Combine: layout entries first (already sorted by recency), then regular entries
+    return [...layoutEntries, ...regularEntries]
 })
 
 function lifecycleRows(entry: RuntimeComposableEntry) {
@@ -175,7 +218,10 @@ function refExpandKey(entryId: string, refKey: string) {
 }
 
 function isLongValue(v: unknown): boolean {
-    if (v === null || v === undefined || typeof v !== 'object') return false
+    if (v === null || v === undefined || typeof v !== 'object') {
+        return false
+    }
+
     try {
         return JSON.stringify(v).length > 60
     } catch {
@@ -190,8 +236,13 @@ function isRefExpanded(entryId: string, refKey: string): boolean {
 function toggleRefExpand(entryId: string, refKey: string) {
     const key = refExpandKey(entryId, refKey)
     const next = new Set(expandedRefs.value)
-    if (next.has(key)) next.delete(key)
-    else next.add(key)
+
+    if (next.has(key)) {
+        next.delete(key)
+    } else {
+        next.add(key)
+    }
+
     expandedRefs.value = next
 }
 
@@ -247,6 +298,7 @@ function applyEdit() {
         editError.value = ''
     } catch (err) {
         editError.value = `Invalid JSON: ${(err as Error).message}`
+
         return
     }
 
@@ -296,8 +348,17 @@ function applyEdit() {
             <button :class="{ active: filter === 'mounted' }" @click="filter = 'mounted'">mounted</button>
             <button :class="{ 'danger-active': filter === 'leak' }" @click="filter = 'leak'">leaks only</button>
             <button :class="{ active: filter === 'unmounted' }" @click="filter = 'unmounted'">unmounted</button>
+            <button
+                class="mode-btn"
+                :title="`switch to ${composableMode === 'route' ? 'session' : 'route'} mode`"
+                @click="toggleComposableMode"
+            >
+                mode: {{ composableMode }}
+            </button>
             <input v-model="search" type="search" placeholder="search name, file, or ref…" style="max-width: 220px; margin-left: auto" />
-            <button class="clear-btn" title="Clear session history" @click="clearSession">clear</button>
+            <button v-if="composableMode === 'session'" class="clear-btn" title="Clear session history" @click="clearSession">
+                clear session
+            </button>
         </div>
 
         <div class="list">
@@ -541,6 +602,16 @@ function applyEdit() {
     color: var(--red);
     border-color: var(--red);
     background: transparent;
+}
+
+.mode-btn {
+    border-color: color-mix(in srgb, var(--blue) 40%, var(--border));
+    color: var(--blue);
+}
+
+.mode-btn:hover {
+    border-color: var(--blue);
+    background: color-mix(in srgb, var(--blue) 12%, transparent);
 }
 
 .list {

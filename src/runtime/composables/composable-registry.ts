@@ -34,6 +34,10 @@ export interface ComposableEntry {
     line: number
     /** Route path the composable was registered on, e.g. "/products". */
     route: string
+    /** File path of the component that called this composable. */
+    callerComponentFile?: string
+    /** Whether this composable is called from a layout component (persists across pages). */
+    isLayoutComposable?: boolean
 }
 
 interface RuntimeEffect {
@@ -406,6 +410,8 @@ export function setupComposableRegistry() {
             file: entry.file,
             line: entry.line,
             route: entry.route,
+            callerComponentFile: entry.callerComponentFile,
+            isLayoutComposable: entry.isLayoutComposable,
         }
     }
 
@@ -464,6 +470,40 @@ export function setupComposableRegistry() {
         emit('composable:clear', {})
     }
 
+    function clearNonLayout() {
+        // Cancel any pending rAF so it doesn't fire after clearing and push stale/empty state
+        if (_pendingFrame !== null) {
+            cancelAnimationFrame(_pendingFrame)
+            _pendingFrame = null
+        }
+
+        // Only clear non-layout composables, preserving layout-level ones
+        const layoutIds = [...entries.entries()]
+            .filter(([, entry]) => entry.isLayoutComposable)
+            .map(([id]) => id)
+
+        for (const [id] of entries.entries()) {
+            if (!layoutIds.includes(id)) {
+                const stop = liveRefWatchers.get(id)
+
+                if (stop) {
+                    stop()
+                    liveRefWatchers.delete(id)
+                }
+
+                liveRefs.delete(id)
+                rawRefs.delete(id)
+                prevValues.delete(id)
+                entryHistory.delete(id)
+                entries.delete(id)
+            }
+        }
+
+        sharedKeysCache.clear()
+        markDirty()
+        emit('composable:clear', {})
+    }
+
     /**
      * Overrides the live value of a writable ref inside a mounted composable.
      * Only works for `ref` type entries (not `computed` — those are read-only).
@@ -508,6 +548,7 @@ export function setupComposableRegistry() {
         registerRawRefs,
         onComposableChange,
         clear,
+        clearNonLayout,
         setRoute,
         getRoute,
         update,
@@ -625,6 +666,29 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         }
     }
 
+    // Detect the calling component's file to check if it's from a layout
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inst = instance as any
+    let callerComponentFile: string | undefined
+
+    // Try multiple ways to get the component file path
+    if (inst?.type?.__file) {
+        callerComponentFile = inst.type.__file
+    } else if (inst?.__vueParentComponent?.type?.__file) {
+        callerComponentFile = inst.__vueParentComponent.type.__file
+    } else if (inst?.parent?.type?.__file) {
+        callerComponentFile = inst.parent.type.__file
+    } else if (inst?.__vueParentComponent?.fileName) {
+        callerComponentFile = inst.__vueParentComponent.fileName
+    } else if (inst?.type?.name && inst?.type?.name.includes('default')) {
+        // Layouts in Nuxt are typically named 'default'
+        callerComponentFile = `layouts/${inst.type.name}.vue`
+    }
+
+    // Normalize path separator for cross-platform matching
+    const normalizedFile = callerComponentFile?.replace(/\\/g, '/') ?? ''
+    const isLayoutComponent = normalizedFile.includes('/layouts/')
+
     const entry: ComposableEntry = {
         id,
         name,
@@ -646,6 +710,8 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         file: meta.file,
         line: meta.line,
         route: registry.getRoute(),
+        callerComponentFile,
+        isLayoutComposable: isLayoutComponent,
     }
 
     // For stable-ID (non-component) entries, update the existing entry if it already
