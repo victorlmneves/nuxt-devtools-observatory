@@ -31,14 +31,50 @@ function formatVal(v: unknown): string {
     return String(v)
 }
 
+/**
+ * Full (non-truncated) formatter used in the expanded detail rows.
+ * @param {unknown} v - The value to format.
+ * @returns {string} Pretty-printed JSON or primitive string.
+ */
+function formatValFull(v: unknown): string {
+    if (v === null) {
+        return 'null'
+    }
+
+    if (v === undefined) {
+        return 'undefined'
+    }
+
+    if (typeof v === 'string') {
+        return `"${v}"`
+    }
+
+    if (typeof v === 'object') {
+        try {
+            return JSON.stringify(v, null, 2)
+        } catch {
+            return String(v)
+        }
+    }
+
+    return String(v)
+}
+
 function basename(file: string) {
     return file.split('/').pop() ?? file
 }
 
 function openInEditor(file: string) {
-    if (!file || file === 'unknown') return
+    if (!file || file === 'unknown') {
+        return
+    }
+
     const origin = getObservatoryOrigin()
-    if (!origin) return
+
+    if (!origin) {
+        return
+    }
+
     window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
 }
 
@@ -55,10 +91,20 @@ const counts = computed(() => ({
 
 const filtered = computed(() => {
     return entries.value.filter((entry) => {
-        if (filter.value === 'leak' && !entry.leak) return false
-        if (filter.value === 'mounted' && entry.status !== 'mounted') return false
-        if (filter.value === 'unmounted' && entry.status !== 'unmounted') return false
+        if (filter.value === 'leak' && !entry.leak) {
+            return false
+        }
+
+        if (filter.value === 'mounted' && entry.status !== 'mounted') {
+            return false
+        }
+
+        if (filter.value === 'unmounted' && entry.status !== 'unmounted') {
+            return false
+        }
+
         const q = search.value.toLowerCase()
+
         if (q) {
             const matchesName = entry.name.toLowerCase().includes(q)
             const matchesFile = entry.componentFile.toLowerCase().includes(q)
@@ -70,8 +116,12 @@ const filtered = computed(() => {
                     return false
                 }
             })
-            if (!matchesName && !matchesFile && !matchesRef && !matchesVal) return false
+
+            if (!matchesName && !matchesFile && !matchesRef && !matchesVal) {
+                return false
+            }
         }
+
         return true
     })
 })
@@ -102,9 +152,47 @@ function lifecycleRows(entry: RuntimeComposableEntry) {
 }
 
 function typeBadgeClass(type: string) {
-    if (type === 'computed') return 'badge-info'
-    if (type === 'reactive') return 'badge-purple'
+    if (type === 'computed') {
+        return 'badge-info'
+    }
+
+    if (type === 'reactive') {
+        return 'badge-purple'
+    }
+
     return 'badge-gray'
+}
+
+// ── Collapsible ref values ──────────────────────────────────────────────
+// Long values (objects/arrays) start collapsed inside the expanded card.
+// Clicking the toggle chevron expands/collapses them inline.
+
+/** Keys that are currently expanded: "<entryId>:<refKey>" */
+const expandedRefs = ref<Set<string>>(new Set())
+
+function refExpandKey(entryId: string, refKey: string) {
+    return `${entryId}:${refKey}`
+}
+
+function isLongValue(v: unknown): boolean {
+    if (v === null || v === undefined || typeof v !== 'object') return false
+    try {
+        return JSON.stringify(v).length > 60
+    } catch {
+        return false
+    }
+}
+
+function isRefExpanded(entryId: string, refKey: string): boolean {
+    return expandedRefs.value.has(refExpandKey(entryId, refKey))
+}
+
+function toggleRefExpand(entryId: string, refKey: string) {
+    const key = refExpandKey(entryId, refKey)
+    const next = new Set(expandedRefs.value)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    expandedRefs.value = next
 }
 
 // ── Reverse lookup ────────────────────────────────────────────────────────
@@ -113,8 +201,12 @@ function typeBadgeClass(type: string) {
 const lookupKey = ref<string | null>(null)
 
 const lookupResults = computed(() => {
-    if (!lookupKey.value) return []
+    if (!lookupKey.value) {
+        return []
+    }
+
     const key = lookupKey.value
+
     return entries.value.filter((e) => key in e.refs)
 })
 
@@ -144,7 +236,9 @@ function openEdit(id: string, key: string, currentValue: unknown) {
 }
 
 function applyEdit() {
-    if (!editTarget.value) return
+    if (!editTarget.value) {
+        return
+    }
 
     let parsed: unknown
 
@@ -157,7 +251,10 @@ function applyEdit() {
     }
 
     const origin = getObservatoryOrigin()
-    if (!origin) return
+
+    if (!origin) {
+        return
+    }
 
     window.top?.postMessage(
         {
@@ -273,12 +370,35 @@ function applyEdit() {
                         >
                             {{ k }}
                         </span>
-                        <span class="mono text-sm ref-val">{{ formatVal(v.value) }}</span>
-                        <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
-                        <span v-if="entry.sharedKeys?.includes(k)" class="badge badge-amber text-xs">global</span>
-                        <button v-if="v.type === 'ref'" class="edit-btn" title="Edit value" @click.stop="openEdit(entry.id, k, v.value)">
-                            edit
-                        </button>
+                        <span
+                            class="mono text-sm ref-val"
+                            :class="{
+                                'ref-val--full': isLongValue(v.value) && isRefExpanded(entry.id, k),
+                                'ref-val--collapsed': isLongValue(v.value) && !isRefExpanded(entry.id, k),
+                            }"
+                        >
+                            {{ isLongValue(v.value) && !isRefExpanded(entry.id, k) ? formatVal(v.value) : formatValFull(v.value) }}
+                        </span>
+                        <div class="ref-row-actions">
+                            <button
+                                v-if="isLongValue(v.value)"
+                                class="expand-btn"
+                                :title="isRefExpanded(entry.id, k) ? 'Collapse' : 'Expand'"
+                                @click.stop="toggleRefExpand(entry.id, k)"
+                            >
+                                {{ isRefExpanded(entry.id, k) ? '▲' : '▼' }}
+                            </button>
+                            <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
+                            <span v-if="entry.sharedKeys?.includes(k)" class="badge badge-amber text-xs">global</span>
+                            <button
+                                v-if="v.type === 'ref'"
+                                class="edit-btn"
+                                title="Edit value"
+                                @click.stop="openEdit(entry.id, k, v.value)"
+                            >
+                                edit
+                            </button>
+                        </div>
                     </div>
 
                     <template v-if="entry.history && entry.history.length">
@@ -569,7 +689,7 @@ function applyEdit() {
 
 .ref-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     padding: 3px 0;
 }
@@ -582,10 +702,44 @@ function applyEdit() {
 
 .ref-val {
     flex: 1;
+    color: var(--teal);
+    min-width: 0;
+}
+
+.ref-val--collapsed {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--teal);
+}
+
+.ref-val--full {
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+.ref-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.expand-btn {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 0.5px solid var(--border);
+    background: var(--bg2);
+    color: var(--text3);
+    cursor: pointer;
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+
+.expand-btn:hover {
+    border-color: var(--text3);
+    color: var(--text);
 }
 
 .lc-row {

@@ -45,6 +45,7 @@
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
         "test:screenshots": "playwright test scripts/playwright/screenshot-trackers.spec.ts",
+        "test:e2e": "playwright test scripts/playwright/playground-pages.spec.ts",
         "capture:screenshots": "node scripts/playwright/capture-observatory-screenshots.cjs"
     },
     "dependencies": {
