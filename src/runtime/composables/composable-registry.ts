@@ -478,9 +478,7 @@ export function setupComposableRegistry() {
         }
 
         // Only clear non-layout composables, preserving layout-level ones
-        const layoutIds = [...entries.entries()]
-            .filter(([, entry]) => entry.isLayoutComposable)
-            .map(([id]) => id)
+        const layoutIds = [...entries.entries()].filter(([, entry]) => entry.isLayoutComposable).map(([id]) => id)
 
         for (const [id] of entries.entries()) {
             if (!layoutIds.includes(id)) {
