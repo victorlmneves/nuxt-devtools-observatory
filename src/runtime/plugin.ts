@@ -101,10 +101,15 @@ export default defineNuxtPlugin(() => {
 
             if (type === 'observatory:clear-composables') {
                 if (composableRegistry) {
-                    composableRegistry.clear()
+                    // In session mode, preserve layout composables; in route mode, clear everything
+                    if (composableNavigationMode === 'session') {
+                        composableRegistry.clearNonLayout()
+                    } else {
+                        composableRegistry.clear()
+                    }
                 }
 
-                // Push a fresh (now empty) snapshot back immediately
+                // Push a fresh snapshot back immediately
                 const source = event.source as Window | null
                 source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
 

@@ -24,6 +24,7 @@ You can configure all observability features and limits from your consuming proj
 - `composableTracker` (boolean) — Enable composable tracker
 - `renderHeatmap` (boolean) — Enable render heatmap
 - `transitionTracker` (boolean) — Enable transition tracker
+- `composableNavigationMode` (string, 'route' | 'session') — Composable tracker mode: 'route' clears entries on page navigation (default), 'session' persists entries across navigation for historical inspection
 - `heatmapThresholdCount` (number) — Highlight components with N+ renders in heatmap
 - `heatmapThresholdTime` (number) — Highlight components with render time above this (ms)
 - `heatmapHideInternals` (boolean) — Hide node_modules and internal components in the render heatmap for a cleaner view
@@ -48,6 +49,7 @@ export default defineNuxtConfig({
         composableTracker: true, // Enable composable tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
+        composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
         heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
@@ -136,22 +138,17 @@ wraps them with a tracking shim (`__trackComposable`) that:
 
 The panel provides:
 
-- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search
-  across composable name, source file, ref key names, and ref values
-- **Inline ref chip preview** — up to three reactive values shown on the card without
-  expanding, with distinct styling for `ref`, `computed`, and `reactive` types
-- **Global state badges** — keys shared across instances are highlighted in amber with
-  a `global` badge and an explanatory banner when expanded
-- **Change history** — a scrollable log of the last 50 value mutations with key, new
-  value, and relative timestamp
-- **Lifecycle summary** — shows whether `onMounted`/`onUnmounted` were registered and
-  whether watchers and intervals were properly cleaned up
-- **Reverse lookup** — clicking any ref key opens a panel listing every other composable
-  instance that exposes a key with the same name, with its composable name, file, and route
-- **Inline value editing** — writable `ref` values have an `edit` button; clicking opens
-  a JSON textarea that applies the new value directly to the live ref in the running app
-- **Jump to editor** — an `open ↗` button in the context section opens the composable's
-  source file in the configured editor
+- **Navigation mode toggle** — switch between 'route' mode (clears entries on navigation) and 'session' mode (persists entries across pages). In session mode, a "clear session" button appears to manually reset the history
+- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search across composable name, source file, ref key names, and ref values
+- **Recency-first ordering** — newest entries appear first, with layout-level composables pinned to the top (layout composables persist across page navigation)
+- **Inline ref chip preview** — up to three reactive values shown on the card without expanding, with distinct styling for `ref`, `computed`, and `reactive` types
+- **Collapsible ref values** — long objects and arrays automatically collapse with a chevron toggle to expand them inline in the detail view with full pretty-printed JSON
+- **Global state badges** — keys shared across instances are highlighted in amber with a `global` badge and an explanatory banner when expanded
+- **Change history** — a scrollable log of the last 50 value mutations with key, new value, and relative timestamp
+- **Lifecycle summary** — shows whether `onMounted`/`onUnmounted` were registered and whether watchers and intervals were properly cleaned up
+- **Reverse lookup** — clicking any ref key opens a panel listing every other composable instance that exposes a key with the same name, with its composable name, file, and route
+- **Inline value editing** — writable `ref` values have an `edit` button; clicking opens a JSON textarea that applies the new value directly to the live ref in the running app
+- **Jump to editor** — an `open ↗` button in the context section opens the composable's source file in the configured editor
 
 **Known gaps:**
 
