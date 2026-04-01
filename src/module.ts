@@ -99,7 +99,6 @@ export interface ModuleOptions {
     heatmapThresholdTime?: number
 }
 
-
 const defaults = {
     instrumentServer: process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true',
     fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
@@ -107,12 +106,8 @@ const defaults = {
     composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
     renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
     transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
-    heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT
-        ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
-        : 3,
-    heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME
-        ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME)
-        : 1600,
+    heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3,
+    heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600,
     maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
     maxPayloadBytes: process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000,
     maxTransitions: process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500,
@@ -148,14 +143,15 @@ export default defineNuxtModule<ModuleOptions>({
 
         // Explicitly resolve each option: user config > env > default
         const resolved = {
-                ...defaults,
-                ...options,
-                // Allow runtime overrides via env
-                heatmapHideInternals: typeof process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS !== 'undefined'
+            ...defaults,
+            ...options,
+            // Allow runtime overrides via env
+            heatmapHideInternals:
+                typeof process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS !== 'undefined'
                     ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
-                    : (typeof options.heatmapHideInternals !== 'undefined'
-                        ? options.heatmapHideInternals
-                        : defaults.heatmapHideInternals),
+                    : typeof options.heatmapHideInternals !== 'undefined'
+                      ? options.heatmapHideInternals
+                      : defaults.heatmapHideInternals,
             fetchDashboard:
                 options.fetchDashboard ??
                 (process.env.OBSERVATORY_FETCH_DASHBOARD ? process.env.OBSERVATORY_FETCH_DASHBOARD === 'true' : true),
