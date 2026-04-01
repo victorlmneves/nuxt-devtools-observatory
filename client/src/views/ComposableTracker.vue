@@ -115,7 +115,10 @@ const counts = computed(() => ({
 
 const filtered = computed(() => {
     // Newest entries are appended by the runtime registry, so reverse for recency-first UI.
-    return [...entries.value].reverse().filter((entry) => {
+    const reversed = [...entries.value].reverse()
+
+    // Apply all filters first
+    const filtered = reversed.filter((entry) => {
         if (filter.value === 'leak' && !entry.leak) {
             return false
         }
@@ -149,6 +152,21 @@ const filtered = computed(() => {
 
         return true
     })
+
+    // Partition into layout-level (pinned to top) and regular entries
+    const layoutEntries: RuntimeComposableEntry[] = []
+    const regularEntries: RuntimeComposableEntry[] = []
+
+    for (const entry of filtered) {
+        if (entry.isLayoutComposable) {
+            layoutEntries.push(entry)
+        } else {
+            regularEntries.push(entry)
+        }
+    }
+
+    // Combine: layout entries first (already sorted by recency), then regular entries
+    return [...layoutEntries, ...regularEntries]
 })
 
 function lifecycleRows(entry: RuntimeComposableEntry) {

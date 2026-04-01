@@ -209,9 +209,9 @@ export default defineNuxtPlugin(() => {
                 if (
                     composableNavigationMode === 'route' &&
                     composable &&
-                    typeof (composable as { clear?: () => void }).clear === 'function'
+                    typeof (composable as { clearNonLayout?: () => void }).clearNonLayout === 'function'
                 )
-                    (composable as { clear: () => void }).clear()
+                    (composable as { clearNonLayout: () => void }).clearNonLayout()
                 const transition = registries.transition as unknown
                 if (transition && typeof (transition as { clear?: () => void }).clear === 'function')
                     (transition as { clear: () => void }).clear()
