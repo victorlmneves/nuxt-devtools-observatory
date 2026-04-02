@@ -174,13 +174,13 @@ export default defineNuxtPlugin(() => {
                 const render = registries.render as unknown
 
                 if (render && typeof (render as { reset?: () => void }).reset === 'function') {
-                    (render as { reset: () => void }).reset()
+                    ;(render as { reset: () => void }).reset()
                 }
 
                 const provideInject = registries.provideInject as unknown
 
                 if (provideInject && typeof (provideInject as { clear?: () => void }).clear === 'function') {
-                    (provideInject as { clear: () => void }).clear()
+                    ;(provideInject as { clear: () => void }).clear()
                 }
 
                 const composable = registries.composable as unknown
@@ -190,13 +190,13 @@ export default defineNuxtPlugin(() => {
                     composable &&
                     typeof (composable as { clearNonLayout?: () => void }).clearNonLayout === 'function'
                 ) {
-                    (composable as { clearNonLayout: () => void }).clearNonLayout()
+                    ;(composable as { clearNonLayout: () => void }).clearNonLayout()
                 }
 
                 const transition = registries.transition as unknown
 
                 if (transition && typeof (transition as { clear?: () => void }).clear === 'function') {
-                    (transition as { clear: () => void }).clear()
+                    ;(transition as { clear: () => void }).clear()
                 }
             }
         )
