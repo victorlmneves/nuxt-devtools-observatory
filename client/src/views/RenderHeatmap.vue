@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
-import { useObservatoryData, getObservatoryOrigin, type RenderEntry, type RenderEvent } from '../stores/observatory'
+import { useObservatoryData, openInEditor as openInEditorFromStore, type RenderEntry, type RenderEvent } from '../stores/observatory'
 
 interface ComponentNode {
     id: string
@@ -687,17 +687,7 @@ function basename(file: string) {
 }
 
 function openInEditor(file: string) {
-    if (!file || file === 'unknown') {
-        return
-    }
-
-    const origin = getObservatoryOrigin()
-
-    if (!origin) {
-        return
-    }
-
-    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+    openInEditorFromStore(file)
 }
 
 function pathLabel(node: ComponentNode) {

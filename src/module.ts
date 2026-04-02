@@ -1,8 +1,11 @@
 import { defineNuxtModule, addPlugin, addServerPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
+import { onDevToolsInitialized, extendServerRpc } from '@nuxt/devtools-kit'
+import sirv from 'sirv'
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { composableTrackerPlugin } from './transforms/composable-transform'
 import { transitionTrackerPlugin } from './transforms/transition-transform'
+import type { ObservatoryCommand, ObservatorySnapshot, ObservatoryClientFunctions, ObservatoryServerFunctions } from './types/rpc'
 
 export interface ModuleOptions {
     /**
@@ -10,7 +13,7 @@ export interface ModuleOptions {
      * server build as well as the client build. Enable this when using SSR so
      * server-side composable calls are captured. Disable for SPA projects to
      * avoid double-registration caused by the transform running on both builds.
-     * @default false
+     * @default true when SSR is enabled, false for SPA
      */
     instrumentServer?: boolean
 
@@ -105,9 +108,17 @@ export interface ModuleOptions {
      * @default 1600
      */
     heatmapThresholdTime?: number
+
+    /**
+     * Enable RPC handshake debug logs in the Observatory iframe/host bridge.
+     * @default false
+     */
+    debugRpc?: boolean
 }
 
 const defaults = {
+    // Auto-enable server instrumentation for SSR projects unless explicitly overridden.
+    // This ensures initial SSR snapshots include server-side composables/fetch events.
     instrumentServer: process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true',
     fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
     provideInjectGraph: process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
@@ -125,6 +136,7 @@ const defaults = {
     composableNavigationMode:
         process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : ('route' as 'route' | 'session'),
     heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
+    debugRpc: process.env.OBSERVATORY_DEBUG_RPC === 'true',
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -179,7 +191,9 @@ export default defineNuxtModule<ModuleOptions>({
                 (process.env.OBSERVATORY_TRANSITION_TRACKER ? process.env.OBSERVATORY_TRANSITION_TRACKER === 'true' : true),
             instrumentServer:
                 options.instrumentServer ??
-                (process.env.OBSERVATORY_INSTRUMENT_SERVER ? process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true' : false),
+                (process.env.OBSERVATORY_INSTRUMENT_SERVER
+                    ? process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true'
+                    : nuxt.options.ssr !== false),
             heatmapThresholdCount:
                 options.heatmapThresholdCount ??
                 (process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3),
@@ -206,6 +220,7 @@ export default defineNuxtModule<ModuleOptions>({
             composableNavigationMode:
                 options.composableNavigationMode ??
                 (process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : 'route'),
+            debugRpc: options.debugRpc ?? (process.env.OBSERVATORY_DEBUG_RPC ? process.env.OBSERVATORY_DEBUG_RPC === 'true' : false),
         }
 
         // ── Vite aliases for runtime shims (dev resolution) ──────────────────
@@ -255,48 +270,90 @@ export default defineNuxtModule<ModuleOptions>({
             addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
         }
 
-        // ── Serve the client SPA on its own Vite dev server ──────────────────
-        const CLIENT_PORT = 4949
-        const clientOrigin = `http://localhost:${CLIENT_PORT}`
-
-        // Guard: vite:serverCreated can fire more than once in some configurations.
-        // Attempting to bind strictPort: true twice throws EADDRINUSE, so we ensure
-        // the inner server is only ever created once per module lifecycle.
-        let innerServer: import('vite').ViteDevServer | null = null
-
-        nuxt.hook('vite:serverCreated', async (_viteServer, env) => {
-            if (!env.isClient) {
-                return
+        // ── Devtools integration ──────────────────────────────────────────────
+        const base = '/__observatory'
+        const debugRpc = resolved.debugRpc === true
+        const debugLog = (...args: unknown[]) => {
+            if (debugRpc) {
+                console.info('[observatory][rpc][server]', ...args)
             }
+        }
 
-            if (innerServer) {
-                return
-            }
+        // Last host-app snapshot received from runtime/plugin.ts through Vite HMR.
+        let latestSnapshot: ObservatorySnapshot = {
+            fetch: [],
+            provideInject: { provides: [], injects: [] },
+            composables: [],
+            renders: [],
+            transitions: [],
+            features: {
+                fetchDashboard: !!resolved.fetchDashboard,
+                provideInjectGraph: !!resolved.provideInjectGraph,
+                composableTracker: !!resolved.composableTracker,
+                composableNavigationMode: resolved.composableNavigationMode,
+                renderHeatmap: !!resolved.renderHeatmap,
+                transitionTracker: !!resolved.transitionTracker,
+            },
+        }
 
-            const { createServer } = await import('vite')
-            const { default: vue } = await import('@vitejs/plugin-vue')
+        let rpc: ReturnType<typeof extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>> | null = null
 
-            innerServer = await createServer({
-                root: resolver.resolve('../client'),
-                base: '/',
-                server: { port: CLIENT_PORT, strictPort: true, cors: true },
-                appType: 'spa',
-                configFile: false,
-                plugins: [vue()],
-                logLevel: 'warn',
-            })
+        // Register a Vite middleware on the Nuxt dev server so the Observatory
+        // SPA is served same-origin from /__observatory.
+        // This must be added during module setup (not deferred), otherwise
+        // configureServer can miss Vite initialization.
+        addVitePlugin({
+            name: 'nuxt-devtools-observatory:sirv-client',
+            configureServer(server) {
+                const clientDist = resolver.resolve('../client/dist')
+                server.middlewares.use(base, sirv(clientDist, { dev: true, single: true }))
 
-            await innerServer.listen()
-            nuxt.hook('close', () => {
-                innerServer?.close()
-                innerServer = null
-            })
+                server.ws.on('observatory:snapshot', (snapshot: ObservatorySnapshot) => {
+                    latestSnapshot = snapshot
+                    debugLog('received host snapshot', {
+                        fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
+                        composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
+                        renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
+                        transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
+                    })
+
+                    rpc?.broadcast.onSnapshot.asEvent(snapshot)
+                })
+            },
         })
 
-        // ── Devtools integration ──────────────────────────────────────────────
-        // SPA runs at localhost:4949, cross-origin from :3000.
-        // Data is bridged via postMessage (see plugin.ts + stores/observatory.ts).
-        const base = clientOrigin
+        onDevToolsInitialized(() => {
+            rpc = extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>(
+                'observatory',
+                {
+                    async getSnapshot() {
+                        return latestSnapshot
+                    },
+                    async requestSnapshot() {
+                        nuxt.server?.ws?.send('observatory:command', { cmd: 'request-snapshot' } satisfies ObservatoryCommand)
+                    },
+                    async clearComposables() {
+                        nuxt.server?.ws?.send('observatory:command', { cmd: 'clear-composables' } satisfies ObservatoryCommand)
+                    },
+                    async setComposableMode(mode) {
+                        nuxt.server?.ws?.send('observatory:command', { cmd: 'set-mode', mode } satisfies ObservatoryCommand)
+                    },
+                    async editComposableValue(id, key, value) {
+                        nuxt.server?.ws?.send('observatory:command', {
+                            cmd: 'edit-composable',
+                            id,
+                            key,
+                            value,
+                        } satisfies ObservatoryCommand)
+                    },
+                },
+                nuxt
+            )
+
+            // Push current known snapshot once RPC is ready so newly opened tabs
+            // do not wait for the next host-side event.
+            rpc.broadcast.onSnapshot.asEvent(latestSnapshot)
+        }, nuxt)
 
         // Inject resolved config as a global variable for the client SPA
         // @ts-expect-error: 'render:response' is an internal Nuxt hook not typed in public API
@@ -320,7 +377,7 @@ export default defineNuxtModule<ModuleOptions>({
                     name: 'observatory-trackers',
                     title: 'Observatory Trackers',
                     icon: 'carbon:heat-map',
-                    view: { type: 'iframe', src: `${base}/trackers` },
+                    view: { type: 'iframe', src: `${base}/trackers${resolved.debugRpc ? '?debugRpc=1' : ''}` },
                 })
             }
         })
@@ -328,7 +385,6 @@ export default defineNuxtModule<ModuleOptions>({
         // ── Expose module options to runtime ──────────────────────────────────
         nuxt.options.runtimeConfig.public.observatory = {
             instrumentServer: resolved.instrumentServer,
-            clientOrigin,
             fetchDashboard: resolved.fetchDashboard,
             provideInjectGraph: resolved.provideInjectGraph,
             composableTracker: resolved.composableTracker,
@@ -344,6 +400,7 @@ export default defineNuxtModule<ModuleOptions>({
             heatmapHideInternals: resolved.heatmapHideInternals,
             heatmapThresholdCount: resolved.heatmapThresholdCount,
             heatmapThresholdTime: resolved.heatmapThresholdTime,
+            debugRpc: resolved.debugRpc,
         }
     },
 })

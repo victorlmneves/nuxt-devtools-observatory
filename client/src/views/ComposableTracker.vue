@@ -1,27 +1,24 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData, getObservatoryOrigin, type ComposableEntry as RuntimeComposableEntry } from '../stores/observatory'
+import {
+    useObservatoryData,
+    setComposableMode,
+    editComposableValue,
+    openInEditor as openInEditorFromStore,
+    type ComposableEntry as RuntimeComposableEntry,
+} from '../stores/observatory'
 
 const { composables: rawEntries, connected, features, clearComposables } = useObservatoryData()
 
 const composableMode = computed<'route' | 'session'>(() => (features.value?.composableNavigationMode === 'session' ? 'session' : 'route'))
 
 function toggleComposableMode() {
-    const origin = getObservatoryOrigin()
-
-    if (!origin) {
-        return
-    }
-
     const nextMode = composableMode.value === 'route' ? 'session' : 'route'
-    window.top?.postMessage({ type: 'observatory:set-composable-mode', mode: nextMode }, origin)
+    setComposableMode(nextMode)
 }
 
 function clearSession() {
-    const origin = getObservatoryOrigin()
-    if (!origin) return
     clearComposables()
-    window.top?.postMessage({ type: 'observatory:clear-composables' }, origin)
 }
 
 // ── Flat per-instance display ─────────────────────────────────────────────
@@ -89,17 +86,7 @@ function basename(file: string) {
 }
 
 function openInEditor(file: string) {
-    if (!file || file === 'unknown') {
-        return
-    }
-
-    const origin = getObservatoryOrigin()
-
-    if (!origin) {
-        return
-    }
-
-    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+    openInEditorFromStore(file)
 }
 
 const filter = ref('all')
@@ -302,21 +289,7 @@ function applyEdit() {
         return
     }
 
-    const origin = getObservatoryOrigin()
-
-    if (!origin) {
-        return
-    }
-
-    window.top?.postMessage(
-        {
-            type: 'observatory:edit-composable',
-            id: editTarget.value.id,
-            key: editTarget.value.key,
-            value: parsed,
-        },
-        origin
-    )
+    editComposableValue(editTarget.value.id, editTarget.value.key, parsed)
 
     editTarget.value = null
 }

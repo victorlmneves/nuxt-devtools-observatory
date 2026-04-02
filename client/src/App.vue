@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
-import { useObservatoryData, stopObservatoryPolling } from './stores/observatory'
+import { ref, computed } from 'vue'
+import { useObservatoryData } from './stores/observatory'
 import FetchDashboard from './views/FetchDashboard.vue'
 import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
@@ -19,10 +19,6 @@ const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
 const activeTab = ref(pathMap[segment] ?? 'fetch')
 
 const { features } = useObservatoryData()
-
-onUnmounted(() => {
-    stopObservatoryPolling()
-})
 
 const tabs = computed(() => {
     const f = features.value || {}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useObservatoryData, getObservatoryOrigin, type InjectEntry, type ProvideEntry } from '../stores/observatory'
+import { useObservatoryData, openInEditor as openInEditorFromStore, type InjectEntry, type ProvideEntry } from '../stores/observatory'
 
 interface TreeNodeData {
     id: string
@@ -173,14 +173,7 @@ function basename(file: string) {
 }
 
 function openInEditor(file: string) {
-    if (!file || file === 'unknown') {
-        return
-    }
-    const origin = getObservatoryOrigin()
-    if (!origin) {
-        return
-    }
-    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+    openInEditorFromStore(file)
 }
 
 function componentId(entry: ProvideEntry | InjectEntry) {
