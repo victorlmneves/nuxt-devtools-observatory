@@ -40,6 +40,8 @@ export default defineNuxtPlugin(() => {
     }
 
     let composableNavigationMode: 'route' | 'session' = config.composableNavigationMode === 'session' ? 'session' : 'route'
+    let heartbeatId: number | null = null
+    let lastSnapshotSignature = ''
 
     // Enable Vue performance API for render heatmap if enabled
     if (config.renderHeatmap) {
@@ -134,6 +136,11 @@ export default defineNuxtPlugin(() => {
 
         nuxtApp.hook('app:beforeUnmount', () => {
             import.meta.hot?.off('observatory:command')
+
+            if (heartbeatId !== null) {
+                window.clearInterval(heartbeatId)
+                heartbeatId = null
+            }
         })
     }
 
@@ -152,6 +159,22 @@ export default defineNuxtPlugin(() => {
         setTimeout(() => {
             broadcastAll('app:mounted:250ms')
         }, 250)
+
+        // Heartbeat fallback: some trackers (fetch/provide/render/transition)
+        // don't currently emit a direct callback into this plugin. Poll the
+        // aggregated snapshot and only broadcast when the payload changed.
+        if (import.meta.client && heartbeatId === null) {
+            heartbeatId = window.setInterval(() => {
+                const snapshot = buildSnapshot()
+                const signature = JSON.stringify(snapshot)
+
+                if (signature !== lastSnapshotSignature) {
+                    lastSnapshotSignature = signature
+                    debugLog('heartbeat detected snapshot change')
+                    import.meta.hot?.send('observatory:snapshot', snapshot)
+                }
+            }, 400)
+        }
     })
 
     nuxtApp.hook('page:finish', () => {
@@ -240,6 +263,7 @@ export default defineNuxtPlugin(() => {
             transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
         })
 
+        lastSnapshotSignature = JSON.stringify(snapshot)
         import.meta.hot.send('observatory:snapshot', snapshot)
     }
 
