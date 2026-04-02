@@ -23,6 +23,11 @@ import type { Plugin } from 'vite'
  * Key invariants preserved:
  *   - onEnter / onLeave are NOT wrapped (Vue inspects .length to decide CSS vs JS mode).
  *   - On SSR: window is undefined → _obsRegistry() returns undefined → real Transition used.
+ *
+ * Note on transport:
+ *   Transition instrumentation happens at Vue-compiler import level, so this file
+ *   cannot depend on Nuxt DevTools iframe helpers directly. Snapshot delivery to
+ *   the panel is handled by the runtime plugin/server RPC bridge.
  */
 
 const VIRTUAL_ID = '\0obs:vue-proxy'

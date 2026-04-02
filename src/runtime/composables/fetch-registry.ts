@@ -377,6 +377,14 @@ export function __devFetchCall(
             }
         },
         onResponseError({ response }: { response: FetchResponse }) {
+            const endTime = performance.now()
+            const ms = Math.round(endTime - lastCallStart)
+
+            // Record error status whether or not onResponse already fired.
+            // When both hooks fire (normal HTTP error flow), this is a harmless
+            // update since the entry is already 'error'.
+            registry.update(id, { status: 'error', endTime, ms })
+
             if (typeof opts.onResponseError === 'function') {
                 opts.onResponseError({ response })
             }

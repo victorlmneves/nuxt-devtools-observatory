@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useObservatoryData, getObservatoryOrigin, type InjectEntry, type ProvideEntry } from '../stores/observatory'
+import { useObservatoryData, openInEditor as openInEditorFromStore } from '../stores/observatory'
+import type { InjectEntry, ProvideEntry } from '../../../src/types/snapshot'
 
 interface TreeNodeData {
     id: string
@@ -97,7 +98,6 @@ function matchesSearch(node: TreeNodeData, query: string): boolean {
  * Count leaf nodes in a subtree iteratively to avoid stack overflow on
  * pathologically deep provide/inject trees (e.g. every component re-providing
  * the same key creates a chain as long as the component tree itself).
- *
  * @param {TreeNodeData} root - The root node of the subtree to count leaves for.
  * @returns {number} The number of leaf nodes in the subtree.
  */
@@ -173,14 +173,7 @@ function basename(file: string) {
 }
 
 function openInEditor(file: string) {
-    if (!file || file === 'unknown') {
-        return
-    }
-    const origin = getObservatoryOrigin()
-    if (!origin) {
-        return
-    }
-    window.top?.postMessage({ type: 'observatory:open-in-editor', file }, origin)
+    openInEditorFromStore(file)
 }
 
 function componentId(entry: ProvideEntry | InjectEntry) {
@@ -900,7 +893,7 @@ const edges = computed<Edge[]>(() => {
     border-radius: var(--radius);
     padding: 8px 10px;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: break-word;
     overflow: auto;
     max-height: 180px;
 }

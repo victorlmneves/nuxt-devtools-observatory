@@ -235,8 +235,8 @@ CSS/JS timing detection:
 
 The Transitions tab shows a live timeline with name, direction, phase, duration,
 parent component, and cancellation state for every transition fired on the page.
-Data is bridged from the Nuxt app (port 3000) to the Observatory SPA (port 4949)
-via `postMessage` since the two origins are cross-origin inside the DevTools iframe.
+Data is bridged between host app and Observatory using Nuxt DevTools RPC + Vite WS
+events (`observatory:snapshot` / `observatory:command`) on the same dev server origin.
 
 ## Opting out
 
@@ -268,6 +268,9 @@ pnpm dev
 
 # Run tests
 pnpm test
+
+# Format + lint fixes
+pnpm format
 
 # Build the module (client SPA + Nuxt module)
 pnpm build

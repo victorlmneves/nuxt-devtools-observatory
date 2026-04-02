@@ -5,10 +5,10 @@ import { setupProvideInjectRegistry } from './composables/provide-inject-registr
 import { setupComposableRegistry } from './composables/composable-registry'
 import { setupRenderRegistry } from './composables/render-registry'
 import { setupTransitionRegistry } from './composables/transition-registry'
+import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
 
 interface ObservatoryWindow extends Window {
     __observatory__?: Record<string, unknown>
-    __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
 export default defineNuxtPlugin(() => {
@@ -21,7 +21,7 @@ export default defineNuxtPlugin(() => {
     const config = useRuntimeConfig().public.observatory as {
         heatmapThresholdCount: number
         heatmapThresholdTime: number
-        clientOrigin?: string
+        debugRpc?: boolean
         composableNavigationMode?: 'route' | 'session'
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
@@ -31,7 +31,17 @@ export default defineNuxtPlugin(() => {
         heatmapHideInternals?: boolean
     }
 
+    const debugRpc = config.debugRpc === true
+    const debugLog = (...args: unknown[]) => {
+        if (debugRpc) {
+            // eslint-disable-next-line no-console
+            console.info('[observatory][rpc][host]', ...args)
+        }
+    }
+
     let composableNavigationMode: 'route' | 'session' = config.composableNavigationMode === 'session' ? 'session' : 'route'
+    let heartbeatId: number | null = null
+    let lastSnapshotSignature = ''
 
     // Enable Vue performance API for render heatmap if enabled
     if (config.renderHeatmap) {
@@ -72,36 +82,33 @@ export default defineNuxtPlugin(() => {
         delete (window as ObservatoryWindow).__observatory__
         ;(window as ObservatoryWindow).__observatory__ = registries
 
-        // postMessage bridge — the Observatory SPA runs at localhost:4949 (cross-
-        // origin). It cannot read window.top properties, but CAN send messages.
-        // We register this listener immediately (not in app:mounted) so requests
-        // arriving before hydration completes are handled correctly.
-        // WeakRef prevents this closure from keeping the SPA iframe's Window object
-        // alive if the DevTools panel is destroyed and recreated (e.g. on HMR).
-        let lastMessageSourceRef: WeakRef<Window> | null = null
-        let lastMessageOrigin = ''
+        const composableRegistry = registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
 
-        const messageHandler = (event: MessageEvent) => {
-            if (config.clientOrigin && event.origin !== config.clientOrigin) {
+        if (composableRegistry && composableRegistry.onComposableChange) {
+            composableRegistry.onComposableChange(() => {
+                broadcastAll('composable:onChange')
+            })
+        }
+
+        // Receive commands from the server-side RPC handlers.
+        import.meta.hot?.on('observatory:command', (rawPayload: unknown) => {
+            if (!rawPayload || typeof rawPayload !== 'object') {
                 return
             }
 
-            const type = event.data?.type
+            const payload = rawPayload as ObservatoryCommand
 
-            if (type === 'observatory:request') {
-                // Remember the SPA window so we can push unsolicited updates to it
-                lastMessageSourceRef = event.source ? new WeakRef(event.source as Window) : null
-                lastMessageOrigin = event.origin
-
-                const source = event.source as Window | null
-                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+            if (payload.cmd === 'request-snapshot') {
+                debugLog('received command: request-snapshot')
+                broadcastAll('command:request-snapshot')
 
                 return
             }
 
-            if (type === 'observatory:clear-composables') {
+            if (payload.cmd === 'clear-composables') {
+                debugLog('received command: clear-composables')
+
                 if (composableRegistry) {
-                    // In session mode, preserve layout composables; in route mode, clear everything
                     if (composableNavigationMode === 'session') {
                         composableRegistry.clearNonLayout()
                     } else {
@@ -109,88 +116,75 @@ export default defineNuxtPlugin(() => {
                     }
                 }
 
-                // Push a fresh snapshot back immediately
-                const source = event.source as Window | null
-                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+                broadcastAll('command:clear-composables')
 
                 return
             }
 
-            if (type === 'observatory:set-composable-mode') {
-                const mode = event.data?.mode
+            if (payload.cmd === 'set-mode') {
+                debugLog('received command: set-mode', payload.mode)
 
-                if (mode === 'route' || mode === 'session') {
-                    composableNavigationMode = mode
+                if (payload.mode === 'route' || payload.mode === 'session') {
+                    composableNavigationMode = payload.mode
                 }
 
-                const source = event.source as Window | null
-                source?.postMessage({ type: 'observatory:snapshot', data: buildSnapshot() }, event.origin)
+                broadcastAll('command:set-mode')
+
+                return
             }
 
-            if (type === 'observatory:edit-composable') {
-                const { id, key, value } = event.data as { id: string; key: string; value: unknown }
+            if (payload.cmd === 'edit-composable') {
+                debugLog('received command: edit-composable', { id: payload.id, key: payload.key })
 
-                if (composableRegistry) {
-                    composableRegistry.editValue(id, key, value)
-                }
-
-                // The watchEffect inside the registry will call _onChange() which
-                // pushes the updated snapshot automatically — no explicit broadcast needed.
+                composableRegistry?.editValue(payload.id, payload.key, payload.value)
             }
-
-            if (type === 'observatory:open-in-editor') {
-                // Delegate to Vite's built-in /__open-in-editor endpoint which is
-                // present on every Vite dev server and handles VS Code / editor launch.
-                // Vite's transform injects the full module id as the file path.
-                // Strip the /@fs/ prefix (used for files outside the project root)
-                // and any query string Vite appends (e.g. ?t=1234&vue&type=script).
-                const { file } = event.data as { file: string }
-
-                if (file && file !== 'unknown') {
-                    const cleaned = file
-                        .replace(/^\/@fs/, '') // strip Vite's /@fs/ virtual prefix
-                        .replace(/\?.*$/, '') // strip query string
-                    fetch(`/__open-in-editor?file=${encodeURIComponent(cleaned)}`).catch(() => {})
-                }
-            }
-        }
-
-        window.addEventListener('message', messageHandler)
-
-        // Remove the listener when the Nuxt app tears down (including HMR-triggered
-        // plugin re-registration), so re-evaluating this plugin never accumulates
-        // duplicate listeners on window.
-        nuxtApp.hook('app:beforeUnmount', () => {
-            window.removeEventListener('message', messageHandler)
-            lastMessageSourceRef = null
         })
 
-        // Push a fresh snapshot to the SPA immediately when any tracked
-        // composable's reactive state changes — no need to wait for the next poll.
-        const composableRegistry = registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
+        nuxtApp.hook('app:beforeUnmount', () => {
+            import.meta.hot?.off('observatory:command')
 
-        if (composableRegistry && composableRegistry.onComposableChange) {
-            composableRegistry.onComposableChange(() => {
-                const lastMessageSource = lastMessageSourceRef?.deref()
-
-                if (!lastMessageSource || !lastMessageOrigin) {
-                    return
-                }
-
-                lastMessageSource.postMessage(
-                    {
-                        type: 'observatory:snapshot',
-                        data: buildSnapshot(),
-                    },
-                    lastMessageOrigin
-                )
-            })
-        }
+            if (heartbeatId !== null) {
+                window.clearInterval(heartbeatId)
+                heartbeatId = null
+            }
+        })
     }
 
     // Broadcast all registry data when devtools tab connects
     nuxtApp.hook('app:mounted', () => {
-        broadcastAll()
+        broadcastAll('app:mounted')
+
+        nextTick(() => {
+            broadcastAll('app:mounted:nextTick')
+        })
+
+        setTimeout(() => {
+            broadcastAll('app:mounted:50ms')
+        }, 50)
+
+        setTimeout(() => {
+            broadcastAll('app:mounted:250ms')
+        }, 250)
+
+        // Heartbeat fallback: some trackers (fetch/provide/render/transition)
+        // don't currently emit a direct callback into this plugin. Poll the
+        // aggregated snapshot and only broadcast when the payload changed.
+        if (import.meta.client && heartbeatId === null) {
+            heartbeatId = window.setInterval(() => {
+                const snapshot = buildSnapshot()
+                const signature = JSON.stringify(snapshot)
+
+                if (signature !== lastSnapshotSignature) {
+                    lastSnapshotSignature = signature
+                    debugLog('heartbeat detected snapshot change')
+                    import.meta.hot?.send('observatory:snapshot', snapshot)
+                }
+            }, 400)
+        }
+    })
+
+    nuxtApp.hook('page:finish', () => {
+        broadcastAll('page:finish')
     })
 
     if (import.meta.client) {
@@ -205,21 +199,34 @@ export default defineNuxtPlugin(() => {
                 if (!from || from.name === undefined) {
                     return
                 }
+
                 const render = registries.render as unknown
-                if (render && typeof (render as { reset?: () => void }).reset === 'function') (render as { reset: () => void }).reset()
+
+                if (render && typeof (render as { reset?: () => void }).reset === 'function') {
+                    ;(render as { reset: () => void }).reset()
+                }
+
                 const provideInject = registries.provideInject as unknown
-                if (provideInject && typeof (provideInject as { clear?: () => void }).clear === 'function')
-                    (provideInject as { clear: () => void }).clear()
+
+                if (provideInject && typeof (provideInject as { clear?: () => void }).clear === 'function') {
+                    ;(provideInject as { clear: () => void }).clear()
+                }
+
                 const composable = registries.composable as unknown
+
                 if (
                     composableNavigationMode === 'route' &&
                     composable &&
                     typeof (composable as { clearNonLayout?: () => void }).clearNonLayout === 'function'
-                )
-                    (composable as { clearNonLayout: () => void }).clearNonLayout()
+                ) {
+                    ;(composable as { clearNonLayout: () => void }).clearNonLayout()
+                }
+
                 const transition = registries.transition as unknown
-                if (transition && typeof (transition as { clear?: () => void }).clear === 'function')
-                    (transition as { clear: () => void }).clear()
+
+                if (transition && typeof (transition as { clear?: () => void }).clear === 'function') {
+                    ;(transition as { clear: () => void }).clear()
+                }
             }
         )
 
@@ -239,25 +246,34 @@ export default defineNuxtPlugin(() => {
                 ;(render as { setRoute: (path: string) => void }).setRoute(to.path ?? '/')
             }
 
-            nextTick(() => broadcastAll())
+            nextTick(() => broadcastAll('router:afterEach'))
         })
     }
 
-    function broadcastAll() {
+    function broadcastAll(reason = 'unknown') {
         if (!import.meta.client) {
             return
         }
 
-        const channel = getDevtoolsChannel()
-
-        if (!channel) {
+        if (!import.meta.hot) {
             return
         }
 
-        channel.send('observatory:snapshot', buildSnapshot())
+        const snapshot = buildSnapshot()
+
+        debugLog('push snapshot', {
+            reason,
+            fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
+            composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
+            renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
+            transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
+        })
+
+        lastSnapshotSignature = JSON.stringify(snapshot)
+        import.meta.hot.send('observatory:snapshot', snapshot)
     }
 
-    function buildSnapshot() {
+    function buildSnapshot(): ObservatorySnapshot {
         // Always return a consistent object with all tracker keys present.
         function safeParse<T>(val: unknown, fallback: T): T {
             if (typeof val === 'string') {
@@ -267,9 +283,11 @@ export default defineNuxtPlugin(() => {
                     return fallback
                 }
             }
+
             if (val && typeof val === 'object') {
                 return val as T
             }
+
             return fallback
         }
 
@@ -300,11 +318,6 @@ export default defineNuxtPlugin(() => {
             transitionTracker: !!registries.transition,
         }
 
-        return snapshot
-    }
-
-    function getDevtoolsChannel() {
-        // Connects to @nuxt/devtools WS bridge if available
-        return (window as ObservatoryWindow).__nuxt_devtools__?.channel ?? null
+        return snapshot as ObservatorySnapshot
     }
 })
