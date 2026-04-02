@@ -207,6 +207,12 @@ const showLeakyAudit = ref(false)
     margin-bottom: 12px;
 }
 
+h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 12px;
+}
+
 .section-head h2 {
     margin: 0;
     font-size: 15px;
@@ -221,12 +227,6 @@ const showLeakyAudit = ref(false)
     border: 1px solid #d3d1c7;
     background: white;
     cursor: pointer;
-}
-
-h2 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 12px;
 }
 
 .poll-badge {

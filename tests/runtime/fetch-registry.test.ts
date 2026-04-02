@@ -2,6 +2,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setupFetchRegistry, __devFetchCall, __devFetchHandler } from '../../src/runtime/composables/fetch-registry'
 
+type DevFetchCallFn = Parameters<typeof __devFetchCall>[0]
+type DevFetchOptions = Parameters<typeof __devFetchCall>[2]
+
+// __devFetchCall uses getCurrentInstance() to decide whether to take the main
+// instrumentation path (inside component setup) or the parallel-fetch fallback.
+// In vitest there is no Vue component context, so we always return a fake instance
+// to exercise the real instrumentation code paths.
+vi.mock('vue', async () => {
+    const vue = await vi.importActual<typeof import('vue')>('vue')
+
+    return { ...vue, getCurrentInstance: vi.fn(() => ({})) }
+})
+
 type ObservatoryWindow = Window & { __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> } }
 
 function getWindow() {
@@ -101,7 +114,8 @@ describe('setupFetchRegistry', () => {
         }
 
         // The internal map still has the one registered entry
-        expect(entries.value.size).toBe(1)
+        // entries is a Vue readonly proxy of a Map — access via .size directly, not .value
+        expect(entries.size).toBe(1)
     })
 })
 
@@ -110,7 +124,7 @@ describe('__devFetchCall', () => {
         const registry = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: registry }
 
-        const mockFn = vi.fn<(url: string, opts: Record<string, unknown>) => Promise<unknown>>().mockResolvedValue({})
+        const mockFn = vi.fn<DevFetchCallFn>().mockReturnValue({})
         __devFetchCall(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const entries = registry.getAll()
@@ -123,7 +137,7 @@ describe('__devFetchCall', () => {
     })
 
     it('passes through to originalFn when __observatory__ is not set', () => {
-        const mockFn = vi.fn().mockResolvedValue('result') as (url: string, opts: Record<string, unknown>) => Promise<unknown>
+        const mockFn = vi.fn<DevFetchCallFn>().mockReturnValue({ status: { value: 'success' }, data: { value: 'result' } })
         const result = __devFetchCall(mockFn, '/api/test', {}, { key: 'test', file: 'F.ts', line: 1 })
 
         expect(mockFn).toHaveBeenCalledWith('/api/test', expect.any(Object))
@@ -138,15 +152,10 @@ describe('__devFetchCall', () => {
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
-            return Promise.resolve({})
+            return {}
         })
 
-        __devFetchCall(
-            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
-            '/api/users',
-            {},
-            { key: 'users', file: 'P.ts', line: 1 }
-        )
+        __devFetchCall(mockFn as DevFetchCallFn, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
 
         const mockResponse = {
             ok: true,
@@ -171,15 +180,10 @@ describe('__devFetchCall', () => {
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
-            return Promise.resolve({})
+            return {}
         })
 
-        __devFetchCall(
-            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
-            '/api/users',
-            {},
-            { key: 'users', file: 'P.ts', line: 1 }
-        )
+        __devFetchCall(mockFn as DevFetchCallFn, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
         ;(capturedOpts.onResponse as (ctx: unknown) => void)({
             response: {
                 ok: true,
@@ -194,11 +198,10 @@ describe('__devFetchCall', () => {
     it('marks payload-backed entries as cached SSR entries immediately', () => {
         const registry = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: registry }
-        ;(getWindow() as Window & { __NUXT__?: { data: Record<string, unknown> } }).__NUXT__ = {
-            data: { users: [{ id: 1 }] },
-        }
-
-        const mockFn = vi.fn().mockResolvedValue({})
+        // Simulate Nuxt SSR hydration: useFetch returns a reactive AsyncData object
+        // synchronously with status.value === 'success'. Must use mockReturnValue (not
+        // mockResolvedValue) because result.status.value is inspected synchronously.
+        const mockFn = vi.fn().mockReturnValue({ status: { value: 'success' }, data: { value: [{ id: 1 }] } })
         __devFetchCall(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const [entry] = registry.getAll()
@@ -218,15 +221,10 @@ describe('__devFetchCall', () => {
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
-            return Promise.resolve({})
+            return {}
         })
 
-        __devFetchCall(
-            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
-            '/api/product',
-            {},
-            { key: 'product', file: 'P.ts', line: 5 }
-        )
+        __devFetchCall(mockFn as DevFetchCallFn, '/api/product', {}, { key: 'product', file: 'P.ts', line: 5 })
 
         const mockResponse = {
             ok: true,
@@ -246,15 +244,10 @@ describe('__devFetchCall', () => {
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
-            return Promise.reject(new Error('500'))
+            return {}
         })
 
-        __devFetchCall(
-            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
-            '/api/broken',
-            {},
-            { key: 'broken', file: 'P.ts', line: 2 }
-        )
+        __devFetchCall(mockFn as DevFetchCallFn, '/api/broken', {}, { key: 'broken', file: 'P.ts', line: 2 })
 
         const mockResponse = { ok: false, headers: { get: () => null } }
         ;(capturedOpts.onResponseError as (ctx: unknown) => void)({ response: mockResponse })
@@ -274,15 +267,10 @@ describe('__devFetchCall', () => {
         const mockFn = vi.fn().mockImplementation((_url, opts) => {
             capturedOpts = opts as Record<string, unknown>
 
-            return Promise.resolve({})
+            return {}
         })
 
-        __devFetchCall(
-            mockFn as (url: string, opts: Record<string, unknown>) => Promise<unknown>,
-            '/api/users',
-            { onResponse: originalOnResponse },
-            { key: 'users', file: 'P.ts', line: 1 }
-        )
+        __devFetchCall(mockFn as DevFetchCallFn, '/api/users', { onResponse: originalOnResponse }, { key: 'users', file: 'P.ts', line: 1 })
 
         const ctx = { response: { ok: true, headers: { get: () => null } } }
         ;(capturedOpts.onResponse as (ctx: unknown) => void)(ctx)
@@ -325,7 +313,7 @@ describe('__devFetchCall — Ref/computed URL resolution (fix #17)', () => {
         const mockFn = vi.fn().mockResolvedValue({})
         const refUrl = { value: '/api/from-ref' } // simulate Ref<string>
 
-        __devFetchCall(mockFn as never, refUrl, {}, { key: 'ref-url', file: 'Page.ts', line: 1 })
+        __devFetchCall(mockFn as never, refUrl as unknown as string, {}, { key: 'ref-url', file: 'Page.ts', line: 1 })
 
         expect(registry.getAll()[0].url).toBe('/api/from-ref')
     })
@@ -337,7 +325,7 @@ describe('__devFetchCall — Ref/computed URL resolution (fix #17)', () => {
         const mockFn = vi.fn().mockResolvedValue({})
         const getter = () => '/api/from-getter'
 
-        __devFetchCall(mockFn as never, getter, {}, { key: 'getter-url', file: 'Page.ts', line: 1 })
+        __devFetchCall(mockFn as never, getter as unknown as string, {}, { key: 'getter-url', file: 'Page.ts', line: 1 })
 
         expect(registry.getAll()[0].url).toBe('/api/from-getter')
     })
@@ -350,7 +338,7 @@ describe('__devFetchCall — Ref/computed URL resolution (fix #17)', () => {
         // An object with no .value property and no call signature
         const weirdUrl = { toString: () => '/api/weird' }
 
-        __devFetchCall(mockFn as never, weirdUrl, {}, { key: 'weird-url', file: 'Page.ts', line: 1 })
+        __devFetchCall(mockFn as never, weirdUrl as unknown as string, {}, { key: 'weird-url', file: 'Page.ts', line: 1 })
 
         // Should not be '[object Object]'
         expect(registry.getAll()[0].url).not.toBe('[object Object]')
@@ -361,16 +349,14 @@ describe('__devFetchCall — SSR cached entries still attach hooks (fix #4)', ()
     it('attaches onResponse to SSR-cached entries so re-fetches update the registry payload', () => {
         const registry = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: registry }
-        ;(getWindow() as Window & { __NUXT__?: { data: Record<string, unknown> } }).__NUXT__ = {
-            data: { users: [{ id: 1 }] },
-        }
 
         let capturedOpts: Record<string, unknown> = {}
 
+        // Simulate Nuxt SSR hydration returning synchronously (useReturnValue, not mockResolvedValue).
         const mockFn = vi.fn().mockImplementation((_url: unknown, opts: Record<string, unknown>) => {
             capturedOpts = opts
 
-            return Promise.resolve({})
+            return { status: { value: 'success' }, data: { value: [{ id: 1 }] } }
         })
 
         __devFetchCall(mockFn as never, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
@@ -383,22 +369,21 @@ describe('__devFetchCall — SSR cached entries still attach hooks (fix #4)', ()
             response: { ok: true, headers: { get: () => null }, _data: [{ id: 2 }] },
         })
 
-        const entry = registry.getAll()[0]
+        const all = registry.getAll()
 
-        // Payload is updated with the fresh client response
-        expect(entry.payload).toEqual([{ id: 2 }])
-        // Status remains 'cached' because the origin was SSR — this is correct behaviour
-        expect(entry.status).toBe('cached')
+        // The original SSR entry is preserved unchanged
+        expect(all[0].status).toBe('cached')
+        expect(all[0].payload).toEqual([{ id: 1 }])
+        // Re-fetch data appears as a new row (refresh entry)
+        expect(all[1].payload).toEqual([{ id: 2 }])
     })
 
     it('SSR-cached entries expose the original SSR payload before any re-fetch', () => {
         const registry = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: registry }
-        ;(getWindow() as Window & { __NUXT__?: { data: Record<string, unknown> } }).__NUXT__ = {
-            data: { users: [{ id: 1 }] },
-        }
 
-        const mockFn = vi.fn().mockResolvedValue({})
+        // Simulate Nuxt SSR hydration returning synchronously.
+        const mockFn = vi.fn().mockReturnValue({ status: { value: 'success' }, data: { value: [{ id: 1 }] } })
         __devFetchCall(mockFn as never, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const entry = registry.getAll()[0]
@@ -418,7 +403,7 @@ describe('__devFetchHandler — error path coverage', () => {
                 throw new Error('network failure')
             },
             'fail-1',
-            { url: '/api/fail', key: 'fail-1', file: 'test.ts', line: 1 }
+            { key: 'fail-1', file: 'test.ts', line: 1 }
         )
 
         await expect(handler()).rejects.toThrow('network failure')
@@ -440,18 +425,18 @@ describe('__devFetchCall — pre-existing onResponseError hook is chained', () =
             calls.push('user')
         }
 
-        let capturedOpts: FetchOptions = {}
+        let capturedOpts: DevFetchOptions = {}
 
-        const originalFn = async (_url: string, opts: FetchOptions) => {
+        const originalFn: DevFetchCallFn = (_url, opts) => {
             capturedOpts = opts
 
-            return 'ok'
+            return {}
         }
 
-        await __devFetchCall(originalFn, '/api/test', { onResponseError: userHook }, { url: '/api/test', key: 'k', file: 'f.ts', line: 1 })
+        __devFetchCall(originalFn, '/api/test', { onResponseError: userHook }, { key: 'k', file: 'f.ts', line: 1 })
 
         // Invoke the chained hook
-        const response = { status: 500, _data: null } as unknown as Parameters<NonNullable<FetchOptions['onResponseError']>>[0]
+        const response = { response: {} as unknown as Response } as Parameters<NonNullable<DevFetchOptions['onResponseError']>>[0]
 
         if (typeof capturedOpts.onResponseError === 'function') {
             capturedOpts.onResponseError(response)
@@ -462,19 +447,19 @@ describe('__devFetchCall — pre-existing onResponseError hook is chained', () =
 })
 
 describe('__devFetchCall — getter URL resolution (line 171)', () => {
-    it('resolves a function URL by calling it', async () => {
+    it('resolves a function URL by calling it', () => {
         const reg = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: reg }
 
         // Pass a function as the URL — resolveUrl calls it to get the string
         const urlFn = () => '/api/from-fn'
 
-        await __devFetchCall(async (url: string) => ({ ok: true }), urlFn, {}, { url: '/api/from-fn', key: 'k', file: 'f.ts', line: 1 })
+        __devFetchCall((() => ({ ok: true })) as DevFetchCallFn, urlFn as unknown as string, {}, { key: 'k', file: 'f.ts', line: 1 })
 
         expect(reg.getAll()[0].url).toBe('/api/from-fn')
     })
 
-    it('falls back to String(fn) when the URL function throws', async () => {
+    it('falls back to String(fn) when the URL function throws', () => {
         const reg = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: reg }
 
@@ -483,7 +468,7 @@ describe('__devFetchCall — getter URL resolution (line 171)', () => {
             throw new Error('bad url getter')
         }
 
-        await __devFetchCall(async (url: string) => ({ ok: true }), throwingFn, {}, { url: 'fallback', key: 'k', file: 'f.ts', line: 1 })
+        __devFetchCall((() => ({ ok: true })) as DevFetchCallFn, throwingFn as unknown as string, {}, { key: 'k', file: 'f.ts', line: 1 })
 
         // Should not throw; entry registered with String(throwingFn) as fallback URL
         expect(reg.getAll()[0]).toBeDefined()

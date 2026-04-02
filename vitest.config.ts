@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import path from 'node:path'
 
 // Vite's `define` option does not reliably replace `import.meta.*` properties.
 // A transform plugin ensures the replacement is applied to every processed file.
@@ -29,6 +30,11 @@ const importMetaShim = {
 
 export default defineConfig({
     plugins: [importMetaShim],
+    resolve: {
+        alias: {
+            '#app': path.resolve('./tests/__mocks__/app.ts'),
+        },
+    },
     test: {
         include: ['tests/**/*.test.ts'],
         coverage: {

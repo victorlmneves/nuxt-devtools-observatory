@@ -893,7 +893,7 @@ const edges = computed<Edge[]>(() => {
     border-radius: var(--radius);
     padding: 8px 10px;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: break-word;
     overflow: auto;
     max-height: 180px;
 }
