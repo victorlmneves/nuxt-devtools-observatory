@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
-import { useObservatoryData, openInEditor as openInEditorFromStore, type RenderEntry, type RenderEvent } from '../stores/observatory'
+import { useObservatoryData, openInEditor as openInEditorFromStore } from '../stores/observatory'
+import type { RenderEntry, RenderEvent } from '../../../src/types/snapshot'
 
 interface ComponentNode {
     id: string

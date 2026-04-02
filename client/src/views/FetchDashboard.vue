@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData, type FetchEntry } from '../stores/observatory'
+import { useObservatoryData } from '../stores/observatory'
+import type { FetchEntry } from '../../../src/types/snapshot'
 
 type FetchViewEntry = FetchEntry & { startOffset: number }
 

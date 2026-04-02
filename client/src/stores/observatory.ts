@@ -1,19 +1,9 @@
 import { ref } from 'vue'
 import { useDevtoolsClient, onDevtoolsClientConnected } from '@nuxt/devtools-kit/iframe-client'
 import type { ObservatorySnapshot, ObservatoryServerFunctions, ObservatoryClientFunctions } from '../../../src/types/rpc'
-import type { FetchEntry, ComposableEntry, RenderEntry, TransitionEntry } from '../../../src/types/snapshot'
+import type { FetchEntry, ProvideEntry, InjectEntry, ComposableEntry, RenderEntry, TransitionEntry } from '../../../src/types/snapshot'
 
-export type {
-    FetchEntry,
-    ProvideEntry,
-    InjectEntry,
-    ComposableEntry,
-    RenderEntry,
-    RenderEvent,
-    TransitionEntry,
-} from '../../../src/types/snapshot'
-
-type ProvideInjectSnapshot = NonNullable<ObservatorySnapshot['provideInject']>
+type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] }
 
 const fetchEntries = ref<FetchEntry[]>([])
 const provideInject = ref<ProvideInjectSnapshot>({ provides: [], injects: [] })
@@ -30,6 +20,7 @@ let loggedFirstSnapshot = false
 
 function debugLog(...args: unknown[]) {
     if (debugRpc) {
+        // eslint-disable-next-line no-console
         console.info('[observatory][rpc][iframe]', ...args)
     }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData, type TransitionEntry } from '../stores/observatory'
+import { useObservatoryData } from '../stores/observatory'
+import type { TransitionEntry } from '../../../src/types/snapshot'
 
 const { transitions: entries, connected } = useObservatoryData()
 
