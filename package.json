@@ -35,6 +35,10 @@
     ],
     "scripts": {
         "dev": "nuxi dev playground",
+        "docs:dev": "pnpm --dir docs dev",
+        "docs:build": "pnpm --dir docs build",
+        "docs:generate": "pnpm --dir docs generate",
+        "docs:preview": "pnpm --dir docs preview",
         "build:client": "vite build --config client/vite.config.ts",
         "build": "npm run build:client && nuxt-module-build build",
         "prepack": "npm run build",
