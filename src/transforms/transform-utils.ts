@@ -16,7 +16,8 @@
  * `<script>` tag inside a `v-html` attribute) do not prevent extraction —
  * `@vue/compiler-sfc` still locates the script blocks correctly in those
  * cases. We only return `null` if no usable block was found at all.
- * @param code
+ * @param {string} code
+ * @returns {{ content: string; start: number; end: number } | null} The extracted script block with content and position offsets, or null if no script block was found
  */
 export function extractScriptBlock(code: string): { content: string; start: number; end: number } | null {
     try {
