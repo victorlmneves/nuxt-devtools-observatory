@@ -28,6 +28,7 @@ You can configure all observability features and limits from your consuming proj
 - `heatmapThresholdCount` (number) — Highlight components with N+ renders in heatmap
 - `heatmapThresholdTime` (number) — Highlight components with render time above this (ms)
 - `heatmapHideInternals` (boolean) — Hide node_modules and internal components in the render heatmap for a cleaner view
+- `debugRpc` (boolean) — Enable RPC handshake debug logs in the Observatory iframe/host bridge (set via `OBSERVATORY_DEBUG_RPC`)
 - `maxFetchEntries` (number) — Max fetch entries to keep in memory
 - `maxPayloadBytes` (number) — Max payload size (bytes) per fetch entry
 - `maxTransitions` (number) — Max transition entries to keep in memory
@@ -53,6 +54,7 @@ export default defineNuxtConfig({
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
         heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
+        debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
         maxFetchEntries: 200, // Max fetch entries to keep in memory
         maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
         maxTransitions: 500, // Max transition entries to keep in memory
@@ -67,7 +69,7 @@ export default defineNuxtConfig({
 
 Open the Nuxt DevTools panel — five new tabs will appear.
 
-The DevTools client SPA runs on a dedicated Vite development server (port **4949**).
+The DevTools client SPA is served same-origin via the Nuxt dev server at `/__observatory/`.
 
 ## How it works
 
@@ -287,7 +289,7 @@ src/
 │   ├── composable-transform.ts         ← AST wraps useX() composables
 │   └── transition-transform.ts         ← Virtual vue proxy — overrides Transition export
 ├── runtime/
-│   ├── plugin.ts                       ← Client runtime bootstrap + postMessage bridge
+│   ├── plugin.ts                       ← Client runtime bootstrap + RPC/Vite WS bridge
 │   └── composables/
 │       ├── fetch-registry.ts           ← Fetch tracking store + __devFetch shim
 │       ├── provide-inject-registry.ts  ← Injection tracking + __devProvide/__devInject
