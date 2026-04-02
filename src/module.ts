@@ -275,6 +275,7 @@ export default defineNuxtModule<ModuleOptions>({
         const debugRpc = resolved.debugRpc === true
         const debugLog = (...args: unknown[]) => {
             if (debugRpc) {
+                // eslint-disable-next-line no-console
                 console.info('[observatory][rpc][server]', ...args)
             }
         }
@@ -297,6 +298,18 @@ export default defineNuxtModule<ModuleOptions>({
         }
 
         let rpc: ReturnType<typeof extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>> | null = null
+        let viteServer: { ws: { send: (event: string, data: unknown) => void } } | null = null
+
+        const emitCommand = (command: ObservatoryCommand) => {
+            if (!viteServer) {
+                console.warn('[observatory][rpc][server] command dropped (vite ws not ready)', command)
+
+                return
+            }
+
+            debugLog('send command', command)
+            viteServer.ws.send('observatory:command', command)
+        }
 
         // Register a Vite middleware on the Nuxt dev server so the Observatory
         // SPA is served same-origin from /__observatory.
@@ -305,6 +318,7 @@ export default defineNuxtModule<ModuleOptions>({
         addVitePlugin({
             name: 'nuxt-devtools-observatory:sirv-client',
             configureServer(server) {
+                viteServer = server
                 const clientDist = resolver.resolve('../client/dist')
                 server.middlewares.use(base, sirv(clientDist, { dev: true, single: true }))
 
@@ -330,21 +344,16 @@ export default defineNuxtModule<ModuleOptions>({
                         return latestSnapshot
                     },
                     async requestSnapshot() {
-                        nuxt.server?.ws?.send('observatory:command', { cmd: 'request-snapshot' } satisfies ObservatoryCommand)
+                        emitCommand({ cmd: 'request-snapshot' })
                     },
                     async clearComposables() {
-                        nuxt.server?.ws?.send('observatory:command', { cmd: 'clear-composables' } satisfies ObservatoryCommand)
+                        emitCommand({ cmd: 'clear-composables' })
                     },
                     async setComposableMode(mode) {
-                        nuxt.server?.ws?.send('observatory:command', { cmd: 'set-mode', mode } satisfies ObservatoryCommand)
+                        emitCommand({ cmd: 'set-mode', mode })
                     },
                     async editComposableValue(id, key, value) {
-                        nuxt.server?.ws?.send('observatory:command', {
-                            cmd: 'edit-composable',
-                            id,
-                            key,
-                            value,
-                        } satisfies ObservatoryCommand)
+                        emitCommand({ cmd: 'edit-composable', id, key, value })
                     },
                 },
                 nuxt

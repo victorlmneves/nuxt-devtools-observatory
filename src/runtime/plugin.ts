@@ -106,6 +106,8 @@ export default defineNuxtPlugin(() => {
             }
 
             if (payload.cmd === 'clear-composables') {
+                debugLog('received command: clear-composables')
+
                 if (composableRegistry) {
                     if (composableNavigationMode === 'session') {
                         composableRegistry.clearNonLayout()
@@ -120,6 +122,8 @@ export default defineNuxtPlugin(() => {
             }
 
             if (payload.cmd === 'set-mode') {
+                debugLog('received command: set-mode', payload.mode)
+
                 if (payload.mode === 'route' || payload.mode === 'session') {
                     composableNavigationMode = payload.mode
                 }
@@ -130,6 +134,8 @@ export default defineNuxtPlugin(() => {
             }
 
             if (payload.cmd === 'edit-composable') {
+                debugLog('received command: edit-composable', { id: payload.id, key: payload.key })
+
                 composableRegistry?.editValue(payload.id, payload.key, payload.value)
             }
         })

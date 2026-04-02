@@ -17,6 +17,8 @@ const debugRpc = typeof window !== 'undefined' && new URLSearchParams(window.loc
 let started = false
 let rpc: ObservatoryServerFunctions | null = null
 let loggedFirstSnapshot = false
+let queuedMode: 'route' | 'session' | null = null
+let desiredMode: 'route' | 'session' | null = null
 
 function debugLog(...args: unknown[]) {
     if (debugRpc) {
@@ -49,6 +51,25 @@ function applySnapshot(data: ObservatorySnapshot) {
     renders.value = normalizeRenderEntries(data.renders as RenderEntry[] | undefined)
     transitions.value = cloneArray(data.transitions as TransitionEntry[] | undefined)
     features.value = data.features || {}
+
+    // If the server snapshot disagrees with the user's requested mode,
+    // keep trying to reconcile so mode doesn't silently snap back.
+    const snapshotMode = features.value?.composableNavigationMode
+
+    if (desiredMode && snapshotMode !== desiredMode) {
+        features.value = { ...(features.value || {}), composableNavigationMode: desiredMode }
+
+        rpc?.setComposableMode(desiredMode)
+            .then(() => rpc?.requestSnapshot())
+            .catch((error) => {
+                debugLog('setComposableMode reconcile failed', error)
+            })
+    }
+
+    if (desiredMode && snapshotMode === desiredMode) {
+        desiredMode = null
+    }
+
     connected.value = true
 
     if (!loggedFirstSnapshot) {
@@ -82,6 +103,14 @@ function ensureStarted() {
         })
 
         debugLog('RPC connected')
+
+        if (queuedMode) {
+            const mode = queuedMode
+            queuedMode = null
+            rpc.setComposableMode(mode).catch((error) => {
+                debugLog('setComposableMode failed (queued)', error)
+            })
+        }
 
         rpc.getSnapshot()
             .then((snapshot) => {
@@ -117,15 +146,37 @@ export function getObservatoryOrigin() {
 
 export function clearComposables() {
     composables.value = []
-    rpc?.clearComposables().catch(() => {})
+    rpc?.clearComposables()
+        .then(() => rpc?.requestSnapshot())
+        .catch((error) => {
+            debugLog('clearComposables failed', error)
+        })
 }
 
 export function setComposableMode(mode: 'route' | 'session') {
-    rpc?.setComposableMode(mode).catch(() => {})
+    desiredMode = mode
+
+    // Keep UI responsive even when RPC is still initializing.
+    features.value = { ...(features.value || {}), composableNavigationMode: mode }
+
+    if (!rpc) {
+        queuedMode = mode
+        debugLog('setComposableMode queued', mode)
+
+        return
+    }
+
+    rpc.setComposableMode(mode)
+        .then(() => rpc?.requestSnapshot())
+        .catch((error) => {
+            debugLog('setComposableMode failed', error)
+        })
 }
 
 export function editComposableValue(id: string, key: string, value: unknown) {
-    rpc?.editComposableValue(id, key, value).catch(() => {})
+    rpc?.editComposableValue(id, key, value).catch((error) => {
+        debugLog('editComposableValue failed', error)
+    })
 }
 
 export function openInEditor(file: string) {
