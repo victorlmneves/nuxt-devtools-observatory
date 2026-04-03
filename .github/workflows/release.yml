@@ -1,11 +1,11 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:
+    push:
+        branches:
+            - main
+            - master
+    workflow_dispatch:
 
 jobs:
     publish-and-release:
@@ -66,7 +66,6 @@ jobs:
               run: pnpm publish --no-git-checks --access public --provenance
 
             - name: Create git tag for version
-              if: steps.npm_check.outputs.published == 'false'
               run: |
                   PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
                   TAG_NAME="v$PACKAGE_VERSION"
@@ -82,7 +81,6 @@ jobs:
                   git push origin "$TAG_NAME"
 
             - name: Create GitHub Release
-              if: steps.npm_check.outputs.published == 'false'
               run: |
                   PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
                   TAG_NAME="v$PACKAGE_VERSION"
@@ -92,6 +90,6 @@ jobs:
                     exit 0
                   fi
 
-                  gh release create "$TAG_NAME" --generate-notes --title "$TAG_NAME"
+                  gh release create "$TAG_NAME" --generate-notes --title "$PACKAGE_VERSION"
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
