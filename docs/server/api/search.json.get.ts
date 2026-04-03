@@ -1,3 +1,3 @@
-export default eventHandler(async (event) => {
-  return queryCollectionSearchSections(event, 'docs')
+export default eventHandler(async () => {
+    return queryCollectionSearchSections('docs')
 })

@@ -8,6 +8,8 @@ useSeoMeta({
     ogTitle: appConfig.observatoryDocs.title,
     description: appConfig.observatoryDocs.description,
     ogDescription: appConfig.observatoryDocs.description,
+    ogImage: 'https://nuxt-devtools-observatory.vercel.app/nuxt-devtools-observatory.png',
+    ogUrl: 'https://nuxt-devtools-observatory.vercel.app',
 })
 
 const primaryLinks = [
@@ -15,12 +17,13 @@ const primaryLinks = [
         label: 'Get Started',
         to: '/getting-started/installation',
         icon: 'i-lucide-rocket',
+        variant: 'soft' as const,
     },
     {
         label: 'Explore Feature Guides',
         to: '/feature-guides',
-        variant: 'subtle',
-        color: 'neutral',
+        variant: 'subtle' as const,
+        color: 'neutral' as const,
         icon: 'i-lucide-radar',
     },
 ]
