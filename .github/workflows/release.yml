@@ -1,9 +1,11 @@
 name: Release
 
 on:
-    push:
-        tags:
-            - 'v*'
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
 jobs:
     publish-and-release:
@@ -38,19 +40,58 @@ jobs:
               run: pnpm build
 
             - name: Verify tag matches package version
+              id: package_meta
               run: |
+                  PACKAGE_NAME="$(node -p \"require('./package.json').name\")"
                   PACKAGE_VERSION="$(node -p \"require('./package.json').version\")"
-                  TAG_VERSION="${GITHUB_REF_NAME#v}"
+                  echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+                  echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
 
-                  if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-                    echo "Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)."
-                    exit 1
+            - name: Check if version exists on npm
+              id: npm_check
+              run: |
+                  PACKAGE_NAME="${{ steps.package_meta.outputs.package_name }}"
+                  PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
+
+                  if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+                    echo "published=true" >> "$GITHUB_OUTPUT"
+                    echo "Version $PACKAGE_VERSION is already published on npm."
+                  else
+                    echo "published=false" >> "$GITHUB_OUTPUT"
+                    echo "Version $PACKAGE_VERSION is not published yet."
                   fi
 
             - name: Publish to npm
+              if: steps.npm_check.outputs.published == 'false'
               run: pnpm publish --no-git-checks --access public --provenance
 
+            - name: Create git tag for version
+              if: steps.npm_check.outputs.published == 'false'
+              run: |
+                  PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
+                  TAG_NAME="v$PACKAGE_VERSION"
+
+                  if git ls-remote --tags origin "refs/tags/$TAG_NAME" | grep -q "$TAG_NAME"; then
+                    echo "Tag $TAG_NAME already exists on remote."
+                    exit 0
+                  fi
+
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git tag "$TAG_NAME"
+                  git push origin "$TAG_NAME"
+
             - name: Create GitHub Release
-              run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
+              if: steps.npm_check.outputs.published == 'false'
+              run: |
+                  PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
+                  TAG_NAME="v$PACKAGE_VERSION"
+
+                  if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+                    echo "GitHub Release $TAG_NAME already exists."
+                    exit 0
+                  fi
+
+                  gh release create "$TAG_NAME" --generate-notes --title "$TAG_NAME"
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
