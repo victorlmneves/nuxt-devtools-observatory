@@ -22,7 +22,7 @@ export default defineAppConfig({
         },
     },
     seo: {
-        siteName: 'Nuxt Docs Template',
+        siteName: 'Nuxt Devtools Observatory Docs - Setup, feature guides, API reference, and troubleshooting for Nuxt DevTools Observatory.',
     },
     header: {
         title: '',
@@ -37,7 +37,7 @@ export default defineAppConfig({
         links: [
             {
                 icon: 'i-simple-icons-github',
-                to: 'https://github.com/nuxt-ui-templates/docs',
+                to: 'https://github.com/victorlmneves/nuxt-devtools-observatory',
                 target: '_blank',
                 'aria-label': 'GitHub',
             },
@@ -69,7 +69,7 @@ export default defineAppConfig({
         title: 'Table of Contents',
         bottom: {
             title: 'Community',
-            edit: 'https://github.com/nuxt-ui-templates/docs/edit/main/content',
+            edit: 'https://github.com/victorlmneves/nuxt-devtools-observatory/docs/edit/main/content',
             links: [
                 {
                     icon: 'i-lucide-star',
@@ -79,8 +79,8 @@ export default defineAppConfig({
                 },
                 {
                     icon: 'i-lucide-book-open',
-                    label: 'Nuxt UI docs',
-                    to: 'https://ui.nuxt.com/docs/getting-started/installation/nuxt',
+                    label: 'Nuxt DevTools Observatory docs',
+                    to: 'https://nuxt-devtools-observatory.vercel.app/getting-started/installation',
                     target: '_blank',
                 },
             ],
