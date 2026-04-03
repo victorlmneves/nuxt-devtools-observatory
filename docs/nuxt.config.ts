@@ -17,7 +17,13 @@ export default defineNuxtConfig({
 
     routeRules: {
         '/guide': { redirect: '/getting-started' },
-        '/**': { prerender: true },
+    },
+
+    nitro: {
+        prerender: {
+            crawlLinks: true,
+            routes: ['/'],
+        },
     },
 
     css: ['~/assets/main.css'],
