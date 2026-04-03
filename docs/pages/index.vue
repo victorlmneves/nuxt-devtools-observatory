@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const appConfig = useAppConfig()
-const { version } = useRuntimeConfig().public
 
 useSeoMeta({
     titleTemplate: '',
@@ -8,7 +7,7 @@ useSeoMeta({
     ogTitle: appConfig.observatoryDocs.title,
     description: appConfig.observatoryDocs.description,
     ogDescription: appConfig.observatoryDocs.description,
-    ogImage: 'https://nuxt-devtools-observatory.vercel.app/nuxt-devtools-observatory.png',
+    ogImage: 'https://nuxt-devtools-observatory.vercel.app/logo-nuxt-devtools-observatory-header.png',
     ogUrl: 'https://nuxt-devtools-observatory.vercel.app',
 })
 

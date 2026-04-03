@@ -13,7 +13,7 @@ useHead({
     link: [
         {
             rel: 'icon',
-            href: '/nuxt-devtools-observatory.png',
+            href: '/favicon.png',
             type: 'image/png',
         },
     ],
