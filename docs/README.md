@@ -1,6 +1,12 @@
 # Documentation Site
 
-This folder contains the Docus-powered documentation site for `nuxt-devtools-observatory`.
+This folder contains the custom Nuxt documentation app for `nuxt-devtools-observatory`.
+
+Stack:
+
+- Nuxt app shell (`docs/app.vue`, `docs/layouts/**`, `docs/pages/**`)
+- Nuxt Content collections (`docs/content.config.ts`)
+- Nuxt UI components and layout primitives
 
 ## Local development
 

@@ -1,6 +1,8 @@
-# nuxt-devtools-observatory
+[![provide/inject Graph](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/public/nuxt-devtools-observatory-readme.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/public/nuxt-devtools-observatory-readme.png)
 
-Nuxt DevTools extension providing five missing observability features:
+# Nuxt DevTools Observatory
+
+Nuxt DevTools module providing five missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
