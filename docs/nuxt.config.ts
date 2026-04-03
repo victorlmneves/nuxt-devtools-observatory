@@ -17,6 +17,7 @@ export default defineNuxtConfig({
 
     routeRules: {
         '/guide': { redirect: '/getting-started' },
+        '/**': { prerender: true },
     },
 
     css: ['~/assets/main.css'],
