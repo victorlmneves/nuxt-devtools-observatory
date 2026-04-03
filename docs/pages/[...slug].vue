@@ -35,7 +35,7 @@ useSeoMeta({
     description: page.value.description,
     ogTitle: `${page.value.title} - ${appConfig.observatoryDocs.title}`,
     ogDescription: page.value.description,
-    ogImage: 'https://nuxt-devtools-observatory.vercel.app/nuxt-devtools-observatory.png',
+    ogImage: 'https://nuxt-devtools-observatory.vercel.app/logo-nuxt-devtools-observatory-header.png',
     ogUrl: `https://nuxt-devtools-observatory.vercel.app${route.path}`,
 })
 </script>
