@@ -7,9 +7,6 @@ on:
     push:
         branches:
             - main
-    pull_request:
-        branches:
-            - main
 
 jobs:
     publish-and-release:
@@ -74,10 +71,11 @@ jobs:
                   echo "already_published=${{ steps.npm_check.outputs.published }}"
 
             - name: Publish to npm
-              if: steps.npm_check.outputs.published == 'false'
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.npm_check.outputs.published == 'false'
               run: pnpm publish --no-git-checks --access public --provenance
 
             - name: Create git tag for version
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
               run: |
                   PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
                   TAG_NAME="v$PACKAGE_VERSION"
@@ -93,6 +91,7 @@ jobs:
                   git push origin "$TAG_NAME"
 
             - name: Create GitHub Release
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
               run: |
                   PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
                   TAG_NAME="v$PACKAGE_VERSION"
