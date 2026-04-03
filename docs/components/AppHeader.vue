@@ -6,39 +6,9 @@ const links = [
     { label: 'Docs', to: '/getting-started/installation' },
     { label: 'Feature Guides', to: '/feature-guides' },
     { label: 'API', to: '/api-reference' },
-    { label: 'Releases', to: 'https://github.com/victorneves/nuxt-devtools-observatory/releases', target: '_blank' },
+    { label: 'Releases', to: 'https://github.com/victorlmneves/nuxt-devtools-observatory/releases', target: '_blank' },
 ]
 </script>
-
-<!-- <template>
-    <header class="docs-header">
-        <UContainer class="docs-header__inner">
-            <div class="docs-head-left">
-                <NuxtLink to="/" class="docs-brand">{{ appConfig.observatoryDocs.title }}</NuxtLink>
-                <span class="docs-version">v{{ version }}</span>
-            </div>
-
-            <nav class="docs-top-nav">
-                <UButton
-                    v-for="link in links"
-                    :key="link.label"
-                    :to="link.to"
-                    :target="link.target"
-                    variant="ghost"
-                    color="neutral"
-                    size="xs"
-                >
-                    {{ link.label }}
-                </UButton>
-            </nav>
-
-            <div class="docs-head-right">
-                <UContentSearchButton :collapsed="false" variant="subtle" color="neutral" size="sm" class="docs-search-button" />
-                <ULink to="https://github.com/victorneves/nuxt-devtools-observatory" target="_blank" class="docs-github-link">GitHub</ULink>
-            </div>
-        </UContainer>
-    </header>
-</template> -->
 
 <template>
     <UHeader>
