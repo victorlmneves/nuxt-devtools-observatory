@@ -94,7 +94,8 @@ jobs:
                   TAG_NAME="v$PACKAGE_VERSION"
 
                   if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-                    echo "GitHub Release $TAG_NAME already exists."
+                    echo "GitHub Release $TAG_NAME already exists. Updating title to $PACKAGE_VERSION."
+                    gh release edit "$TAG_NAME" --title "$PACKAGE_VERSION"
                     exit 0
                   fi
 
