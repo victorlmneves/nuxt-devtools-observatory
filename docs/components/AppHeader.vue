@@ -44,7 +44,7 @@ const links = [
     <UHeader>
         <template #title>
             <NuxtLink to="/" class="docs-brand">
-                <image class="docs-logo mr-2" src="/logo-nuxt-devtools-observatory-header.png" :alt="appConfig.observatoryDocs.title" />
+                <img class="docs-logo mr-2" src="/logo-nuxt-devtools-observatory-header.png" :alt="appConfig.observatoryDocs.title" />
             </NuxtLink>
             <span class="docs-version">v{{ version }}</span>
         </template>
