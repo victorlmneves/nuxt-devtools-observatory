@@ -1,12 +1,23 @@
-# nuxt-devtools-observatory
+[![provide/inject Graph](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/public/nuxt-devtools-observatory-readme.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/public/nuxt-devtools-observatory-readme.png)
 
-Nuxt DevTools extension providing five missing observability features:
+# Nuxt DevTools Observatory
+
+Nuxt DevTools module providing five missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
+
+## Documentation website
+
+An in-repo docs site is available in `docs/` (Docus + Nuxt Content).
+
+- Run locally from repo root: `pnpm docs:dev`
+- Production build: `pnpm docs:build`
+
+Vercel deployment is configured to use `docs/` as the project root directory.
 
 ## Installation
 
