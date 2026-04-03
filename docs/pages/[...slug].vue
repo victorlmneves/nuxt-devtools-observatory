@@ -8,7 +8,9 @@ const appConfig = useAppConfig()
 
 const { data: page } = await useAsyncData(`docs-${route.path}`, () => queryCollection('docs').path(route.path).first())
 
-if (!page.value) throw createError({ statusCode: 404, statusMessage: 'Page not found', fatal: true })
+if (!page.value) {
+    throw createError({ statusCode: 404, statusMessage: 'Page not found', fatal: true })
+}
 
 const { data: surround } = await useAsyncData(`docs-${route.path}-surround`, () => {
     return queryCollectionItemSurroundings('docs', route.path, {
@@ -19,7 +21,11 @@ const { data: surround } = await useAsyncData(`docs-${route.path}-surround`, () 
 const githubEditUrl = computed(() => {
     const stem = page.value?.stem
     const github = appConfig.observatoryDocs.github
-    if (!stem) return '#'
+
+    if (!stem) {
+        return '#'
+    }
+
     return `https://github.com/${github.owner}/${github.repo}/edit/${github.branch}/${github.contentDir}/${stem}.md`
 })
 
@@ -29,6 +35,8 @@ useSeoMeta({
     description: page.value.description,
     ogTitle: `${page.value.title} - ${appConfig.observatoryDocs.title}`,
     ogDescription: page.value.description,
+    ogImage: 'https://nuxt-devtools-observatory.vercel.app/nuxt-devtools-observatory.png',
+    ogUrl: `https://nuxt-devtools-observatory.vercel.app${route.path}`,
 })
 </script>
 
@@ -49,7 +57,7 @@ useSeoMeta({
             </UButton>
         </footer>
 
-        <nav class="docs-surround" v-if="surround">
+        <nav v-if="surround" class="docs-surround">
             <UButton v-if="surround[0]" :to="surround[0].path" color="neutral" variant="outline" size="sm">
                 ← {{ surround[0].title }}
             </UButton>
