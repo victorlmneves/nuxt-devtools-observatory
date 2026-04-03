@@ -1,0 +1,56 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - 'v*'
+
+jobs:
+    publish-and-release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  registry-url: https://registry.npmjs.org
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Run tests
+              run: pnpm test
+
+            - name: Build package
+              run: pnpm build
+
+            - name: Verify tag matches package version
+              run: |
+                  PACKAGE_VERSION="$(node -p \"require('./package.json').version\")"
+                  TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+                  if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+                    echo "Tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)."
+                    exit 1
+                  fi
+
+            - name: Publish to npm
+              run: pnpm publish --no-git-checks --access public --provenance
+
+            - name: Create GitHub Release
+              run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
