@@ -1,3 +1,5 @@
 {
-    "framework": "nuxtjs"
+    "framework": "nuxtjs",
+    "buildCommand": "nuxt generate",
+    "outputDirectory": ".output/public"
 }

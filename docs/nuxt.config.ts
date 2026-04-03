@@ -22,7 +22,24 @@ export default defineNuxtConfig({
     nitro: {
         prerender: {
             crawlLinks: true,
-            routes: ['/'],
+            routes: [
+                '/',
+                '/getting-started',
+                '/getting-started/installation',
+                '/getting-started/configuration',
+                '/feature-guides',
+                '/feature-guides/usefetch-dashboard',
+                '/feature-guides/provide-inject-graph',
+                '/feature-guides/composable-tracker',
+                '/feature-guides/render-heatmap',
+                '/feature-guides/transition-tracker',
+                '/api-reference',
+                '/api-reference/module-options',
+                '/api-reference/rpc-contracts',
+                '/troubleshooting',
+                '/troubleshooting/common-issues',
+            ],
+            failOnError: false,
         },
     },
 
