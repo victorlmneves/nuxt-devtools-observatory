@@ -2,7 +2,11 @@ packages:
     - docs
 
 onlyBuiltDependencies:
+    - '@parcel/watcher'
     - better-sqlite3
+    - esbuild
+    - unrs-resolver
+    - vue-demi
 
 patchedDependencies:
     unimport@6.0.1: patches/unimport@6.0.1.patch
