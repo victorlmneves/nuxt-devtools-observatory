@@ -31,7 +31,6 @@ jobs:
               with:
                   node-version: 22
                   cache: pnpm
-                  registry-url: https://registry.npmjs.org
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
@@ -72,7 +71,9 @@ jobs:
 
             - name: Publish to npm
               if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.npm_check.outputs.published == 'false'
-              run: pnpm publish --no-git-checks --access public --provenance
+              env:
+                  NODE_AUTH_TOKEN: ''
+              run: npm publish --access public --provenance
 
             - name: Create git tag for version
               if: github.event_name == 'push' && github.ref == 'refs/heads/main'
