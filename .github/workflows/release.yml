@@ -61,11 +61,18 @@ jobs:
                     echo "Version $PACKAGE_VERSION is not published yet."
                   fi
 
+            - name: Publish decision
+              run: |
+                  echo "package=${{ steps.package_meta.outputs.package_name }}"
+                  echo "version=${{ steps.package_meta.outputs.package_version }}"
+                  echo "already_published=${{ steps.npm_check.outputs.published }}"
+
             - name: Publish to npm
               if: steps.npm_check.outputs.published == 'false'
               run: pnpm publish --no-git-checks --access public --provenance
 
             - name: Create git tag for version
+              if: steps.npm_check.outputs.published == 'false'
               run: |
                   PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
                   TAG_NAME="v$PACKAGE_VERSION"
@@ -81,6 +88,7 @@ jobs:
                   git push origin "$TAG_NAME"
 
             - name: Create GitHub Release
+              if: steps.npm_check.outputs.published == 'false'
               run: |
                   PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
                   TAG_NAME="v$PACKAGE_VERSION"
