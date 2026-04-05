@@ -1,7 +1,5 @@
 <template>
-    <main class="docs-main">
-        <UContainer>
-            <slot />
-        </UContainer>
-    </main>
+    <UContainer>
+        <slot />
+    </UContainer>
 </template>
