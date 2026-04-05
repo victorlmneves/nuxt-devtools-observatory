@@ -2,20 +2,6 @@
 const { footer } = useAppConfig()
 </script>
 
-<!-- <template>
-    <footer class="docs-footer">
-        <UContainer class="docs-footer__inner">
-            <p>Nuxt DevTools Observatory is an in-repo documentation site for the module, playground, and runtime reference.</p>
-
-            <div class="docs-footer__links">
-                <ULink to="/getting-started/installation">Get Started</ULink>
-                <ULink to="/feature-guides">Feature Guides</ULink>
-                <ULink to="https://github.com/victorneves/nuxt-devtools-observatory" target="_blank">GitHub</ULink>
-            </div>
-        </UContainer>
-    </footer>
-</template> -->
-
 <template>
     <UFooter>
         <template #left>

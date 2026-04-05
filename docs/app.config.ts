@@ -22,7 +22,8 @@ export default defineAppConfig({
         },
     },
     seo: {
-        siteName: 'Nuxt Devtools Observatory Docs - Setup, feature guides, API reference, and troubleshooting for Nuxt DevTools Observatory.',
+        siteName:
+            'Nuxt Devtools Observatory Docs - Setup, feature guides, API reference, and troubleshooting for Nuxt DevTools Observatory.',
     },
     header: {
         title: '',
