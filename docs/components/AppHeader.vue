@@ -21,6 +21,10 @@ const links = [
 
         <UNavigationMenu :items="links" />
 
+        <template #body>
+            <UNavigationMenu :items="links" orientation="vertical" class="-mx-2.5" />
+        </template>
+
         <template #right>
             <UColorModeButton />
 
