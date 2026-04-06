@@ -798,7 +798,6 @@ const edges = computed<Edge[]>(() => {
     flex-direction: column;
     gap: 3px;
     overflow: auto;
-    max-height: 220px;
     padding-right: 2px;
 }
 
@@ -862,7 +861,8 @@ const edges = computed<Edge[]>(() => {
 .row-main {
     display: flex;
     align-items: center;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 4px 8px;
     min-width: 0;
 }
 
