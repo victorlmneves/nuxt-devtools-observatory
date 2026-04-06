@@ -34,7 +34,8 @@
         "client"
     ],
     "scripts": {
-        "dev": "nuxi dev playground",
+        "dev": "concurrently -r -n client,nuxt \"pnpm dev:client\" \"nuxi dev playground\"",
+        "dev:client": "vite build --watch --config client/vite.config.ts",
         "docs:clean": "rm -rf docs/.nuxt docs/.output",
         "docs:dev": "pnpm docs:clean && pnpm --dir docs dev",
         "docs:build": "pnpm docs:clean && pnpm --dir docs build",
@@ -73,6 +74,7 @@
         "@types/node": "^25.5.0",
         "@vitejs/plugin-vue": "^6.0.0",
         "@vitest/coverage-v8": "^4.1.0",
+        "concurrently": "^9.2.1",
         "eslint": "^9.39.2",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-jsdoc": "^62.5.0",
