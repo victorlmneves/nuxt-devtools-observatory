@@ -89,6 +89,16 @@ function ensureStarted() {
     }
 
     started = true
+
+    // Support mock data injection via postMessage (used by the screenshot capture script).
+    if (typeof window !== 'undefined') {
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'observatory:snapshot') {
+                applySnapshot(event.data.data)
+            }
+        })
+    }
+
     const client = useDevtoolsClient()
 
     const setupRpc = () => {

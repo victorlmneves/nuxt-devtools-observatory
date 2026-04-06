@@ -5,6 +5,7 @@ const { chromium } = require('playwright');
 const path = require('path');
 
 const BASE_URL = 'http://localhost:4949';
+const CLIENT_ROOT = path.resolve(__dirname, '../../client');
 const screenshots = [
   { name: 'fetch-dashboard', path: '/fetch', file: 'docs/screenshots/fetch-dashboard.png' },
   { name: 'provide-inject-graph', path: '/provide', file: 'docs/screenshots/provide-inject-graph.png' },
@@ -80,6 +81,15 @@ const mockData = {
 };
 
 (async () => {
+  // Start a vite dev server for the client SPA at port 4949 with base '/' for standalone mode
+  const { createServer } = await import('vite');
+  const viteServer = await createServer({
+    root: CLIENT_ROOT,
+    base: '/',
+    server: { port: 4949, strictPort: true },
+  });
+  await viteServer.listen();
+
   const browser = await chromium.launch();
   const page = await browser.newPage();
 
@@ -114,7 +124,7 @@ const mockData = {
       await page.waitForTimeout(200);
     } else if (tab.name === 'render-heatmap') {
       // Wait for the .tree-row to appear
-      await page.waitForSelector('.tree-row', { timeout: 2000 });
+      await page.waitForSelector('.tree-row', { timeout: 5000 });
       await page.evaluate(() => {
         const firstTreeRow = document.querySelector('.tree-row');
         if (firstTreeRow) firstTreeRow.click();
@@ -133,4 +143,5 @@ const mockData = {
   }
 
   await browser.close();
+  await viteServer.close();
 })();
