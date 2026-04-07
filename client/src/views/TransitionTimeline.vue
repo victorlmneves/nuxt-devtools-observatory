@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useObservatoryData } from '../stores/observatory'
+import { useResizablePane } from '../composables/useResizablePane'
 import type { TransitionEntry } from '../../../src/types/snapshot'
 
 const { transitions: entries, connected } = useObservatoryData()
+const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(260, 'observatory:transitions:detailWidth')
 
 type FilterMode = 'all' | 'cancelled' | 'active' | 'completed'
 const filter = ref<FilterMode>('all')
@@ -233,7 +235,10 @@ function directionColor(e: TransitionEntry): string {
 
             <!-- Detail panel -->
             <transition name="panel-slide">
-                <aside v-if="selected" class="detail-panel">
+                <div v-if="selected" class="resize-handle" @mousedown="onHandleMouseDown" />
+            </transition>
+            <transition name="panel-slide">
+                <aside v-if="selected" class="detail-panel" :style="{ width: detailWidth + 'px' }">
                     <div class="panel-header">
                         <span class="panel-title">{{ selected.transitionName }}</span>
                         <button class="close-btn" @click="selected = null">✕</button>
@@ -423,9 +428,33 @@ function directionColor(e: TransitionEntry): string {
     transition: width 0.15s;
 }
 
+/* ── Resize handle ──────────────────────────────────────────────────────── */
+.resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    margin: 0 2px;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    inset: 0 3px;
+    border-radius: 2px;
+    background: var(--border);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.resize-handle:hover::after {
+    opacity: 1;
+}
+
 /* ── Detail panel ────────────────────────────────────────────────────────── */
 .detail-panel {
-    width: 260px;
     flex-shrink: 0;
     border-left: 0.5px solid var(--border);
     overflow-y: auto;

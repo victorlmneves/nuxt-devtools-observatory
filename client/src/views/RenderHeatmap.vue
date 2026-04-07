@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '../stores/observatory'
+import { useResizablePane } from '../composables/useResizablePane'
 import type { RenderEntry, RenderEvent } from '../../../src/types/snapshot'
 
 interface ComponentNode {
@@ -171,6 +172,7 @@ const TreeNode = defineComponent({
 })
 
 const { renders, connected } = useObservatoryData()
+const { paneWidth: detailWidth, onHandleMouseDown: onDetailHandleMouseDown } = useResizablePane(280, 'observatory:heatmap:detailWidth')
 
 const activeMode = ref<'count' | 'time'>('count')
 // Route filter — '' means show all routes
@@ -797,7 +799,9 @@ function formatTimestamp(t: number): string {
                 </div>
             </section>
 
-            <aside class="detail-panel">
+            <div class="resize-handle" @mousedown="onDetailHandleMouseDown" />
+
+            <aside class="detail-panel" :style="{ width: detailWidth + 'px' }">
                 <template v-if="activeSelected">
                     <div class="detail-header">
                         <span class="mono bold" style="font-size: 12px">{{ activeSelected.label }}</span>
@@ -945,11 +949,44 @@ function formatTimestamp(t: number): string {
 }
 
 .inspector {
-    display: grid;
-    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 320px);
-    gap: 12px;
+    display: flex;
+    gap: 0;
     flex: 1;
     min-height: 0;
+}
+
+.resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    margin: 0 2px;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    inset: 0 3px;
+    border-radius: 2px;
+    background: var(--border);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.resize-handle:hover::after {
+    opacity: 1;
+}
+
+.roots-panel,
+.detail-panel {
+    flex-shrink: 0;
+}
+
+.roots-panel {
+    width: 240px;
+    margin-right: 12px;
 }
 
 .roots-panel,
@@ -1022,6 +1059,8 @@ function formatTimestamp(t: number): string {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    flex: 1;
+    min-width: 0;
 }
 
 .tree-toolbar {
@@ -1390,12 +1429,11 @@ function formatTimestamp(t: number): string {
 }
 
 @media (width <= 1180px) {
-    .inspector {
-        grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    .roots-panel {
+        display: none;
     }
 
     .detail-panel {
-        grid-column: 1 / -1;
         max-height: 220px;
     }
 }

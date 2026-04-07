@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useObservatoryData } from '../stores/observatory'
+import { useResizablePane } from '../composables/useResizablePane'
 import type { FetchEntry } from '../../../src/types/snapshot'
 
 type FetchViewEntry = FetchEntry & { startOffset: number }
 
 const { fetch, connected } = useObservatoryData()
+const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(280, 'observatory:fetch:detailWidth')
 
 const filter = ref<string>('all')
 const search = ref('')
@@ -231,7 +233,9 @@ function formatSize(bytes: number) {
                 </table>
             </div>
 
-            <div v-if="selected" class="detail-panel">
+            <div v-if="selected" class="resize-handle" @mousedown="onHandleMouseDown" />
+
+            <div v-if="selected" class="detail-panel" :style="{ width: detailWidth + 'px' }">
                 <div class="detail-header">
                     <span class="mono bold" style="font-size: 12px">{{ selected.key }}</span>
                     <div class="flex gap-2">
@@ -317,10 +321,34 @@ function formatSize(bytes: number) {
 
 .split {
     display: flex;
-    gap: 12px;
+    gap: 0;
     flex: 1;
     overflow: hidden;
     min-height: 0;
+}
+
+.resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    margin: 0 2px;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    inset: 0 3px;
+    border-radius: 2px;
+    background: var(--border);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.resize-handle:hover::after {
+    opacity: 1;
 }
 
 .table-wrap {
@@ -331,7 +359,6 @@ function formatSize(bytes: number) {
 }
 
 .detail-panel {
-    width: 280px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;

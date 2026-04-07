@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '../stores/observatory'
+import { useResizablePane } from '../composables/useResizablePane'
 import type { InjectEntry, ProvideEntry } from '../../../src/types/snapshot'
 
 interface TreeNodeData {
@@ -46,6 +47,7 @@ const V_GAP = 72
 const H_GAP = 18
 
 const { provideInject, connected } = useObservatoryData()
+const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(280, 'observatory:provide:detailWidth')
 
 function nodeColor(node: TreeNodeData): string {
     if (node.injects.some((entry) => !entry.ok)) {
@@ -525,7 +527,9 @@ const edges = computed<Edge[]>(() => {
                 </div>
             </div>
 
-            <div v-if="selectedNode" class="detail-panel">
+            <div v-if="selectedNode" class="resize-handle" @mousedown="onHandleMouseDown" />
+
+            <div v-if="selectedNode" class="detail-panel" :style="{ width: detailWidth + 'px' }">
                 <div class="detail-header">
                     <span class="mono bold" style="font-size: 12px">{{ selectedNode.label }}</span>
                     <button
@@ -634,10 +638,34 @@ const edges = computed<Edge[]>(() => {
 
 .split {
     display: flex;
-    gap: 12px;
+    gap: 0;
     flex: 1;
     overflow: hidden;
     min-height: 0;
+}
+
+.resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 1;
+    margin: 0 2px;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    inset: 0 3px;
+    border-radius: 2px;
+    background: var(--border);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.resize-handle:hover::after {
+    opacity: 1;
 }
 
 .graph-area {
@@ -737,7 +765,6 @@ const edges = computed<Edge[]>(() => {
 }
 
 .detail-panel {
-    width: 280px;
     flex-shrink: 0;
     overflow: auto;
     border: 0.5px solid var(--border);
