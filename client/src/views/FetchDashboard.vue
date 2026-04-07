@@ -96,6 +96,7 @@ function barWidth(entry: FetchViewEntry) {
     // collapse all bars to a dot while waiting.
     const completedMs = entries.value.filter((e) => e.ms != null).map((e) => e.ms!)
     const maxMs = completedMs.length > 0 ? Math.max(...completedMs, 1) : 1
+
     return entry.ms != null ? Math.max(4, Math.round((entry.ms / maxMs) * 100)) : 4
 }
 
@@ -105,6 +106,7 @@ function barWidth(entry: FetchViewEntry) {
 function waterfallScale() {
     const completed = entries.value.filter((e) => e.ms != null)
     const maxEnd = completed.length > 0 ? Math.max(...completed.map((e) => e.startOffset + e.ms!), 1) : 1
+
     return maxEnd
 }
 
@@ -119,8 +121,10 @@ function wfWidth(entry: FetchViewEntry) {
         // a zero-width invisible bar.
         return 2
     }
+
     const scale = waterfallScale()
     const left = wfLeft(entry)
+
     // Clamp so bar + left never exceeds 100%
     return Math.min(100 - left, Math.max(2, Math.round((entry.ms / scale) * 100)))
 }
@@ -135,36 +139,41 @@ function formatSize(bytes: number) {
 </script>
 
 <template>
-    <div class="view">
-        <div class="stats-row">
+    <div class="fetch-dashboard tracker-view">
+        <div class="fetch-dashboard__stats tracker-stats-row">
             <div class="stat-card">
                 <div class="stat-label">total</div>
                 <div class="stat-val">{{ entries.length }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">success</div>
-                <div class="stat-val" style="color: var(--teal)">{{ counts.ok }}</div>
+                <div class="stat-val stat-val--ok">{{ counts.ok }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">pending</div>
-                <div class="stat-val" style="color: var(--amber)">{{ counts.pending }}</div>
+                <div class="stat-val stat-val--pending">{{ counts.pending }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">error</div>
-                <div class="stat-val" style="color: var(--red)">{{ counts.error }}</div>
+                <div class="stat-val stat-val--error">{{ counts.error }}</div>
             </div>
         </div>
 
-        <div class="toolbar">
+        <div class="fetch-dashboard__toolbar tracker-toolbar">
             <button :class="{ active: filter === 'all' }" @click="filter = 'all'">all</button>
             <button :class="{ 'danger-active': filter === 'error' }" @click="filter = 'error'">errors</button>
             <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'">pending</button>
             <button :class="{ active: filter === 'cached' }" @click="filter = 'cached'">cached</button>
-            <input v-model="search" type="search" placeholder="search key or url…" style="max-width: 240px; margin-left: auto" />
+            <input
+                v-model="search"
+                type="search"
+                class="fetch-dashboard__search tracker-toolbar__spacer"
+                placeholder="search key or url…"
+            />
         </div>
 
-        <div class="split">
-            <div class="table-wrap">
+        <div class="fetch-dashboard__split tracker-split">
+            <div class="fetch-dashboard__table tracker-table-wrap">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -174,7 +183,7 @@ function formatSize(bytes: number) {
                             <th>origin</th>
                             <th>size</th>
                             <th>time</th>
-                            <th style="min-width: 80px">bar</th>
+                            <th class="fetch-dashboard__bar-column">bar</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -185,21 +194,10 @@ function formatSize(bytes: number) {
                             @click="selectedId = entry.id"
                         >
                             <td>
-                                <span class="mono" style="font-size: 11px; color: var(--text2)">{{ entry.key }}</span>
+                                <span class="fetch-dashboard__key mono tracker-mono-secondary">{{ entry.key }}</span>
                             </td>
                             <td>
-                                <span
-                                    class="mono"
-                                    style="
-                                        font-size: 11px;
-                                        max-width: 200px;
-                                        display: block;
-                                        overflow: hidden;
-                                        text-overflow: ellipsis;
-                                        white-space: nowrap;
-                                    "
-                                    :title="entry.url"
-                                >
+                                <span class="fetch-dashboard__url mono tracker-mono-secondary tracker-truncate" :title="entry.url">
                                     {{ entry.url }}
                                 </span>
                             </td>
@@ -212,20 +210,19 @@ function formatSize(bytes: number) {
                             <td class="muted text-sm">{{ entry.size ? formatSize(entry.size) : '—' }}</td>
                             <td class="mono text-sm">{{ entry.ms != null ? `${entry.ms}ms` : '—' }}</td>
                             <td>
-                                <div style="height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden">
+                                <div class="fetch-dashboard__bar-track tracker-progress-bar">
                                     <div
+                                        class="fetch-dashboard__bar-fill tracker-progress-bar__fill"
                                         :style="{
                                             width: `${barWidth(entry)}%`,
                                             background: barColor(entry.status),
-                                            height: '100%',
-                                            borderRadius: '2px',
                                         }"
                                     ></div>
                                 </div>
                             </td>
                         </tr>
                         <tr v-if="!filtered.length">
-                            <td colspan="7" style="text-align: center; color: var(--text3); padding: 24px">
+                            <td colspan="7" class="tracker-empty-cell">
                                 {{ connected ? 'No fetches recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
                             </td>
                         </tr>
@@ -233,51 +230,48 @@ function formatSize(bytes: number) {
                 </table>
             </div>
 
-            <div v-if="selected" class="resize-handle" @mousedown="onHandleMouseDown" />
+            <div v-if="selected" class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
 
-            <div v-if="selected" class="detail-panel" :style="{ width: detailWidth + 'px' }">
-                <div class="detail-header">
-                    <span class="mono bold" style="font-size: 12px">{{ selected.key }}</span>
+            <div v-if="selected" class="fetch-dashboard__detail tracker-detail-panel" :style="{ width: detailWidth + 'px' }">
+                <div class="fetch-dashboard__detail-header">
+                    <span class="fetch-dashboard__detail-title mono bold">{{ selected.key }}</span>
                     <div class="flex gap-2">
                         <button @click="selectedId = null">×</button>
                     </div>
                 </div>
 
-                <div class="meta-grid">
+                <div class="fetch-dashboard__meta-grid">
                     <template v-for="[key, value] in metaRows" :key="key">
                         <span class="muted text-sm">{{ key }}</span>
-                        <span class="mono text-sm" style="word-break: break-all">{{ value }}</span>
+                        <span class="fetch-dashboard__meta-value mono text-sm">{{ value }}</span>
                     </template>
                 </div>
 
-                <div class="section-label">payload</div>
-                <pre class="payload-box">{{ payloadStr }}</pre>
+                <div class="tracker-section-label fetch-dashboard__section-label">payload</div>
+                <pre class="fetch-dashboard__payload-box">{{ payloadStr }}</pre>
 
-                <div class="section-label" style="margin-top: 10px">source</div>
+                <div class="tracker-section-label fetch-dashboard__section-label fetch-dashboard__section-label--source">source</div>
                 <div class="mono text-sm muted">{{ selected.file }}:{{ selected.line }}</div>
             </div>
-            <div v-else class="detail-empty">select a call to inspect</div>
+            <div v-else class="tracker-detail-empty">select a call to inspect</div>
         </div>
 
-        <div class="waterfall">
-            <div class="waterfall-header">
-                <div class="section-label" style="margin-top: 0; margin-bottom: 0">waterfall</div>
+        <div class="fetch-dashboard__waterfall">
+            <div class="fetch-dashboard__waterfall-header">
+                <div class="tracker-section-label fetch-dashboard__waterfall-label">waterfall</div>
                 <button :class="{ active: waterfallOpen }" @click="waterfallOpen = !waterfallOpen">
                     {{ waterfallOpen ? 'hide' : 'show' }}
                 </button>
             </div>
 
-            <div v-if="waterfallOpen" class="waterfall-body">
-                <div v-for="entry in entries" :key="entry.id" class="wf-row">
-                    <span
-                        class="mono muted text-sm"
-                        style="width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0"
-                    >
+            <div v-if="waterfallOpen" class="fetch-dashboard__waterfall-body">
+                <div v-for="entry in entries" :key="entry.id" class="fetch-dashboard__waterfall-row">
+                    <span class="fetch-dashboard__waterfall-key mono muted text-sm">
                         {{ entry.key }}
                     </span>
-                    <div class="wf-track">
+                    <div class="fetch-dashboard__waterfall-track">
                         <div
-                            class="wf-bar"
+                            class="fetch-dashboard__waterfall-bar"
                             :style="{
                                 left: `${wfLeft(entry)}%`,
                                 width: `${Math.max(2, wfWidth(entry))}%`,
@@ -285,7 +279,7 @@ function formatSize(bytes: number) {
                             }"
                         ></div>
                     </div>
-                    <span class="mono muted text-sm" style="width: 44px; text-align: right; flex-shrink: 0">
+                    <span class="fetch-dashboard__waterfall-time mono muted text-sm">
                         {{ entry.ms != null ? `${entry.ms}ms` : '—' }}
                     </span>
                 </div>
@@ -295,168 +289,118 @@ function formatSize(bytes: number) {
 </template>
 
 <style scoped>
-.view {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-    padding: 12px;
-    gap: 10px;
+.fetch-dashboard__search {
+    max-width: 240px;
 }
 
-.stats-row {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    flex-shrink: 0;
+.fetch-dashboard__bar-column {
+    min-width: 80px;
 }
 
-.toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    flex-wrap: wrap;
+.fetch-dashboard__url {
+    max-width: 200px;
 }
 
-.split {
-    display: flex;
-    gap: 0;
-    flex: 1;
-    overflow: hidden;
-    min-height: 0;
-}
-
-.resize-handle {
-    width: 8px;
-    flex-shrink: 0;
-    cursor: col-resize;
-    background: transparent;
-    position: relative;
-    z-index: 1;
-    margin: 0 2px;
-}
-
-.resize-handle::after {
-    content: '';
-    position: absolute;
-    inset: 0 3px;
-    border-radius: 2px;
-    background: var(--border);
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-
-.resize-handle:hover::after {
-    opacity: 1;
-}
-
-.table-wrap {
-    flex: 1;
-    overflow: auto;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-lg);
-}
-
-.detail-panel {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    overflow: auto;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 12px;
-    background: var(--bg3);
-}
-
-.detail-empty {
-    width: 280px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text3);
-    font-size: 12px;
-    border: 0.5px dashed var(--border);
-    border-radius: var(--radius-lg);
-}
-
-.detail-header {
+.fetch-dashboard__detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
-.meta-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 4px 12px;
-    font-size: 11px;
+.fetch-dashboard__detail-title {
+    font-size: var(--tracker-font-size-md);
 }
 
-.section-label {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--text3);
+.fetch-dashboard__meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--tracker-space-1) var(--tracker-space-3);
+    font-size: var(--tracker-font-size-sm);
+}
+
+.fetch-dashboard__meta-value {
+    word-break: break-all;
+}
+
+.fetch-dashboard__section-label {
     margin-top: 6px;
     min-height: fit-content;
 }
 
-.payload-box {
+.fetch-dashboard__section-label--source {
+    margin-top: 10px;
+}
+
+.fetch-dashboard__payload-box {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--tracker-font-size-sm);
     color: var(--text2);
     background: var(--bg2);
     border-radius: var(--radius);
-    padding: 8px 10px;
+    padding: var(--tracker-space-2) 10px;
     overflow: auto;
     white-space: pre;
     max-height: 160px;
 }
 
-.waterfall {
+.fetch-dashboard__waterfall {
     flex-shrink: 0;
     background: var(--bg3);
-    border: 0.5px solid var(--border);
+    border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 10px 12px;
+    padding: 10px var(--tracker-space-3);
 }
 
-.waterfall-header {
+.fetch-dashboard__waterfall-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--tracker-space-2);
 }
 
-.waterfall-body {
-    margin-top: 6px;
+.fetch-dashboard__waterfall-label {
+    margin: 0;
 }
 
-.wf-row {
+.fetch-dashboard__waterfall-body {
+    margin-top: var(--tracker-gap-toolbar);
+}
+
+.fetch-dashboard__waterfall-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: var(--tracker-space-2);
+    margin-bottom: var(--tracker-space-1);
 }
 
-.wf-track {
-    flex: 1;
+.fetch-dashboard__waterfall-key {
+    width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.fetch-dashboard__waterfall-track {
     position: relative;
+    flex: 1;
     height: 8px;
     background: var(--bg2);
     border-radius: 2px;
     overflow: hidden;
 }
 
-.wf-bar {
+.fetch-dashboard__waterfall-bar {
     position: absolute;
     top: 0;
     height: 100%;
     border-radius: 2px;
     opacity: 0.8;
+}
+
+.fetch-dashboard__waterfall-time {
+    width: 44px;
+    text-align: right;
+    flex-shrink: 0;
 }
 </style>

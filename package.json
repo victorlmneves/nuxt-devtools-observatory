@@ -45,7 +45,7 @@
         "build": "npm run build:client && nuxt-module-build build",
         "prepack": "npm run build",
         "lint": "eslint .",
-        "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .prettierignore && stylelint '**/*.{css,vue}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**'",
+        "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .prettierignore && stylelint '**/*.{css,vue}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --ignore-pattern 'docs/dist/**'",
         "typecheck": "vue-tsc --noEmit",
         "test": "vitest run",
         "test:watch": "vitest",

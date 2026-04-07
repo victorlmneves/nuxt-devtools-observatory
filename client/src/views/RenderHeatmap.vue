@@ -708,13 +708,13 @@ function formatTimestamp(t: number): string {
 </script>
 
 <template>
-    <div class="view">
-        <div class="controls">
-            <div class="mode-group">
+    <div class="render-heatmap tracker-view">
+        <div class="render-heatmap__controls tracker-toolbar">
+            <div class="render-heatmap__mode-group">
                 <button :class="{ active: activeMode === 'count' }" @click="activeMode = 'count'">render count</button>
                 <button :class="{ active: activeMode === 'time' }" @click="activeMode = 'time'">render time</button>
             </div>
-            <div class="threshold-group">
+            <div class="render-heatmap__threshold-group">
                 <span class="muted text-sm">threshold</span>
                 <input
                     v-model.number="activeThreshold"
@@ -722,7 +722,7 @@ function formatTimestamp(t: number): string {
                     :min="activeMode === 'count' ? 2 : 4"
                     :max="activeMode === 'count' ? 20 : 100"
                     :step="activeMode === 'count' ? 1 : 4"
-                    style="width: 90px"
+                    class="render-heatmap__threshold-range"
                 />
                 <span class="mono text-sm">{{ activeThreshold }}{{ activeMode === 'count' ? '+ renders' : 'ms+' }}</span>
             </div>
@@ -731,12 +731,12 @@ function formatTimestamp(t: number): string {
                 <option value="">all routes</option>
                 <option v-for="r in knownRoutes" :key="r" :value="r">{{ r }}</option>
             </select>
-            <button :class="{ active: frozen }" style="margin-left: auto" @click="toggleFreeze">
+            <button :class="{ active: frozen }" class="render-heatmap__freeze tracker-toolbar__spacer" @click="toggleFreeze">
                 {{ frozen ? 'unfreeze' : 'freeze snapshot' }}
             </button>
         </div>
 
-        <div class="stats-row">
+        <div class="render-heatmap__stats tracker-stats-row">
             <div class="stat-card">
                 <div class="stat-label">components</div>
                 <div class="stat-val">{{ allComponents.length }}</div>
@@ -747,7 +747,7 @@ function formatTimestamp(t: number): string {
             </div>
             <div class="stat-card">
                 <div class="stat-label">hot</div>
-                <div class="stat-val" style="color: var(--red)">{{ hotCount }}</div>
+                <div class="stat-val stat-val--error">{{ hotCount }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">avg time</div>
@@ -755,32 +755,37 @@ function formatTimestamp(t: number): string {
             </div>
         </div>
 
-        <div class="inspector">
-            <aside class="roots-panel">
-                <div class="panel-title">apps</div>
+        <div class="render-heatmap__inspector">
+            <aside class="render-heatmap__roots-panel">
+                <div class="render-heatmap__panel-title tracker-section-label">apps</div>
                 <button
                     v-for="entry in appEntries"
                     :key="entry.id"
-                    class="root-item"
+                    class="render-heatmap__root-item"
                     :class="{ active: activeRootId === entry.id }"
                     @click="selectRoot(entry.root)"
                 >
-                    <div class="root-copy">
-                        <span class="root-label mono">{{ entry.label }}</span>
-                        <span class="root-sub muted mono">{{ entry.root.label }}</span>
+                    <div class="render-heatmap__root-copy">
+                        <span class="render-heatmap__root-label mono">{{ entry.label }}</span>
+                        <span class="render-heatmap__root-sub muted mono">{{ entry.root.label }}</span>
                     </div>
-                    <span class="root-meta mono">{{ entry.meta }}</span>
+                    <span class="render-heatmap__root-meta mono">{{ entry.meta }}</span>
                 </button>
-                <div v-if="!appEntries.length" class="detail-empty">no apps match</div>
+                <div v-if="!appEntries.length" class="render-heatmap__detail-empty">no apps match</div>
             </aside>
 
-            <section class="tree-panel">
-                <div class="tree-toolbar">
-                    <input :value="search" class="search-input mono" placeholder="Find components..." @input="updateSearch" />
+            <section class="render-heatmap__tree-panel">
+                <div class="render-heatmap__tree-toolbar">
+                    <input
+                        :value="search"
+                        class="render-heatmap__search-input mono"
+                        placeholder="Find components..."
+                        @input="updateSearch"
+                    />
                 </div>
 
-                <div class="tree-frame">
-                    <div class="tree-canvas">
+                <div class="render-heatmap__tree-frame">
+                    <div class="render-heatmap__tree-canvas tree-canvas">
                         <TreeNode
                             v-for="root in visibleTreeRoots"
                             :key="root.id"
@@ -793,49 +798,62 @@ function formatTimestamp(t: number): string {
                             @toggle="toggleNode"
                         />
                     </div>
-                    <div v-if="!visibleTreeRoots.length" class="detail-empty">
+                    <div v-if="!visibleTreeRoots.length" class="render-heatmap__detail-empty">
                         {{ connected ? 'No render activity recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
                     </div>
                 </div>
             </section>
 
-            <div class="resize-handle" @mousedown="onDetailHandleMouseDown" />
+            <div class="tracker-resize-handle" @mousedown="onDetailHandleMouseDown" />
 
-            <aside class="detail-panel" :style="{ width: detailWidth + 'px' }">
+            <aside class="render-heatmap__detail-panel tracker-detail-panel" :style="{ width: detailWidth + 'px' }">
                 <template v-if="activeSelected">
-                    <div class="detail-header">
-                        <span class="mono bold" style="font-size: 12px">{{ activeSelected.label }}</span>
+                    <div class="render-heatmap__detail-header">
+                        <span class="render-heatmap__detail-title mono bold">{{ activeSelected.label }}</span>
                         <button @click="activeSelectedId = null">×</button>
                     </div>
 
-                    <div class="detail-pill-row">
-                        <span class="detail-pill mono">
+                    <div class="render-heatmap__detail-pill-row">
+                        <span class="render-heatmap__detail-pill mono">
                             {{ activeSelected.rerenders + activeSelected.mountCount }} render{{
                                 activeSelected.rerenders + activeSelected.mountCount !== 1 ? 's' : ''
                             }}
                         </span>
-                        <span class="detail-pill mono muted">
+                        <span class="render-heatmap__detail-pill render-heatmap__detail-pill--muted mono muted">
                             {{ activeSelected.mountCount }} mount{{ activeSelected.mountCount !== 1 ? 's' : '' }}
                         </span>
-                        <span v-if="activeSelected.rerenders" class="detail-pill mono">
+                        <span v-if="activeSelected.rerenders" class="render-heatmap__detail-pill mono">
                             {{ activeSelected.rerenders }} re-render{{ activeSelected.rerenders !== 1 ? 's' : '' }}
                         </span>
-                        <span v-if="activeSelected.isPersistent" class="detail-pill mono persistent">persistent</span>
-                        <span v-if="activeSelected.isHydrationMount" class="detail-pill mono hydrated">hydrated</span>
-                        <span class="detail-pill mono">{{ activeSelected.avgMs.toFixed(1) }}ms avg</span>
-                        <span class="detail-pill mono" :class="{ hot: isHot(activeSelected) }">
+                        <span
+                            v-if="activeSelected.isPersistent"
+                            class="render-heatmap__detail-pill render-heatmap__detail-pill--persistent mono"
+                        >
+                            persistent
+                        </span>
+                        <span
+                            v-if="activeSelected.isHydrationMount"
+                            class="render-heatmap__detail-pill render-heatmap__detail-pill--hydrated mono"
+                        >
+                            hydrated
+                        </span>
+                        <span class="render-heatmap__detail-pill mono">{{ activeSelected.avgMs.toFixed(1) }}ms avg</span>
+                        <span
+                            class="render-heatmap__detail-pill mono"
+                            :class="{ 'render-heatmap__detail-pill--hot': isHot(activeSelected) }"
+                        >
                             {{ isHot(activeSelected) ? 'hot' : 'cool' }}
                         </span>
                     </div>
 
-                    <div class="section-label">identity</div>
-                    <div class="meta-grid">
+                    <div class="tracker-section-label render-heatmap__section-label">identity</div>
+                    <div class="render-heatmap__meta-grid">
                         <span class="muted text-sm">label</span>
                         <span class="mono text-sm">{{ activeSelected.label }}</span>
                         <span class="muted text-sm">path</span>
                         <span class="mono text-sm">{{ pathLabel(activeSelected) }}</span>
                         <span class="muted text-sm">file</span>
-                        <span class="mono text-sm muted" style="display: flex; align-items: center; gap: 6px">
+                        <span class="render-heatmap__file-row mono text-sm muted">
                             {{ activeSelected.file }}
                             <button
                                 v-if="activeSelected.file && activeSelected.file !== 'unknown'"
@@ -854,8 +872,8 @@ function formatTimestamp(t: number): string {
                         <span class="mono text-sm">{{ activeSelected.children.length }}</span>
                     </div>
 
-                    <div class="section-label">rendering</div>
-                    <div class="meta-grid">
+                    <div class="tracker-section-label render-heatmap__section-label">rendering</div>
+                    <div class="render-heatmap__meta-grid">
                         <span class="muted text-sm">total renders</span>
                         <span class="mono text-sm">{{ activeSelected.rerenders + activeSelected.mountCount }}</span>
                         <span class="muted text-sm">re-renders</span>
@@ -863,7 +881,7 @@ function formatTimestamp(t: number): string {
                         <span class="muted text-sm">mounts</span>
                         <span class="mono text-sm">{{ activeSelected.mountCount }}</span>
                         <span class="muted text-sm">persistent</span>
-                        <span class="mono text-sm" :style="{ color: activeSelected.isPersistent ? 'var(--amber)' : 'inherit' }">
+                        <span class="mono text-sm" :class="{ 'render-heatmap__persistent-value': activeSelected.isPersistent }">
                             {{ activeSelected.isPersistent ? 'yes — survives navigation' : 'no' }}
                         </span>
                         <span class="muted text-sm">hydration mount</span>
@@ -876,47 +894,42 @@ function formatTimestamp(t: number): string {
                         <span class="mono text-sm">{{ activeMode === 'count' ? 're-render count' : 'render time' }}</span>
                     </div>
 
-                    <div class="section-label">triggers</div>
-                    <div v-for="trigger in activeSelected.triggers" :key="trigger" class="trigger-item mono text-sm">{{ trigger }}</div>
+                    <div class="tracker-section-label render-heatmap__section-label">triggers</div>
+                    <div v-for="trigger in activeSelected.triggers" :key="trigger" class="render-heatmap__trigger-item mono text-sm">
+                        {{ trigger }}
+                    </div>
                     <div v-if="!activeSelected.triggers.length" class="muted text-sm">no triggers recorded</div>
 
-                    <div class="section-label" style="margin-top: 8px">
+                    <div class="tracker-section-label render-heatmap__section-label render-heatmap__section-label--timeline">
                         render timeline
-                        <span class="muted" style="font-weight: 400; text-transform: none; letter-spacing: 0">
-                            ({{ activeSelected.timeline.length }})
-                        </span>
+                        <span class="render-heatmap__section-label-meta muted">({{ activeSelected.timeline.length }})</span>
                     </div>
                     <div v-if="!activeSelected.timeline.length" class="muted text-sm">no timeline events yet</div>
-                    <div v-else class="timeline-list">
-                        <div v-for="(event, idx) in [...activeSelected.timeline].reverse().slice(0, 30)" :key="idx" class="timeline-row">
-                            <span class="timeline-kind mono" :class="event.kind">{{ event.kind }}</span>
-                            <span class="timeline-time mono muted">{{ formatTimestamp(event.t) }}</span>
-                            <span class="timeline-dur mono">{{ formatMs(event.durationMs) }}</span>
-                            <span v-if="event.triggerKey" class="timeline-trigger mono muted">{{ event.triggerKey }}</span>
-                            <span class="timeline-route mono muted" style="margin-left: auto">{{ event.route }}</span>
+                    <div v-else class="render-heatmap__timeline-list">
+                        <div
+                            v-for="(event, idx) in [...activeSelected.timeline].reverse().slice(0, 30)"
+                            :key="idx"
+                            class="render-heatmap__timeline-row"
+                        >
+                            <span class="render-heatmap__timeline-kind mono" :class="event.kind">{{ event.kind }}</span>
+                            <span class="render-heatmap__timeline-time mono muted">{{ formatTimestamp(event.t) }}</span>
+                            <span class="render-heatmap__timeline-dur mono">{{ formatMs(event.durationMs) }}</span>
+                            <span v-if="event.triggerKey" class="render-heatmap__timeline-trigger mono muted">{{ event.triggerKey }}</span>
+                            <span class="render-heatmap__timeline-route mono muted">{{ event.route }}</span>
                         </div>
-                        <div v-if="activeSelected.timeline.length > 30" class="muted text-sm" style="padding: 2px 0">
+                        <div v-if="activeSelected.timeline.length > 30" class="render-heatmap__compact-muted muted text-sm">
                             … {{ activeSelected.timeline.length - 30 }} earlier events
                         </div>
                     </div>
                 </template>
-                <div v-else class="detail-empty">click a component to inspect</div>
+                <div v-else class="render-heatmap__detail-empty">click a component to inspect</div>
             </aside>
         </div>
     </div>
 </template>
 
 <style scoped>
-.view {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-    padding: 12px;
-    gap: 10px;
-}
-
-.controls {
+.render-heatmap__controls {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -924,98 +937,67 @@ function formatTimestamp(t: number): string {
     flex-wrap: wrap;
 }
 
-.mode-group {
+.render-heatmap__mode-group {
     display: flex;
     gap: 2px;
 }
 
-.threshold-group {
+.render-heatmap__threshold-group {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
-.stats-row {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    flex-shrink: 0;
+.render-heatmap__threshold-range {
+    width: 90px;
 }
 
 .stat-sub {
-    margin-top: 4px;
-    font-size: 11px;
+    margin-top: var(--tracker-space-1);
+    font-size: var(--tracker-font-size-sm);
     color: var(--text3);
 }
 
-.inspector {
+.render-heatmap__inspector {
     display: flex;
     gap: 0;
     flex: 1;
     min-height: 0;
 }
 
-.resize-handle {
-    width: 8px;
-    flex-shrink: 0;
-    cursor: col-resize;
-    background: transparent;
-    position: relative;
-    z-index: 1;
-    margin: 0 2px;
-}
-
-.resize-handle::after {
-    content: '';
-    position: absolute;
-    inset: 0 3px;
-    border-radius: 2px;
-    background: var(--border);
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-
-.resize-handle:hover::after {
-    opacity: 1;
-}
-
-.roots-panel,
-.detail-panel {
+.render-heatmap__roots-panel,
+.render-heatmap__detail-panel {
     flex-shrink: 0;
 }
 
-.roots-panel {
+.render-heatmap__roots-panel {
     width: 240px;
     margin-right: 12px;
 }
 
-.roots-panel,
-.tree-panel,
-.detail-panel {
-    border: 0.5px solid var(--border);
+.render-heatmap__roots-panel,
+.render-heatmap__tree-panel,
+.render-heatmap__detail-panel {
+    border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
     background: var(--bg3);
     min-height: 0;
 }
 
-.roots-panel,
-.detail-panel {
+.render-heatmap__roots-panel,
+.render-heatmap__detail-panel {
     display: flex;
     flex-direction: column;
     overflow: auto;
-    padding: 12px;
-    gap: 8px;
+    padding: var(--tracker-space-3);
+    gap: var(--tracker-space-2);
 }
 
-.panel-title {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--text3);
+.render-heatmap__panel-title {
+    margin: 0;
 }
 
-.root-item {
+.render-heatmap__root-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1029,33 +1011,33 @@ function formatTimestamp(t: number): string {
     text-align: left;
 }
 
-.root-item.active {
+.render-heatmap__root-item.active {
     border-color: var(--teal);
     background: color-mix(in srgb, var(--teal) 16%, var(--bg2));
 }
 
-.root-label {
+.render-heatmap__root-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.root-copy {
+.render-heatmap__root-copy {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
 
-.root-sub {
-    font-size: 11px;
+.render-heatmap__root-sub {
+    font-size: var(--tracker-font-size-sm);
 }
 
-.root-meta {
+.render-heatmap__root-meta {
     color: var(--text3);
-    font-size: 11px;
+    font-size: var(--tracker-font-size-sm);
 }
 
-.tree-panel {
+.render-heatmap__tree-panel {
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1063,12 +1045,12 @@ function formatTimestamp(t: number): string {
     min-width: 0;
 }
 
-.tree-toolbar {
-    padding: 12px;
-    border-bottom: 0.5px solid var(--border);
+.render-heatmap__tree-toolbar {
+    padding: var(--tracker-space-3);
+    border-bottom: var(--tracker-border-width) solid var(--border);
 }
 
-.search-input {
+.render-heatmap__search-input {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -1077,14 +1059,14 @@ function formatTimestamp(t: number): string {
     color: var(--text);
 }
 
-.tree-frame {
+.render-heatmap__tree-frame {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 12px;
+    padding: var(--tracker-space-3);
 }
 
-:deep(.tree-canvas) {
+.render-heatmap__tree-canvas {
     display: inline-block;
     min-width: 100%;
     width: max-content;
@@ -1236,77 +1218,96 @@ function formatTimestamp(t: number): string {
     border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 
-.detail-empty {
+.render-heatmap__detail-empty {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
     color: var(--text3);
-    font-size: 12px;
+    font-size: var(--tracker-font-size-md);
 }
 
-.detail-header {
+.render-heatmap__detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
-.meta-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 4px 12px;
+.render-heatmap__detail-title {
+    font-size: var(--tracker-font-size-md);
 }
 
-.detail-pill-row {
+.render-heatmap__meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--tracker-space-1) var(--tracker-space-3);
+}
+
+.render-heatmap__detail-pill-row {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
 }
 
-.detail-pill {
+.render-heatmap__detail-pill {
     border: 1px solid var(--border);
     border-radius: 999px;
     padding: 4px 8px;
     background: var(--bg2);
-    font-size: 11px;
+    font-size: var(--tracker-font-size-sm);
 }
 
-.detail-pill.hot {
+.render-heatmap__detail-pill--hot {
     border-color: color-mix(in srgb, var(--red) 50%, var(--border));
     color: var(--red);
 }
 
-.detail-pill.persistent {
+.render-heatmap__detail-pill--persistent {
     border-color: color-mix(in srgb, var(--amber) 55%, var(--border));
     color: color-mix(in srgb, var(--amber) 80%, var(--text));
 }
 
-.detail-pill.hydrated {
+.render-heatmap__detail-pill--hydrated {
     border-color: color-mix(in srgb, var(--teal) 55%, var(--border));
     color: color-mix(in srgb, var(--teal) 80%, var(--text));
 }
 
-.detail-pill.muted {
+.render-heatmap__detail-pill--muted {
     color: var(--text3);
     border-color: var(--border);
 }
 
-.section-label {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--text3);
+.render-heatmap__section-label {
     margin-top: 8px;
     margin-bottom: 4px;
 }
 
-.trigger-item {
+.render-heatmap__file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.render-heatmap__trigger-item {
     background: var(--bg2);
     border-radius: var(--radius);
     padding: 4px 8px;
     margin-bottom: 3px;
     color: var(--text2);
+}
+
+.render-heatmap__persistent-value {
+    color: color-mix(in srgb, var(--amber) 80%, var(--text));
+}
+
+.render-heatmap__section-label--timeline {
+    margin-top: var(--tracker-space-2);
+}
+
+.render-heatmap__section-label-meta {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 :deep(.tree-jump-btn) {
@@ -1359,7 +1360,7 @@ function formatTimestamp(t: number): string {
     max-width: 140px;
 }
 
-.timeline-list {
+.render-heatmap__timeline-list {
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -1371,49 +1372,49 @@ function formatTimestamp(t: number): string {
     min-height: fit-content;
 }
 
-.timeline-row {
+.render-heatmap__timeline-row {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 2px 0;
-    font-size: 11px;
-    border-bottom: 0.5px solid var(--border);
+    font-size: var(--tracker-font-size-sm);
+    border-bottom: var(--tracker-border-width) solid var(--border);
     min-width: 0;
     min-height: fit-content;
 }
 
-.timeline-row:last-child {
+.render-heatmap__timeline-row:last-child {
     border-bottom: none;
 }
 
-.timeline-kind {
+.render-heatmap__timeline-kind {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--tracker-font-size-xs);
     font-weight: 500;
     min-width: 40px;
 }
 
-.timeline-kind.mount {
+.render-heatmap__timeline-kind.mount {
     color: var(--teal);
 }
 
-.timeline-kind.update {
+.render-heatmap__timeline-kind.update {
     color: var(--amber);
 }
 
-.timeline-time {
+.render-heatmap__timeline-time {
     flex-shrink: 0;
     min-width: 52px;
     color: var(--text3);
 }
 
-.timeline-dur {
+.render-heatmap__timeline-dur {
     flex-shrink: 0;
     min-width: 38px;
     color: var(--text2);
 }
 
-.timeline-trigger {
+.render-heatmap__timeline-trigger {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1422,18 +1423,23 @@ function formatTimestamp(t: number): string {
     min-width: 0;
 }
 
-.timeline-route {
+.render-heatmap__timeline-route {
     flex-shrink: 0;
+    margin-left: auto;
     color: var(--text3);
-    font-size: 10px;
+    font-size: var(--tracker-font-size-xs);
+}
+
+.render-heatmap__compact-muted {
+    padding: 2px 0;
 }
 
 @media (width <= 1180px) {
-    .roots-panel {
+    .render-heatmap__roots-panel {
         display: none;
     }
 
-    .detail-panel {
+    .render-heatmap__detail-panel {
         max-height: 220px;
     }
 }

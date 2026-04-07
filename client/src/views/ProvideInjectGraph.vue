@@ -452,20 +452,20 @@ const edges = computed<Edge[]>(() => {
 </script>
 
 <template>
-    <div class="view">
-        <div class="toolbar">
+    <div class="provide-graph tracker-view">
+        <div class="provide-graph__toolbar tracker-toolbar">
             <button :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">all keys</button>
             <button
                 v-for="key in allKeys"
                 :key="key"
-                style="font-family: var(--mono)"
+                class="provide-graph__key-filter mono"
                 :class="{ active: activeFilter === key }"
                 @click="activeFilter = key"
             >
                 {{ key }}
             </button>
             <button
-                style="margin-left: auto"
+                class="provide-graph__toolbar-spacer"
                 :class="{ 'danger-active': activeFilter === 'shadow' }"
                 @click="activeFilter = activeFilter === 'shadow' ? 'all' : 'shadow'"
             >
@@ -474,37 +474,37 @@ const edges = computed<Edge[]>(() => {
             <button :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = activeFilter === 'warn' ? 'all' : 'warn'">
                 warnings
             </button>
-            <input v-model="searchQuery" type="search" placeholder="search component or key…" style="max-width: 200px" />
+            <input v-model="searchQuery" type="search" class="provide-graph__search" placeholder="search component or key…" />
         </div>
 
-        <div class="split">
-            <div class="graph-area">
-                <div class="legend">
-                    <span class="dot" style="background: var(--teal)"></span>
+        <div class="provide-graph__split tracker-split">
+            <div class="provide-graph__graph-area">
+                <div class="provide-graph__legend">
+                    <span class="provide-graph__legend-dot provide-graph__legend-dot--provides"></span>
                     <span>provides</span>
-                    <span class="dot" style="background: var(--blue)"></span>
+                    <span class="provide-graph__legend-dot provide-graph__legend-dot--both"></span>
                     <span>both</span>
-                    <span class="dot" style="background: var(--text3)"></span>
+                    <span class="provide-graph__legend-dot provide-graph__legend-dot--injects"></span>
                     <span>injects</span>
-                    <span class="dot" style="background: var(--red)"></span>
+                    <span class="provide-graph__legend-dot provide-graph__legend-dot--missing"></span>
                     <span>missing provider</span>
                 </div>
-                <div v-if="layout.length" class="canvas-stage">
-                    <div class="canvas-wrap" :style="{ width: `${canvasW}px`, height: `${canvasH}px` }">
-                        <svg class="edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
+                <div v-if="layout.length" class="provide-graph__canvas-stage">
+                    <div class="provide-graph__canvas-wrap" :style="{ width: `${canvasW}px`, height: `${canvasH}px` }">
+                        <svg class="provide-graph__edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
                             <path
                                 v-for="edge in edges"
                                 :key="edge.id"
                                 :d="`M ${edge.x1},${edge.y1} C ${edge.x1},${(edge.y1 + edge.y2) / 2} ${edge.x2},${(edge.y1 + edge.y2) / 2} ${edge.x2},${edge.y2}`"
-                                class="edge"
+                                class="provide-graph__edge"
                                 fill="none"
                             />
                         </svg>
                         <div
                             v-for="layoutNode in layout"
                             :key="layoutNode.data.id"
-                            class="graph-node"
-                            :class="{ 'is-selected': selectedNode?.id === layoutNode.data.id }"
+                            class="provide-graph__node"
+                            :class="{ 'provide-graph__node--selected': selectedNode?.id === layoutNode.data.id }"
                             :style="{
                                 left: `${layoutNode.x - NODE_W / 2}px`,
                                 top: `${layoutNode.y - NODE_H / 2}px`,
@@ -513,8 +513,8 @@ const edges = computed<Edge[]>(() => {
                             }"
                             @click="selectedNode = layoutNode.data"
                         >
-                            <span class="node-dot" :style="{ background: nodeColor(layoutNode.data) }"></span>
-                            <span class="mono node-label">{{ layoutNode.data.label }}</span>
+                            <span class="provide-graph__node-dot" :style="{ background: nodeColor(layoutNode.data) }"></span>
+                            <span class="mono provide-graph__node-label">{{ layoutNode.data.label }}</span>
                             <span v-if="layoutNode.data.provides.length" class="badge badge-ok badge-xs">
                                 +{{ layoutNode.data.provides.length }}
                             </span>
@@ -522,16 +522,16 @@ const edges = computed<Edge[]>(() => {
                         </div>
                     </div>
                 </div>
-                <div v-else class="graph-empty">
+                <div v-else class="provide-graph__graph-empty">
                     {{ connected ? 'No components match the current provide/inject filter.' : 'Waiting for connection to the Nuxt app…' }}
                 </div>
             </div>
 
-            <div v-if="selectedNode" class="resize-handle" @mousedown="onHandleMouseDown" />
+            <div v-if="selectedNode" class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
 
-            <div v-if="selectedNode" class="detail-panel" :style="{ width: detailWidth + 'px' }">
-                <div class="detail-header">
-                    <span class="mono bold" style="font-size: 12px">{{ selectedNode.label }}</span>
+            <div v-if="selectedNode" class="provide-graph__detail tracker-detail-panel" :style="{ width: detailWidth + 'px' }">
+                <div class="provide-graph__detail-header">
+                    <span class="provide-graph__detail-title mono bold">{{ selectedNode.label }}</span>
                     <button
                         v-if="selectedNode.componentFile && selectedNode.componentFile !== 'unknown'"
                         class="jump-btn"
@@ -544,7 +544,7 @@ const edges = computed<Edge[]>(() => {
                 </div>
 
                 <div v-if="selectedNode.provides.length" class="detail-section">
-                    <div class="section-label">provides ({{ selectedNode.provides.length }})</div>
+                    <div class="tracker-section-label provide-graph__section-label">provides ({{ selectedNode.provides.length }})</div>
                     <div class="detail-list">
                         <div
                             v-for="(entry, index) in selectedNode.provides"
@@ -574,7 +574,7 @@ const edges = computed<Edge[]>(() => {
                                 <span v-for="name in entry.consumerNames" :key="name" class="consumer-chip mono">{{ name }}</span>
                                 <span v-if="!entry.consumerNames.length" class="muted text-sm">no consumers</span>
                             </div>
-                            <div v-else class="muted text-sm" style="padding: 2px 0; font-size: 11px">no consumers detected</div>
+                            <div v-else class="provide-graph__compact-muted muted text-sm">no consumers detected</div>
                             <pre
                                 v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
                                 class="value-box"
@@ -589,7 +589,7 @@ const edges = computed<Edge[]>(() => {
                     class="detail-section"
                     :style="{ marginTop: selectedNode.provides.length ? '10px' : '0' }"
                 >
-                    <div class="section-label">injects ({{ selectedNode.injects.length }})</div>
+                    <div class="tracker-section-label provide-graph__section-label">injects ({{ selectedNode.injects.length }})</div>
                     <div class="detail-list">
                         <div
                             v-for="entry in selectedNode.injects"
@@ -607,11 +607,11 @@ const edges = computed<Edge[]>(() => {
                     </div>
                 </div>
 
-                <div v-if="!selectedNode.provides.length && !selectedNode.injects.length" class="muted text-sm" style="margin-top: 8px">
+                <div v-if="!selectedNode.provides.length && !selectedNode.injects.length" class="provide-graph__empty-detail muted text-sm">
                     no provide/inject in this component
                 </div>
             </div>
-            <div v-else class="detail-empty">
+            <div v-else class="tracker-detail-empty">
                 {{ connected ? 'Click a node to inspect.' : 'Waiting for connection to the Nuxt app…' }}
             </div>
         </div>
@@ -619,81 +619,40 @@ const edges = computed<Edge[]>(() => {
 </template>
 
 <style scoped>
-.view {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-    padding: 12px;
-    gap: 10px;
+.provide-graph__toolbar-spacer {
+    margin-left: auto;
 }
 
-.toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    flex-wrap: wrap;
+.provide-graph__search {
+    max-width: 200px;
 }
 
-.split {
-    display: flex;
-    gap: 0;
-    flex: 1;
-    overflow: hidden;
-    min-height: 0;
-}
-
-.resize-handle {
-    width: 8px;
-    flex-shrink: 0;
-    cursor: col-resize;
-    background: transparent;
-    position: relative;
-    z-index: 1;
-    margin: 0 2px;
-}
-
-.resize-handle::after {
-    content: '';
-    position: absolute;
-    inset: 0 3px;
-    border-radius: 2px;
-    background: var(--border);
-    opacity: 0;
-    transition: opacity 0.15s;
-}
-
-.resize-handle:hover::after {
-    opacity: 1;
-}
-
-.graph-area {
+.provide-graph__graph-area {
     flex: 1;
     overflow: auto;
-    border: 0.5px solid var(--border);
+    border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 12px;
+    padding: var(--tracker-space-3);
     background: var(--bg3);
 }
 
-.legend {
+.provide-graph__legend {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 11px;
+    gap: var(--tracker-space-3);
+    font-size: var(--tracker-font-size-sm);
     color: var(--text2);
-    margin-bottom: 12px;
+    margin-bottom: var(--tracker-space-3);
 }
 
-.canvas-stage {
+.provide-graph__canvas-stage {
     display: flex;
     justify-content: center;
     align-items: flex-start;
     min-width: 100%;
 }
 
-.dot {
+.provide-graph__legend-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
@@ -701,23 +660,39 @@ const edges = computed<Edge[]>(() => {
     margin-right: 2px;
 }
 
-.canvas-wrap {
+.provide-graph__legend-dot--provides {
+    background: var(--teal);
+}
+
+.provide-graph__legend-dot--both {
+    background: var(--blue);
+}
+
+.provide-graph__legend-dot--injects {
+    background: var(--text3);
+}
+
+.provide-graph__legend-dot--missing {
+    background: var(--red);
+}
+
+.provide-graph__canvas-wrap {
     position: relative;
 }
 
-.edges-svg {
+.provide-graph__edges-svg {
     position: absolute;
     top: 0;
     left: 0;
     pointer-events: none;
 }
 
-.edge {
+.provide-graph__edge {
     stroke: var(--border);
     stroke-width: 1.5;
 }
 
-.graph-node {
+.provide-graph__node {
     position: absolute;
     display: flex;
     align-items: center;
@@ -725,35 +700,35 @@ const edges = computed<Edge[]>(() => {
     padding: 0 10px;
     height: 32px;
     border-radius: var(--radius);
-    border: 0.5px solid var(--border);
+    border: var(--tracker-border-width) solid var(--border);
     background: var(--bg3);
     cursor: pointer;
     transition:
-        border-color 0.12s,
-        background 0.12s;
+        border-color var(--tracker-transition-fast),
+        background var(--tracker-transition-fast);
     overflow: hidden;
     box-sizing: border-box;
     white-space: nowrap;
 }
 
-.graph-node:hover {
+.provide-graph__node:hover {
     border-color: var(--text3);
 }
 
-.graph-node.is-selected {
+.provide-graph__node--selected {
     border-color: var(--node-color);
     background: color-mix(in srgb, var(--node-color) 8%, transparent);
 }
 
-.node-dot {
+.provide-graph__node-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
 }
 
-.node-label {
-    font-size: 11px;
+.provide-graph__node-label {
+    font-size: var(--tracker-font-size-sm);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -764,53 +739,32 @@ const edges = computed<Edge[]>(() => {
     padding: 1px 4px;
 }
 
-.detail-panel {
-    flex-shrink: 0;
-    overflow: auto;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 12px;
-    background: var(--bg3);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.provide-graph__detail {
     min-height: 0;
+    gap: var(--tracker-space-1);
 }
 
-.detail-empty {
-    width: 280px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text3);
-    font-size: 12px;
-    border: 0.5px dashed var(--border);
-    border-radius: var(--radius-lg);
-    flex-shrink: 0;
-}
-
-.graph-empty {
+.provide-graph__graph-empty {
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 180px;
     color: var(--text3);
-    font-size: 12px;
+    font-size: var(--tracker-font-size-md);
 }
 
-.detail-header {
+.provide-graph__detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 6px;
+    margin-bottom: var(--tracker-gap-toolbar);
 }
 
-.section-label {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--text3);
+.provide-graph__detail-title {
+    font-size: var(--tracker-font-size-md);
+}
+
+.provide-graph__section-label {
     margin: 8px 0 5px;
 }
 
@@ -839,9 +793,18 @@ const edges = computed<Edge[]>(() => {
 }
 
 .row-warning {
-    font-size: 11px;
+    font-size: var(--tracker-font-size-sm);
     color: var(--amber);
     padding: 2px 0;
+}
+
+.provide-graph__compact-muted {
+    padding: 2px 0;
+    font-size: var(--tracker-font-size-sm);
+}
+
+.provide-graph__empty-detail {
+    margin-top: var(--tracker-space-2);
 }
 
 .row-consumers {
