@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractScriptBlock } from '../../src/transforms/transform-utils'
+import { extractScriptBlock } from '@observatory/transforms/transform-utils'
 
 describe('extractScriptBlock', () => {
     it('extracts content from a plain <script> block', () => {

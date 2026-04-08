@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { provideInjectPlugin } from '../../src/transforms/provide-inject-transform'
+import { provideInjectPlugin } from '@observatory/transforms/provide-inject-transform'
 
 const plugin = provideInjectPlugin()
 

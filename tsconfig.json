@@ -5,6 +5,11 @@
         "moduleResolution": "bundler",
         "strict": true,
         "lib": ["ESNext", "DOM"],
+        "paths": {
+            "@observatory/*": ["./src/*"],
+            "@observatory-client/*": ["./client/src/*"],
+            "@observatory-tests/*": ["./tests/*"]
+        },
         "forceConsistentCasingInFileNames": true
     },
     "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts", "vitest.config.ts"]

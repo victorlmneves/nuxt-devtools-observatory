@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData } from '../stores/observatory'
-import type { TransitionEntry } from '../../../src/types/snapshot'
+import { useResizablePane } from '@observatory-client/composables/useResizablePane'
+import { useObservatoryData } from '@observatory-client/stores/observatory'
+import type { TransitionEntry } from '@observatory/types/snapshot'
 
 const { transitions: entries, connected } = useObservatoryData()
+const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(260, 'observatory:transitions:detailWidth')
 
 type FilterMode = 'all' | 'cancelled' | 'active' | 'completed'
 const filter = ref<FilterMode>('all')
@@ -129,19 +131,19 @@ function directionColor(e: TransitionEntry): string {
 </script>
 
 <template>
-    <div class="timeline-root">
+    <div class="transition-timeline tracker-view">
         <!-- Stats bar -->
-        <div class="stats-row">
+        <div class="transition-timeline__stats tracker-stats-row">
             <div class="stat-card">
                 <div class="stat-val">{{ stats.total }}</div>
                 <div class="stat-label">total</div>
             </div>
             <div class="stat-card">
-                <div class="stat-val" style="color: var(--purple)">{{ stats.active }}</div>
+                <div class="stat-val stat-val--active">{{ stats.active }}</div>
                 <div class="stat-label">active</div>
             </div>
             <div class="stat-card">
-                <div class="stat-val" style="color: var(--red)">{{ stats.cancelled }}</div>
+                <div class="stat-val stat-val--error">{{ stats.cancelled }}</div>
                 <div class="stat-label">cancelled</div>
             </div>
             <div class="stat-card">
@@ -154,9 +156,9 @@ function directionColor(e: TransitionEntry): string {
         </div>
 
         <!-- Toolbar -->
-        <div class="toolbar">
-            <input v-model="search" type="search" placeholder="filter by name or component…" class="search-input" />
-            <div class="filter-group">
+        <div class="transition-timeline__toolbar tracker-toolbar">
+            <input v-model="search" type="search" placeholder="filter by name or component…" class="transition-timeline__search" />
+            <div class="transition-timeline__filters">
                 <button :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
                 <button :class="{ active: filter === 'active' }" @click="filter = 'active'">Active</button>
                 <button :class="{ active: filter === 'completed' }" @click="filter = 'completed'">Completed</button>
@@ -167,16 +169,16 @@ function directionColor(e: TransitionEntry): string {
         </div>
 
         <!-- Main content -->
-        <div class="content-area">
+        <div class="transition-timeline__content tracker-split">
             <!-- Timeline table -->
-            <div class="table-pane" :class="{ 'has-panel': selected }">
+            <div class="transition-timeline__table tracker-table-wrap">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th style="width: 110px">NAME</th>
-                            <th style="width: 80px">DIR</th>
-                            <th style="width: 90px">PHASE</th>
-                            <th style="width: 70px">DURATION</th>
+                            <th class="transition-timeline__col-name">NAME</th>
+                            <th class="transition-timeline__col-dir">DIR</th>
+                            <th class="transition-timeline__col-phase">PHASE</th>
+                            <th class="transition-timeline__col-duration">DURATION</th>
                             <th>COMPONENT</th>
                             <th>TIMELINE</th>
                         </tr>
@@ -189,24 +191,24 @@ function directionColor(e: TransitionEntry): string {
                             @click="selected = selected?.id === entry.id ? null : entry"
                         >
                             <td>
-                                <span class="mono" style="font-size: 11px; font-weight: 500">{{ entry.transitionName }}</span>
+                                <span class="transition-timeline__name mono">{{ entry.transitionName }}</span>
                             </td>
                             <td>
-                                <span class="mono" style="font-size: 11px" :style="{ color: directionColor(entry) }">
+                                <span class="transition-timeline__direction mono" :style="{ color: directionColor(entry) }">
                                     {{ directionLabel(entry) }}
                                 </span>
                             </td>
                             <td>
                                 <span class="badge" :class="phaseBadgeClass(entry.phase)">{{ entry.phase }}</span>
                             </td>
-                            <td class="mono" style="font-size: 11px; color: var(--text2)">
+                            <td class="transition-timeline__duration mono">
                                 {{ entry.durationMs !== undefined ? entry.durationMs + 'ms' : '—' }}
                             </td>
-                            <td class="muted" style="font-size: 11px">{{ entry.parentComponent }}</td>
-                            <td class="bar-cell">
-                                <div class="bar-track">
+                            <td class="transition-timeline__component muted">{{ entry.parentComponent }}</td>
+                            <td class="transition-timeline__bar-cell">
+                                <div class="transition-timeline__bar-track">
                                     <div
-                                        class="bar-fill"
+                                        class="transition-timeline__bar-fill"
                                         :style="{
                                             left: timelineGeometry[i]?.left + '%',
                                             width: Math.max(timelineGeometry[i]?.width ?? 1, 1) + '%',
@@ -219,7 +221,7 @@ function directionColor(e: TransitionEntry): string {
                         </tr>
 
                         <tr v-if="!filtered.length">
-                            <td colspan="6" style="text-align: center; color: var(--text3); padding: 24px">
+                            <td colspan="6" class="tracker-empty-cell">
                                 {{
                                     connected
                                         ? 'No transitions recorded yet — trigger one on the page.'
@@ -233,46 +235,59 @@ function directionColor(e: TransitionEntry): string {
 
             <!-- Detail panel -->
             <transition name="panel-slide">
-                <aside v-if="selected" class="detail-panel">
-                    <div class="panel-header">
-                        <span class="panel-title">{{ selected.transitionName }}</span>
-                        <button class="close-btn" @click="selected = null">✕</button>
+                <div v-if="selected" class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
+            </transition>
+            <transition name="panel-slide">
+                <aside v-if="selected" class="transition-timeline__detail" :style="{ width: detailWidth + 'px' }">
+                    <div class="transition-timeline__detail-header">
+                        <span class="transition-timeline__detail-title">{{ selected.transitionName }}</span>
+                        <button class="transition-timeline__close-btn" @click="selected = null">✕</button>
                     </div>
 
-                    <div class="panel-section">
-                        <div class="panel-row">
-                            <span class="panel-key">Direction</span>
-                            <span class="panel-val" :style="{ color: directionColor(selected) }">{{ directionLabel(selected) }}</span>
+                    <div class="transition-timeline__detail-section">
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Direction</span>
+                            <span class="transition-timeline__detail-val" :style="{ color: directionColor(selected) }">
+                                {{ directionLabel(selected) }}
+                            </span>
                         </div>
-                        <div class="panel-row">
-                            <span class="panel-key">Phase</span>
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Phase</span>
                             <span class="badge" :class="phaseBadgeClass(selected.phase)">{{ selected.phase }}</span>
                         </div>
-                        <div class="panel-row">
-                            <span class="panel-key">Component</span>
-                            <span class="panel-val mono">{{ selected.parentComponent }}</span>
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Component</span>
+                            <span class="transition-timeline__detail-val transition-timeline__detail-val--mono mono">
+                                {{ selected.parentComponent }}
+                            </span>
                         </div>
-                        <div v-if="selected.mode" class="panel-row">
-                            <span class="panel-key">Mode</span>
-                            <span class="panel-val mono">{{ selected.mode }}</span>
+                        <div v-if="selected.mode" class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Mode</span>
+                            <span class="transition-timeline__detail-val transition-timeline__detail-val--mono mono">
+                                {{ selected.mode }}
+                            </span>
                         </div>
                     </div>
 
-                    <div class="panel-section">
-                        <div class="panel-section-title">Timing</div>
-                        <div class="panel-row">
-                            <span class="panel-key">Start</span>
-                            <span class="panel-val mono">{{ selected.startTime.toFixed(2) }}ms</span>
+                    <div class="transition-timeline__detail-section">
+                        <div class="tracker-section-label transition-timeline__section-title">Timing</div>
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Start</span>
+                            <span class="transition-timeline__detail-val transition-timeline__detail-val--mono mono">
+                                {{ selected.startTime.toFixed(2) }}ms
+                            </span>
                         </div>
-                        <div class="panel-row">
-                            <span class="panel-key">End</span>
-                            <span class="panel-val mono">
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">End</span>
+                            <span class="transition-timeline__detail-val transition-timeline__detail-val--mono mono">
                                 {{ selected.endTime !== undefined ? selected.endTime.toFixed(2) + 'ms' : '—' }}
                             </span>
                         </div>
-                        <div class="panel-row">
-                            <span class="panel-key">Duration</span>
-                            <span class="panel-val mono" style="font-weight: 500">
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Duration</span>
+                            <span
+                                class="transition-timeline__detail-val transition-timeline__detail-val--mono transition-timeline__detail-val--strong mono"
+                            >
                                 {{
                                     selected.durationMs !== undefined
                                         ? selected.durationMs + 'ms'
@@ -284,23 +299,29 @@ function directionColor(e: TransitionEntry): string {
                         </div>
                     </div>
 
-                    <div class="panel-section">
-                        <div class="panel-section-title">Flags</div>
-                        <div class="panel-row">
-                            <span class="panel-key">Appear</span>
-                            <span class="panel-val" :style="{ color: selected.appear ? 'var(--amber)' : 'var(--text3)' }">
+                    <div class="transition-timeline__detail-section">
+                        <div class="tracker-section-label transition-timeline__section-title">Flags</div>
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Appear</span>
+                            <span
+                                class="transition-timeline__detail-val"
+                                :style="{ color: selected.appear ? 'var(--amber)' : 'var(--text3)' }"
+                            >
                                 {{ selected.appear ? 'yes' : 'no' }}
                             </span>
                         </div>
-                        <div class="panel-row">
-                            <span class="panel-key">Cancelled</span>
-                            <span class="panel-val" :style="{ color: selected.cancelled ? 'var(--red)' : 'var(--text3)' }">
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Cancelled</span>
+                            <span
+                                class="transition-timeline__detail-val"
+                                :style="{ color: selected.cancelled ? 'var(--red)' : 'var(--text3)' }"
+                            >
                                 {{ selected.cancelled ? 'yes' : 'no' }}
                             </span>
                         </div>
                     </div>
 
-                    <div v-if="selected.cancelled" class="cancel-notice">
+                    <div v-if="selected.cancelled" class="transition-timeline__notice transition-timeline__notice--cancelled">
                         This transition was cancelled mid-flight. The element may be stuck in a partial animation state if the interruption
                         was not handled with
                         <code>onEnterCancelled</code>
@@ -309,7 +330,10 @@ function directionColor(e: TransitionEntry): string {
                         .
                     </div>
 
-                    <div v-if="selected.phase === 'entering' || selected.phase === 'leaving'" class="active-notice">
+                    <div
+                        v-if="selected.phase === 'entering' || selected.phase === 'leaving'"
+                        class="transition-timeline__notice transition-timeline__notice--active"
+                    >
                         Transition is currently in progress. If it stays in this state longer than expected, the
                         <code>done()</code>
                         callback may not be getting called (JS-mode transition stall).
@@ -321,92 +345,65 @@ function directionColor(e: TransitionEntry): string {
 </template>
 
 <style scoped>
-.timeline-root {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-}
-
-/* ── Stats ───────────────────────────────────────────────────────────────── */
-.stats-row {
+.transition-timeline__stats {
     display: flex;
     gap: 10px;
-    padding: 12px 14px 0;
-    flex-shrink: 0;
 }
 
-.stat-card {
-    background: var(--bg2);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 8px 14px;
+.transition-timeline__stats :deep(.stat-card) {
     min-width: 72px;
     text-align: center;
+    padding: var(--tracker-space-2) 14px;
+    border: var(--tracker-border-width) solid var(--border);
 }
 
-.stat-val {
-    font-size: 20px;
+.transition-timeline__stats :deep(.stat-val) {
     font-weight: 600;
     font-family: var(--mono);
     line-height: 1.1;
 }
 
 .stat-unit {
-    font-size: 12px;
+    font-size: var(--tracker-font-size-md);
     opacity: 0.6;
     margin-left: 1px;
 }
 
-.stat-label {
-    font-size: 10px;
-    color: var(--text3);
-    margin-top: 2px;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-}
-
 /* ── Toolbar ─────────────────────────────────────────────────────────────── */
-.toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    flex-shrink: 0;
-    border-bottom: 0.5px solid var(--border);
+.transition-timeline__toolbar {
+    border-bottom: var(--tracker-border-width) solid var(--border);
+    padding-bottom: 10px;
 }
 
-.search-input {
+.transition-timeline__search {
     flex: 1;
     max-width: 260px;
 }
 
-.filter-group {
+.transition-timeline__filters {
     display: flex;
     gap: 4px;
 }
 
 /* ── Content ─────────────────────────────────────────────────────────────── */
-.content-area {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-    min-height: 0;
+.transition-timeline__content {
+    align-items: stretch;
 }
 
-.table-pane {
-    flex: 1;
+.transition-timeline__table {
     overflow: hidden auto;
     min-width: 0;
+    border: none;
+    border-radius: 0;
 }
 
 /* ── Timeline bar ────────────────────────────────────────────────────────── */
-.bar-cell {
+.transition-timeline__bar-cell {
     width: 200px;
     padding: 4px 8px;
 }
 
-.bar-track {
+.transition-timeline__bar-track {
     position: relative;
     height: 8px;
     background: var(--bg2);
@@ -414,26 +411,62 @@ function directionColor(e: TransitionEntry): string {
     overflow: hidden;
 }
 
-.bar-fill {
+.transition-timeline__bar-fill {
     position: absolute;
     top: 0;
     height: 100%;
     min-width: 3px;
     border-radius: 4px;
-    transition: width 0.15s;
+    transition: width var(--tracker-transition-ui);
+}
+
+.transition-timeline__col-name {
+    width: 110px;
+}
+
+.transition-timeline__col-dir {
+    width: 80px;
+}
+
+.transition-timeline__col-phase {
+    width: 90px;
+}
+
+.transition-timeline__col-duration {
+    width: 70px;
+}
+
+.transition-timeline__name {
+    font-size: var(--tracker-font-size-sm);
+    font-weight: 500;
+}
+
+.transition-timeline__direction {
+    font-size: var(--tracker-font-size-sm);
+}
+
+.transition-timeline__duration {
+    font-size: var(--tracker-font-size-sm);
+    color: var(--text2);
+}
+
+.transition-timeline__component {
+    font-size: var(--tracker-font-size-sm);
 }
 
 /* ── Detail panel ────────────────────────────────────────────────────────── */
-.detail-panel {
-    width: 260px;
+.transition-timeline__detail {
+    display: flex;
+    flex-direction: column;
     flex-shrink: 0;
-    border-left: 0.5px solid var(--border);
+    border: var(--tracker-border-width) solid var(--border);
+    border-radius: var(--radius-lg);
     overflow-y: auto;
     background: var(--bg3);
     padding: 0 0 16px;
 }
 
-.panel-header {
+.transition-timeline__detail-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -445,71 +478,73 @@ function directionColor(e: TransitionEntry): string {
     z-index: 1;
 }
 
-.panel-title {
+.transition-timeline__detail-title {
     font-family: var(--mono);
     font-size: 13px;
     font-weight: 500;
 }
 
-.close-btn {
+.transition-timeline__close-btn {
     border: none;
     background: transparent;
     color: var(--text3);
-    font-size: 11px;
+    font-size: var(--tracker-font-size-sm);
     padding: 2px 6px;
     cursor: pointer;
 }
 
-.panel-section {
+.transition-timeline__detail-section {
     padding: 10px 14px 6px;
-    border-bottom: 0.5px solid var(--border);
+    border-bottom: var(--tracker-border-width) solid var(--border);
 }
 
-.panel-section-title {
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+.transition-timeline__section-title {
     margin-bottom: 8px;
 }
 
-.panel-row {
+.transition-timeline__detail-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 8px;
     padding: 3px 0;
-    font-size: 12px;
+    font-size: var(--tracker-font-size-md);
 }
 
-.panel-key {
+.transition-timeline__detail-key {
     color: var(--text3);
     flex-shrink: 0;
 }
 
-.panel-val {
+.transition-timeline__detail-val {
     color: var(--text);
     text-align: right;
     word-break: break-all;
 }
 
-.cancel-notice,
-.active-notice {
+.transition-timeline__detail-val--mono {
+    font-family: var(--mono);
+}
+
+.transition-timeline__detail-val--strong {
+    font-weight: 500;
+}
+
+.transition-timeline__notice {
     margin: 10px 14px 0;
-    font-size: 11px;
+    font-size: var(--tracker-font-size-sm);
     line-height: 1.6;
     padding: 8px 10px;
     border-radius: var(--radius);
 }
 
-.cancel-notice {
+.transition-timeline__notice--cancelled {
     background: rgb(226 75 74 / 10%);
     color: var(--red);
     border: 0.5px solid rgb(226 75 74 / 30%);
 }
 
-.active-notice {
+.transition-timeline__notice--active {
     background: rgb(127 119 221 / 10%);
     color: var(--purple);
     border: 0.5px solid rgb(127 119 221 / 30%);

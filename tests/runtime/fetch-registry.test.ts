@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { setupFetchRegistry, __devFetchCall, __devFetchHandler } from '../../src/runtime/composables/fetch-registry'
+import { setupFetchRegistry, __devFetchCall, __devFetchHandler } from '@observatory/runtime/composables/fetch-registry'
 
 type DevFetchCallFn = Parameters<typeof __devFetchCall>[0]
 type DevFetchOptions = Parameters<typeof __devFetchCall>[2]

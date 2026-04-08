@@ -32,6 +32,9 @@ export default defineConfig({
     plugins: [importMetaShim],
     resolve: {
         alias: {
+            '@observatory': path.resolve('./src'),
+            '@observatory-client': path.resolve('./client/src'),
+            '@observatory-tests': path.resolve('./tests'),
             '#app': path.resolve('./tests/__mocks__/app.ts'),
         },
     },

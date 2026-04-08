@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { composableTrackerPlugin } from '../../src/transforms/composable-transform'
+import { composableTrackerPlugin } from '@observatory/transforms/composable-transform'
 
 const SKIP_LIST = [
     'useFetch',

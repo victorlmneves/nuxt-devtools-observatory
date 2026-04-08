@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fetchInstrumentPlugin } from '../../src/transforms/fetch-transform'
+import { fetchInstrumentPlugin } from '@observatory/transforms/fetch-transform'
 
 const plugin = fetchInstrumentPlugin()
 

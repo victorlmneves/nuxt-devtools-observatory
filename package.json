@@ -1,6 +1,6 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.29",
+    "version": "0.1.30",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "license": "MIT",
     "repository": {
@@ -34,7 +34,8 @@
         "client"
     ],
     "scripts": {
-        "dev": "nuxi dev playground",
+        "dev": "concurrently -r -n client,nuxt \"pnpm dev:client\" \"nuxi dev playground\"",
+        "dev:client": "vite build --watch --config client/vite.config.ts",
         "docs:clean": "rm -rf docs/.nuxt docs/.output",
         "docs:dev": "pnpm docs:clean && pnpm --dir docs dev",
         "docs:build": "pnpm docs:clean && pnpm --dir docs build",
@@ -44,7 +45,7 @@
         "build": "npm run build:client && nuxt-module-build build",
         "prepack": "npm run build",
         "lint": "eslint .",
-        "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .prettierignore && stylelint '**/*.{css,vue}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**'",
+        "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .prettierignore && stylelint '**/*.{css,vue}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --ignore-pattern 'docs/dist/**'",
         "typecheck": "vue-tsc --noEmit",
         "test": "vitest run",
         "test:watch": "vitest",
@@ -73,6 +74,7 @@
         "@types/node": "^25.5.0",
         "@vitejs/plugin-vue": "^6.0.0",
         "@vitest/coverage-v8": "^4.1.0",
+        "concurrently": "^9.2.1",
         "eslint": "^9.39.2",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-jsdoc": "^62.5.0",

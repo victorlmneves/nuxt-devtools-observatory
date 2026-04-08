@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp, defineComponent, h, provide } from 'vue'
-import { setupProvideInjectRegistry, __devProvide, __devInject } from '../../src/runtime/composables/provide-inject-registry'
+import { setupProvideInjectRegistry, __devProvide, __devInject } from '@observatory/runtime/composables/provide-inject-registry'
 
 type ObservatoryWindow = Window & {
     __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> }

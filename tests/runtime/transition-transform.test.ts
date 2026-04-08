@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { transitionTrackerPlugin } from '../../src/transforms/transition-transform'
+import { transitionTrackerPlugin } from '@observatory/transforms/transition-transform'
 
 // Helper to call resolveId on the plugin
 function makePlugin() {

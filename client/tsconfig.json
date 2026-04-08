@@ -6,9 +6,11 @@
         "strict": true,
         "jsx": "preserve",
         "lib": ["ESNext", "DOM"],
-        "baseUrl": ".",
         "forceConsistentCasingInFileNames": true,
         "paths": {
+            "@observatory/*": ["../src/*"],
+            "@observatory-client/*": ["./src/*"],
+            "@observatory-tests/*": ["../tests/*"],
             "*": ["../node_modules/*"]
         }
     },

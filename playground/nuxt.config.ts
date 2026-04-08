@@ -1,4 +1,12 @@
+import { fileURLToPath } from 'node:url'
+
 export default defineNuxtConfig({
+    alias: {
+        '@observatory': fileURLToPath(new URL('../src', import.meta.url)),
+        '@observatory-client': fileURLToPath(new URL('../client/src', import.meta.url)),
+        '@observatory-tests': fileURLToPath(new URL('../tests', import.meta.url)),
+    },
+
     modules: ['../src/module', '@pinia/nuxt'],
 
     imports: {

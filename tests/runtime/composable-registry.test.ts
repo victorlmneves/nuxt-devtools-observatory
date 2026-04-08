@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp, defineComponent, h, ref, reactive, watch, nextTick } from 'vue'
-import { setupComposableRegistry, __trackComposable } from '../../src/runtime/composables/composable-registry'
+import { setupComposableRegistry, __trackComposable } from '@observatory/runtime/composables/composable-registry'
 
 type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
 
