@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData } from '../stores/observatory'
-import { useResizablePane } from '../composables/useResizablePane'
-import type { TransitionEntry } from '../../../src/types/snapshot'
+import { useResizablePane } from '@observatory-client/composables/useResizablePane'
+import { useObservatoryData } from '@observatory-client/stores/observatory'
+import type { TransitionEntry } from '@observatory/types/snapshot'
 
 const { transitions: entries, connected } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(260, 'observatory:transitions:detailWidth')

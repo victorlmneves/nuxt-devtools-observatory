@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createApp, defineComponent, h, ref, nextTick } from 'vue'
-import { setupTransitionRegistry, createTrackedTransition } from '../../src/runtime/composables/transition-registry'
+import { setupTransitionRegistry, createTrackedTransition } from '@observatory/runtime/composables/transition-registry'
 
 // ── setupTransitionRegistry ──────────────────────────────────────────────
 

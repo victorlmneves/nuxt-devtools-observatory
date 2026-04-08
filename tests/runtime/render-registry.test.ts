@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { createApp, defineComponent, h, TriggerOpTypes, effect, type ComponentPublicInstance } from 'vue'
-import { setupRenderRegistry } from '../../src/runtime/composables/render-registry'
+import { setupRenderRegistry } from '@observatory/runtime/composables/render-registry'
 
 function makeNuxtApp(app: ReturnType<typeof createApp>) {
     return { vueApp: app }

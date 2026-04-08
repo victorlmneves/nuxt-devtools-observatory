@@ -9,6 +9,9 @@
         "baseUrl": ".",
         "forceConsistentCasingInFileNames": true,
         "paths": {
+            "@observatory/*": ["../src/*"],
+            "@observatory-client/*": ["./src/*"],
+            "@observatory-tests/*": ["../tests/*"],
             "*": ["../node_modules/*"]
         }
     },

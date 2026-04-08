@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useObservatoryData, setComposableMode, editComposableValue, openInEditor as openInEditorFromStore } from '../stores/observatory'
-import type { ComposableEntry as RuntimeComposableEntry } from '../../../src/types/snapshot'
+import {
+    useObservatoryData,
+    setComposableMode,
+    editComposableValue,
+    openInEditor as openInEditorFromStore,
+} from '@observatory-client/stores/observatory'
+import type { ComposableEntry as RuntimeComposableEntry } from '@observatory/types/snapshot'
 
 const { composables: rawEntries, connected, features, clearComposables } = useObservatoryData()
 

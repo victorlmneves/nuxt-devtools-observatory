@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useObservatoryData, openInEditor as openInEditorFromStore } from '../stores/observatory'
-import { useResizablePane } from '../composables/useResizablePane'
-import type { InjectEntry, ProvideEntry } from '../../../src/types/snapshot'
+import { useResizablePane } from '@observatory-client/composables/useResizablePane'
+import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
+import type { InjectEntry, ProvideEntry } from '@observatory/types/snapshot'
 
 interface TreeNodeData {
     id: string

@@ -1,9 +1,9 @@
 import { defineNuxtModule, addPlugin, addServerPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
 import { onDevToolsInitialized, extendServerRpc } from '@nuxt/devtools-kit'
 import sirv from 'sirv'
+import { composableTrackerPlugin } from './transforms/composable-transform'
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
-import { composableTrackerPlugin } from './transforms/composable-transform'
 import { transitionTrackerPlugin } from './transforms/transition-transform'
 import type { ObservatoryCommand, ObservatorySnapshot, ObservatoryClientFunctions, ObservatoryServerFunctions } from './types/rpc'
 

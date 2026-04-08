@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
@@ -8,6 +9,13 @@ export default defineConfig({
     // the DevTools iframe without needing a separate dev server on a different port.
     base: '/__observatory/',
     plugins: [vue()],
+    resolve: {
+        alias: {
+            '@observatory': path.resolve(__dirname, '../src'),
+            '@observatory-client': path.resolve(__dirname, './src'),
+            '@observatory-tests': path.resolve(__dirname, '../tests'),
+        },
+    },
     build: {
         outDir: './dist',
         emptyOutDir: true,

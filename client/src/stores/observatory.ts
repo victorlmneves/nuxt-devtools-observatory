@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { useDevtoolsClient, onDevtoolsClientConnected } from '@nuxt/devtools-kit/iframe-client'
-import type { ObservatorySnapshot, ObservatoryServerFunctions, ObservatoryClientFunctions } from '../../../src/types/rpc'
-import type { FetchEntry, ProvideEntry, InjectEntry, ComposableEntry, RenderEntry, TransitionEntry } from '../../../src/types/snapshot'
+import type { ObservatorySnapshot, ObservatoryServerFunctions, ObservatoryClientFunctions } from '@observatory/types/rpc'
+import type { FetchEntry, ProvideEntry, InjectEntry, ComposableEntry, RenderEntry, TransitionEntry } from '@observatory/types/snapshot'
 
 type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] }
 
