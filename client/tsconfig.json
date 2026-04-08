@@ -6,7 +6,6 @@
         "strict": true,
         "jsx": "preserve",
         "lib": ["ESNext", "DOM"],
-        "baseUrl": ".",
         "forceConsistentCasingInFileNames": true,
         "paths": {
             "@observatory/*": ["../src/*"],

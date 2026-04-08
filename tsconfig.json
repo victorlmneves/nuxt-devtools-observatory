@@ -3,13 +3,12 @@
         "target": "ESNext",
         "module": "ESNext",
         "moduleResolution": "bundler",
-        "baseUrl": ".",
         "strict": true,
         "lib": ["ESNext", "DOM"],
         "paths": {
-            "@observatory/*": ["src/*"],
-            "@observatory-client/*": ["client/src/*"],
-            "@observatory-tests/*": ["tests/*"]
+            "@observatory/*": ["./src/*"],
+            "@observatory-client/*": ["./client/src/*"],
+            "@observatory-tests/*": ["./tests/*"]
         },
         "forceConsistentCasingInFileNames": true
     },
