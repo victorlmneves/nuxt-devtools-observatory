@@ -12,12 +12,15 @@ Nuxt DevTools module providing five missing observability features:
 
 ## Documentation website
 
-An in-repo docs site is available in `docs/` (Docus + Nuxt Content).
+An in-repo documentation site lives in `docs/`. It is a custom Nuxt app built with
+Nuxt Content and Nuxt UI.
 
 - Run locally from repo root: `pnpm docs:dev`
 - Production build: `pnpm docs:build`
+- Generate a static build: `pnpm docs:generate`
+- Preview the generated output: `pnpm docs:preview`
 
-Vercel deployment is configured to use `docs/` as the project root directory.
+For Vercel deployment, set `docs/` as the project root directory.
 
 ## Installation
 
@@ -25,17 +28,20 @@ Vercel deployment is configured to use `docs/` as the project root directory.
 pnpm add nuxt-devtools-observatory
 ```
 
-You can configure all observability features and limits from your consuming project's `nuxt.config.ts` or `.env` file. All options in `.env.example` are supported as either environment variables or as properties under the `observatory` key in your Nuxt config. Options set in `nuxt.config.ts` take precedence over `.env` values.
+You can configure all observability features and limits from your consuming project's
+`nuxt.config.ts` under the `observatory` key. Common environment variables are listed
+in `.env.example`; use the `OBSERVATORY_*` names when configuring through `.env`.
+Options set in `nuxt.config.ts` take precedence over environment variables.
 
 **Available options:**
 
-- `instrumentServer` (boolean) — Instrument the server for SSR/Nitro fetch and composable tracking (set via `OBSERVATORY_INSTRUMENT_SERVER` or `VITE_OBSERVATORY_INSTRUMENT_SERVER`)
+- `instrumentServer` (boolean) — Instrument the server for SSR/Nitro fetch and composable tracking (set via `OBSERVATORY_INSTRUMENT_SERVER`)
 - `fetchDashboard` (boolean) — Enable useFetch dashboard
 - `provideInjectGraph` (boolean) — Enable provide/inject graph
 - `composableTracker` (boolean) — Enable composable tracker
 - `renderHeatmap` (boolean) — Enable render heatmap
 - `transitionTracker` (boolean) — Enable transition tracker
-- `composableNavigationMode` (string, 'route' | 'session') — Composable tracker mode: 'route' clears entries on page navigation (default), 'session' persists entries across navigation for historical inspection
+- `composableNavigationMode` (string, 'route' | 'session') — Composable tracker mode: 'route' clears entries on page navigation (default), 'session' persists entries across navigation for historical inspection (`OBSERVATORY_COMPOSABLE_NAVIGATION_MODE`)
 - `heatmapThresholdCount` (number) — Highlight components with N+ renders in heatmap
 - `heatmapThresholdTime` (number) — Highlight components with render time above this (ms)
 - `heatmapHideInternals` (boolean) — Hide node_modules and internal components in the render heatmap for a cleaner view
@@ -47,7 +53,8 @@ You can configure all observability features and limits from your consuming proj
 - `maxComposableEntries` (number) — Max composable entries to keep in memory
 - `maxRenderTimeline` (number) — Max render timeline events per entry
 
-See `.env.example` for all environment variable names.
+Feature tabs are enabled by default in development. `instrumentServer` defaults to
+`true` for SSR apps and `false` for SPA apps.
 
 ```ts
 // nuxt.config.ts
@@ -279,8 +286,17 @@ pnpm install
 # Run the playground
 pnpm dev
 
+# Run the docs site
+pnpm docs:dev
+
 # Run tests
 pnpm test
+
+# Run end-to-end checks
+pnpm test:e2e
+
+# Update screenshot fixtures
+pnpm capture:screenshots
 
 # Format + lint fixes
 pnpm format
@@ -328,7 +344,7 @@ client/
         └── TransitionTimeline.vue      ← Transition tracker tab UI
 
 playground/
-├── app.vue                             ← Demo app exercising all five features
+├── app.vue                             ← Demo app shell used during local development
 ├── nuxt.config.ts
 ├── composables/
 │   ├── useCounter.ts                   ← Clean composable (properly cleaned up)
@@ -345,6 +361,13 @@ playground/
 │       └── CancelledTransition.vue     ← Rapid toggle triggers enter-cancelled / leave-cancelled
 └── server/api/
     └── product.ts                      ← Mock API endpoint
+
+docs/
+├── app.vue                             ← Docs app shell
+├── content/                            ← Versioned guides and API pages
+├── layouts/                            ← Docs layouts
+├── pages/                              ← Landing page + content catch-all route
+└── server/api/                         ← Docs-specific API handlers
 ```
 
 ## License
