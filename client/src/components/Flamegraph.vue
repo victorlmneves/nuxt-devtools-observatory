@@ -11,7 +11,10 @@ interface Props {
     trace: TraceEntry
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
+const emit = defineEmits<{
+    'select-span': [span: TraceSpan]
+}>()
 
 const expandedNodes = ref<Set<string>>(new Set())
 
@@ -23,50 +26,48 @@ function toggleExpanded(spanId: string) {
     }
 }
 
-function buildTree(spans: TraceSpan[], level = 0): TraceNode[] {
-    const nodes: TraceNode[] = []
-    const rootSpans = spans.filter((s) => !s.parentSpanId)
-
-    for (const span of rootSpans) {
-        const node: TraceNode = {
+function buildTree(spans: TraceSpan[], parentId: string | undefined = undefined, level = 0): TraceNode[] {
+    return spans
+        .filter((s) => s.parentSpanId === parentId)
+        .map((span) => ({
             ...span,
-            children: buildTree(spans, level + 1).filter((n) => n.parentSpanId === span.id),
+            children: buildTree(spans, span.id, level + 1),
             level,
-        }
-        nodes.push(node)
-    }
-
-    return nodes
+        }))
 }
 
-const spanTree = computed(() => buildTree(props.trace.spans))
+const spanTree = computed(() => buildTree(props.trace.spans, undefined, 0))
 
-const maxDuration = computed(() => {
-    let max = 0
+const timelineDuration = computed(() => {
+    if (props.trace.durationMs && props.trace.durationMs > 0) {
+        return props.trace.durationMs
+    }
 
-    function traverse(nodes: TraceNode[]) {
-        for (const node of nodes) {
-            if (node.durationMs && node.durationMs > max) {
-                max = node.durationMs
-            }
+    if (props.trace.endTime && props.trace.endTime > props.trace.startTime) {
+        return props.trace.endTime - props.trace.startTime
+    }
 
-            traverse(node.children)
+    let maxEndOffset = 0
+
+    for (const span of props.trace.spans) {
+        const endTime = span.endTime ?? span.startTime + (span.durationMs ?? 0)
+        const endOffset = endTime - props.trace.startTime
+        if (endOffset > maxEndOffset) {
+            maxEndOffset = endOffset
         }
     }
 
-    traverse(spanTree.value)
-
-    return max || 1
+    return maxEndOffset || 1
 })
 
 function getBarPosition(span: TraceSpan): { left: string; width: string } {
     const traceStart = props.trace.startTime
-    const left = ((span.startTime - traceStart) / maxDuration.value) * 100
-    const width = ((span.durationMs || 0) / maxDuration.value) * 100
+    const left = ((span.startTime - traceStart) / timelineDuration.value) * 100
+    const width = ((span.durationMs || 0) / timelineDuration.value) * 100
 
     return {
-        left: `${Math.max(0, left)}%`,
-        width: `${Math.max(2, width)}%`,
+        left: `${Math.min(100, Math.max(0, left))}%`,
+        width: `${Math.max(2, Math.min(100 - Math.max(0, left), width))}%`,
     }
 }
 
@@ -129,8 +130,8 @@ const flattenedTree = computed(() => {
     <div class="flamegraph">
         <div class="flamegraph__timeline-header">
             <div class="flamegraph__time-label">0ms</div>
-            <div class="flamegraph__time-label">{{ Math.round(maxDuration / 2) }}ms</div>
-            <div class="flamegraph__time-label">{{ Math.round(maxDuration) }}ms</div>
+            <div class="flamegraph__time-label">{{ Math.round(timelineDuration / 2) }}ms</div>
+            <div class="flamegraph__time-label">{{ Math.round(timelineDuration) }}ms</div>
         </div>
 
         <div class="flamegraph__rows">
@@ -146,8 +147,10 @@ const flattenedTree = computed(() => {
                     >
                         ▶
                     </button>
-                    <span class="flamegraph__span-name">{{ node.name }}</span>
-                    <span class="flamegraph__span-type">{{ node.type }}</span>
+                    <button class="flamegraph__node-button" @click="emit('select-span', node)">
+                        <span class="flamegraph__span-name">{{ node.name }}</span>
+                        <span class="flamegraph__span-type">{{ node.type }}</span>
+                    </button>
                 </div>
 
                 <div class="flamegraph__bar-container">
@@ -156,6 +159,7 @@ const flattenedTree = computed(() => {
                         :class="getSpanColorClass(node.type)"
                         :style="getBarPosition(node)"
                         :title="`${node.name} - ${formatDuration(node.durationMs)} (${node.status})`"
+                        @click="emit('select-span', node)"
                     >
                         <span class="flamegraph__bar-label">{{ formatDuration(node.durationMs) }}</span>
                     </div>
@@ -172,7 +176,9 @@ const flattenedTree = computed(() => {
     display: flex;
     flex-direction: column;
     height: 100%;
-    overflow: auto;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
     font-family: var(--mono);
     font-size: 11px;
 }
@@ -184,6 +190,7 @@ const flattenedTree = computed(() => {
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
+    min-width: 0;
     background: var(--bg-secondary);
     z-index: 10;
 }
@@ -197,6 +204,7 @@ const flattenedTree = computed(() => {
 .flamegraph__rows {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .flamegraph__row {
@@ -204,6 +212,7 @@ const flattenedTree = computed(() => {
     height: 28px;
     border-bottom: 1px solid var(--border-subtle);
     align-items: center;
+    min-width: 0;
 }
 
 .flamegraph__label {
@@ -214,6 +223,19 @@ const flattenedTree = computed(() => {
     gap: 6px;
     padding-right: 8px;
     overflow: hidden;
+}
+
+.flamegraph__node-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
 }
 
 .flamegraph__expand-btn {
@@ -260,8 +282,10 @@ const flattenedTree = computed(() => {
 .flamegraph__bar-container {
     flex: 1;
     height: 100%;
+    min-width: 0;
     position: relative;
     padding: 4px 0;
+    overflow: hidden;
 }
 
 .flamegraph__bar {

@@ -15,7 +15,16 @@ const selectedSpan = ref<TraceSpan | undefined>(undefined)
 const viewMode = ref<'overview' | 'flamegraph' | 'waterfall'>('overview')
 const showFilters = ref(false)
 
-const { filterTraces: applyFilters } = useTraceFilter()
+const {
+    searchQuery,
+    selectedSpanTypes,
+    minDuration,
+    maxDuration,
+    routeFilter,
+    filterTraces: applyFilters,
+    clearFilters,
+    hasActiveFilters,
+} = useTraceFilter()
 
 const sortedTraces = computed(() => {
     return [...traces.value].sort((a, b) => b.startTime - a.startTime)
@@ -23,6 +32,14 @@ const sortedTraces = computed(() => {
 
 const filteredTraces = computed(() => {
     return applyFilters(sortedTraces.value)
+})
+
+const traceCountLabel = computed(() => {
+    if (!hasActiveFilters.value) {
+        return `${sortedTraces.value.length} traces`
+    }
+
+    return `Showing ${filteredTraces.value.length} of ${sortedTraces.value.length} traces`
 })
 
 const selectedTrace = computed(() => {
@@ -47,7 +64,12 @@ function selectTrace(trace: TraceEntry) {
 }
 
 function handleClearFilters() {
+    clearFilters()
     selectedSpan.value = undefined
+}
+
+function handleSpanTypesUpdate(value: Set<string>) {
+    selectedSpanTypes.value = value
 }
 </script>
 
@@ -57,7 +79,7 @@ function handleClearFilters() {
         <div class="trace-viewer__header tracker-toolbar">
             <div class="trace-viewer__title">Trace Viewer</div>
             <div class="trace-viewer__header-actions">
-                <div class="trace-viewer__count muted text-sm">{{ filteredTraces.length }}/{{ sortedTraces.length }} traces</div>
+                <div class="trace-viewer__count muted text-sm">{{ traceCountLabel }}</div>
                 <button
                     :class="{ 'trace-viewer__filter-btn--active': showFilters }"
                     class="trace-viewer__filter-btn"
@@ -70,7 +92,22 @@ function handleClearFilters() {
         </div>
 
         <!-- Filters panel -->
-        <TraceFilter v-if="showFilters" :traces="sortedTraces" @clear-filters="handleClearFilters" />
+        <TraceFilter
+            v-if="showFilters"
+            :traces="sortedTraces"
+            :search-query="searchQuery"
+            :selected-span-types="selectedSpanTypes"
+            :min-duration="minDuration"
+            :max-duration="maxDuration"
+            :route-filter="routeFilter"
+            :has-active-filters="hasActiveFilters"
+            @update:search="searchQuery = $event"
+            @update:types="handleSpanTypesUpdate"
+            @update:min-duration="minDuration = $event"
+            @update:max-duration="maxDuration = $event"
+            @update:route="routeFilter = $event"
+            @clear-filters="handleClearFilters"
+        />
 
         <!-- Main content -->
         <div class="trace-viewer__container">
@@ -186,7 +223,7 @@ function handleClearFilters() {
 
                         <!-- Flamegraph -->
                         <div v-if="viewMode === 'flamegraph'" class="trace-viewer__flamegraph">
-                            <Flamegraph :trace="selectedTrace" />
+                            <Flamegraph :trace="selectedTrace" @select-span="selectedSpan = $event" />
                         </div>
 
                         <!-- Waterfall -->
@@ -285,9 +322,6 @@ function handleClearFilters() {
     letter-spacing: 0.5px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-}
-
-.trace-viewer__list-title {
 }
 
 .trace-viewer__table-wrap {

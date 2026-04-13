@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { TraceEntry } from '@observatory/types/snapshot'
 
 export interface TraceFilterOptions {
     searchQuery: string
@@ -78,8 +78,10 @@ export function useTraceFilter() {
         min: number,
         max: number
     ): boolean {
-        if (!trace.durationMs) {
-            return false
+        const hasExplicitDurationFilter = min > 0 || max < Infinity
+
+        if (trace.durationMs === undefined) {
+            return !hasExplicitDurationFilter
         }
 
         return trace.durationMs >= min && trace.durationMs <= max

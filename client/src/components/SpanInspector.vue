@@ -45,20 +45,30 @@ function formatDuration(durationMs?: number) {
     return `${(durationMs / 1000).toFixed(2)}s`
 }
 
-function formatTime(timestamp: number) {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        fractionalSecondDigits: 3,
-    })
-}
-
 function formatRelativeTime(timestamp: number) {
     const relative = timestamp - props.trace.startTime
 
-    return `+${Math.round(relative * 100) / 100}ms`
+    if (Math.abs(relative) < 1) {
+        return `+${(relative * 1000).toFixed(1)}μs`
+    }
+
+    if (Math.abs(relative) < 1000) {
+        return `+${relative.toFixed(3)}ms`
+    }
+
+    return `+${(relative / 1000).toFixed(3)}s`
+}
+
+function getDisplayEndTime(span: TraceSpan) {
+    if (span.endTime !== undefined) {
+        return span.endTime
+    }
+
+    if (span.durationMs !== undefined) {
+        return span.startTime + span.durationMs
+    }
+
+    return span.startTime
 }
 
 function getStatusColor(status: string): string {
@@ -115,9 +125,9 @@ function getSpanColorClass(type: string) {
                         <span class="span-inspector__label">Start Time</span>
                         <span class="span-inspector__value mono">{{ formatRelativeTime(span.startTime) }}</span>
                     </div>
-                    <div v-if="span.endTime" class="span-inspector__property">
+                    <div class="span-inspector__property">
                         <span class="span-inspector__label">End Time</span>
-                        <span class="span-inspector__value mono">{{ formatRelativeTime(span.endTime) }}</span>
+                        <span class="span-inspector__value mono">{{ formatRelativeTime(getDisplayEndTime(span)) }}</span>
                     </div>
                 </div>
             </div>
