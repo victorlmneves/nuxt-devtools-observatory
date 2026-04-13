@@ -1,5 +1,8 @@
 import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
 import type { Slots } from 'vue'
+import { startSpan } from '../tracing/tracing'
+import type { Span } from '../tracing/trace'
+import { traceStore } from '../tracing/traceStore'
 
 export interface TransitionEntry {
     id: string
@@ -20,8 +23,8 @@ const MAX_TRANSITIONS =
     typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500
 
 export function setupTransitionRegistry() {
-    // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
-    const entries = new Map<string, TransitionEntry>()
+    const activeSpans = new Map<string, ReturnType<typeof startSpan>>()
+    const entryState = new Map<string, Omit<TransitionEntry, 'durationMs'>>()
 
     // FIX #2: dirty flag + cached snapshot string.
     // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
@@ -34,48 +37,24 @@ export function setupTransitionRegistry() {
     }
 
     function register(entry: TransitionEntry) {
-        // Evict the oldest entry when the cap is reached to prevent unbounded growth
-        if (entries.size >= MAX_TRANSITIONS) {
-            const oldestKey = entries.keys().next().value
-            if (oldestKey !== undefined) {
-                entries.delete(oldestKey)
-            }
-        }
+        const spanHandle = startSpan({
+            name: `transition:${entry.transitionName}`,
+            type: 'transition',
+            metadata: {
+                id: entry.id,
+                transitionName: entry.transitionName,
+                parentComponent: entry.parentComponent,
+                direction: entry.direction,
+                phase: entry.phase,
+                cancelled: entry.cancelled,
+                appear: entry.appear,
+                mode: entry.mode,
+            },
+            startTime: entry.startTime,
+        })
 
-        entries.set(entry.id, entry)
-        markDirty()
-        emit('transition:register', entry)
-    }
-
-    function clear() {
-        entries.clear()
-        markDirty()
-        emit('transition:clear', {})
-    }
-
-    function update(id: string, patch: Partial<TransitionEntry>) {
-        const existing = entries.get(id)
-
-        if (!existing) {
-            return
-        }
-
-        const updated: TransitionEntry = { ...existing, ...patch }
-
-        if (patch.endTime !== undefined) {
-            updated.durationMs = Math.round((patch.endTime - existing.startTime) * 10) / 10
-        }
-
-        entries.set(id, updated)
-        markDirty()
-        emit('transition:update', updated)
-    }
-
-    function sanitize(entry: TransitionEntry): TransitionEntry {
-        // Build the serialisable snapshot by copying only the known scalar fields
-        // rather than using for..in + delete, which iterates the prototype chain
-        // and would break if the TransitionEntry type ever gains function properties.
-        return {
+        activeSpans.set(entry.id, spanHandle)
+        entryState.set(entry.id, {
             id: entry.id,
             transitionName: entry.transitionName,
             parentComponent: entry.parentComponent,
@@ -83,15 +62,135 @@ export function setupTransitionRegistry() {
             phase: entry.phase,
             startTime: entry.startTime,
             endTime: entry.endTime,
-            durationMs: entry.durationMs,
             cancelled: entry.cancelled,
             appear: entry.appear,
             mode: entry.mode,
+        })
+
+        markDirty()
+        emit('transition:register', entry)
+    }
+
+    function clear() {
+        activeSpans.clear()
+        entryState.clear()
+        markDirty()
+        emit('transition:clear', {})
+    }
+
+    function update(id: string, patch: Partial<TransitionEntry>) {
+        const existing = entryState.get(id)
+
+        if (!existing) {
+            return
+        }
+
+        const updated: Omit<TransitionEntry, 'durationMs'> = { ...existing, ...patch }
+        entryState.set(id, updated)
+
+        const active = activeSpans.get(id)
+
+        if (active) {
+            active.span.metadata = {
+                ...(active.span.metadata ?? {}),
+                id: updated.id,
+                transitionName: updated.transitionName,
+                parentComponent: updated.parentComponent,
+                direction: updated.direction,
+                phase: updated.phase,
+                cancelled: updated.cancelled,
+                appear: updated.appear,
+                mode: updated.mode,
+            }
+
+            if (patch.endTime !== undefined) {
+                active.end({
+                    endTime: patch.endTime,
+                    status: patch.cancelled === true ? 'cancelled' : 'ok',
+                    metadata: {
+                        phase: updated.phase,
+                        cancelled: updated.cancelled,
+                    },
+                })
+                activeSpans.delete(id)
+            }
+        }
+
+        markDirty()
+        emit('transition:update', toTransitionEntry(updated, active?.span))
+    }
+
+    function toTransitionEntry(base: Omit<TransitionEntry, 'durationMs'>, span?: Span): TransitionEntry {
+        const durationMs = span?.durationMs ?? (base.endTime !== undefined ? Math.round((base.endTime - base.startTime) * 10) / 10 : undefined)
+
+        return {
+            id: base.id,
+            transitionName: base.transitionName,
+            parentComponent: base.parentComponent,
+            direction: base.direction,
+            phase: base.phase,
+            startTime: base.startTime,
+            endTime: base.endTime,
+            durationMs,
+            cancelled: base.cancelled,
+            appear: base.appear,
+            mode: base.mode,
         }
     }
 
     function getAll(): TransitionEntry[] {
-        return [...entries.values()].map(sanitize)
+        const spans = traceStore
+            .getAllTraces()
+            .flatMap((trace) => trace.spans)
+            .filter((span) => span.type === 'transition')
+            .sort((a, b) => a.startTime - b.startTime)
+
+        const entries = spans.map((span) => {
+            const metadata = span.metadata ?? {}
+            const id = typeof metadata.id === 'string' ? metadata.id : span.id
+            const transitionName = typeof metadata.transitionName === 'string' ? metadata.transitionName : 'default'
+            const parentComponent = typeof metadata.parentComponent === 'string' ? metadata.parentComponent : 'unknown'
+            const direction = metadata.direction === 'leave' ? 'leave' : 'enter'
+            const knownPhase = metadata.phase
+            const phase: TransitionEntry['phase'] =
+                knownPhase === 'entering' ||
+                knownPhase === 'entered' ||
+                knownPhase === 'leaving' ||
+                knownPhase === 'left' ||
+                knownPhase === 'enter-cancelled' ||
+                knownPhase === 'leave-cancelled' ||
+                knownPhase === 'interrupted'
+                    ? knownPhase
+                    : span.endTime
+                      ? direction === 'enter'
+                          ? 'entered'
+                          : 'left'
+                      : direction === 'enter'
+                        ? 'entering'
+                        : 'leaving'
+
+            return {
+                id,
+                transitionName,
+                parentComponent,
+                direction,
+                phase,
+                startTime: span.startTime,
+                endTime: span.endTime,
+                durationMs: span.durationMs,
+                cancelled: metadata.cancelled === true || span.status === 'cancelled',
+                appear: metadata.appear === true,
+                mode: typeof metadata.mode === 'string' ? metadata.mode : undefined,
+            }
+        })
+
+        const overflow = entries.length - MAX_TRANSITIONS
+
+        if (overflow > 0) {
+            return entries.slice(overflow)
+        }
+
+        return entries
     }
 
     /**
@@ -107,7 +206,7 @@ export function setupTransitionRegistry() {
         }
 
         try {
-            cachedSnapshot = JSON.stringify([...entries.values()].map(sanitize)) ?? '[]'
+            cachedSnapshot = JSON.stringify(getAll()) ?? '[]'
         } catch {
             cachedSnapshot = '[]'
         }

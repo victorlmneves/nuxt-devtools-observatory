@@ -5,6 +5,10 @@ import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
 import { setupRenderRegistry } from './composables/render-registry'
 import { setupTransitionRegistry } from './composables/transition-registry'
+import { setupComponentInstrumentation } from './instrumentation/component'
+import { setupFetchInstrumentation } from './instrumentation/fetch'
+import { setupRouteInstrumentation } from './instrumentation/route'
+import { traceStore } from './tracing/traceStore'
 import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
 
 interface ObservatoryWindow extends Window {
@@ -78,6 +82,9 @@ export default defineNuxtPlugin(() => {
     // so that shims injected by the Vite transforms find the registry already
     // in place rather than silently no-opping on the first render.
     if (import.meta.client) {
+        setupComponentInstrumentation(nuxtApp)
+        setupFetchInstrumentation(nuxtApp)
+
         // Always clear any previous registry to avoid cross-project state
         delete (window as ObservatoryWindow).__observatory__
         ;(window as ObservatoryWindow).__observatory__ = registries
@@ -190,6 +197,10 @@ export default defineNuxtPlugin(() => {
     if (import.meta.client) {
         const router = useRouter()
 
+        setupRouteInstrumentation(nuxtApp, {
+            getCurrentPath: () => router.currentRoute.value.path ?? '/',
+        })
+
         // router.beforeEach fires BEFORE Vue renders anything for the new route —
         // no new setup() has run yet, so clearing here is safe and race-free.
         // page:start (Suspense.onPending) fires AFTER synchronous setup() runs,
@@ -267,6 +278,7 @@ export default defineNuxtPlugin(() => {
             composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
             renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
             transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
+            traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
         })
 
         lastSnapshotSignature = JSON.stringify(snapshot)
@@ -309,6 +321,28 @@ export default defineNuxtPlugin(() => {
                 hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
         }
 
+        snapshot.traces = traceStore.getAllTraces().map((trace) => ({
+            id: trace.id,
+            name: trace.name,
+            startTime: trace.startTime,
+            endTime: trace.endTime,
+            durationMs: trace.durationMs,
+            status: trace.status,
+            metadata: trace.metadata,
+            spans: trace.spans.map((span) => ({
+                id: span.id,
+                traceId: span.traceId,
+                parentSpanId: span.parentSpanId,
+                name: span.name,
+                type: span.type,
+                startTime: span.startTime,
+                endTime: span.endTime,
+                durationMs: span.durationMs,
+                status: span.status,
+                metadata: span.metadata,
+            })),
+        }))
+
         snapshot.features = {
             fetchDashboard: !!registries.fetch,
             provideInjectGraph: !!registries.provideInject,
@@ -316,6 +350,7 @@ export default defineNuxtPlugin(() => {
             composableNavigationMode,
             renderHeatmap: !!registries.render,
             transitionTracker: !!registries.transition,
+            traceViewer: true,
         }
 
         return snapshot as ObservatorySnapshot

@@ -1,5 +1,7 @@
 import type { ComponentPublicInstance } from 'vue'
 import { useRuntimeConfig } from '#app'
+import type { Span } from '../tracing/trace'
+import { traceStore } from '../tracing/traceStore'
 
 interface DevtoolsWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
@@ -53,22 +55,14 @@ export interface RenderEntry {
  * @returns {object} An object containing the render registry's API methods: `getAll()`, `getSnapshot()`, `snapshot()`, `reset()`, and `setRoute()`.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
-    // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
     const entries = new Map<number, RenderEntry>()
-    const pendingTriggeredRenders = new Set<number>()
-    const renderStartTimes = new Map<number, number>()
-    // Current route, updated by the plugin on every navigation
     let currentRoute = '/'
-    // Allow configuration via Nuxt runtime config
-    const config = useRuntimeConfig().public.observatory as { heatmapHideInternals?: boolean; maxRenderTimeline?: number }
+    const config = useRuntimeConfig().public.observatory as { heatmapHideInternals?: boolean }
     const MAX_TIMELINE = config.maxRenderTimeline ?? 100
     const HIDE_INTERNALS = config.heatmapHideInternals ?? false
-
-    // FIX #2: dirty flag + cached snapshot string.
-    // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
-    // re-serializes only when dirty, returning the cached string otherwise.
     let dirty = true
     let cachedSnapshot = '[]'
+    const liveElements = new Map<number, Element | undefined>()
 
     function markDirty() {
         dirty = true
@@ -114,144 +108,98 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         return entries.get(uid)!
     }
 
-    // UIDs whose rect needs to be refreshed on the next getAll() call.
-    // getBoundingClientRect() forces a layout reflow — we defer it out of the
-    // hot mixin path and batch it lazily when a snapshot is actually requested.
-    const dirtyRects = new Set<number>()
 
-    function markRectDirty(uid: number) {
-        dirtyRects.add(uid)
-        markDirty()
-    }
+    function refreshEntryRect(uid: number) {
+        const entry = entries.get(uid)
 
-    function flushDirtyRects() {
-        if (dirtyRects.size === 0) {
+        if (!entry) {
             return
         }
 
-        for (const uid of dirtyRects) {
-            const entry = entries.get(uid)
+        const el = liveElements.get(uid)
 
-            if (!entry) {
-                dirtyRects.delete(uid)
-                continue
-            }
-
-            // Instance reference is not stored — re-read from the Vue internals.
-            // app.config.globalProperties.$nuxt gives access, but the simplest
-            // approach is to store the $el reference directly on the entry when
-            // the component mounts, and drop it on unmount.
-            const el = _liveElements.get(uid)
-
-            if (!el) {
-                dirtyRects.delete(uid)
-                continue
-            }
-
-            const rect: DOMRect | undefined = el.getBoundingClientRect?.()
-            entry.rect = rect
-                ? {
-                      x: Math.round(rect.x),
-                      y: Math.round(rect.y),
-                      width: Math.round(rect.width),
-                      height: Math.round(rect.height),
-                      top: Math.round(rect.top),
-                      left: Math.round(rect.left),
-                  }
-                : undefined
-
-            dirtyRects.delete(uid)
-        }
-    }
-
-    // Holds the live $el reference for each mounted component uid.
-    // Populated in mounted(), cleared in unmounted().
-    // Typed as any to avoid importing Element which isn't always available (SSR).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const _liveElements = new Map<number, any>()
-
-    function removeEntry(instance: ComponentPublicInstance) {
-        const uid = instance.$.uid
-        entries.delete(uid)
-        markDirty()
-    }
-
-    function startRenderTimer(uid: number) {
-        if (typeof performance === 'undefined') {
+        if (!el?.getBoundingClientRect) {
             return
         }
 
-        renderStartTimes.set(uid, performance.now())
-    }
-
-    function recordRenderDuration(entry: RenderEntry, kind: 'mount' | 'update') {
-        if (typeof performance === 'undefined') {
-            return
+        const rect = el.getBoundingClientRect()
+        entry.rect = {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            top: Math.round(rect.top),
+            left: Math.round(rect.left),
         }
-
-        const startedAt = renderStartTimes.get(entry.uid)
-
-        if (startedAt === undefined) {
-            return
-        }
-
-        renderStartTimes.delete(entry.uid)
-        const durationMs = Math.max(performance.now() - startedAt, 0)
-        entry.totalMs += durationMs
-        // avgMs covers both initial mounts and re-renders since both take real time.
-        // Use rerenders + mountCount as the denominator; guard against 0 with max(,1).
-        const totalEvents = (entry.rerenders ?? 0) + Math.max(entry.mountCount, 1)
-        entry.avgMs = Math.round((entry.totalMs / totalEvents) * 10) / 10
-
-        // Append to per-component timeline
-        const lastTrigger = entry.triggers.length > 0 ? entry.triggers[entry.triggers.length - 1] : undefined
-        const event: RenderEvent = {
-            kind,
-            t: startedAt,
-            durationMs: Math.round(durationMs * 10) / 10,
-            triggerKey: kind === 'update' && lastTrigger ? `${lastTrigger.type}: ${lastTrigger.key}` : undefined,
-            route: currentRoute,
-        }
-
-        entry.timeline.push(event)
-
-        if (entry.timeline.length > MAX_TIMELINE) {
-            entry.timeline.shift()
-        }
-
-        markDirty()
     }
 
     function reset() {
-        pendingTriggeredRenders.clear()
-        renderStartTimes.clear()
-        dirtyRects.clear()
-
         for (const entry of entries.values()) {
-            // Mark every component that survives this reset as persistent now,
-            // rather than snapshotting all UIDs into a new Set and checking later.
-            // This avoids allocating a full Set<number> on every navigation.
             entry.isPersistent = true
             entry.rerenders = 0
             entry.totalMs = 0
             entry.avgMs = 0
             entry.triggers = []
             entry.timeline = []
-            // mountCount intentionally NOT reset — it reflects how many times this
-            // component mounted during the current page's lifetime. Resetting it
-            // would make the second mount appear to be a first mount and bypass
-            // the re-mount → rerender counting logic.
         }
 
         markDirty()
     }
 
-    // Hook Vue's global mixin for render tracking
-    nuxtApp.vueApp.mixin({
-        beforeMount(this: ComponentPublicInstance) {
-            startRenderTimer(this.$.uid)
-        },
+    function aggregateFromComponentSpans() {
+        const componentSpans = traceStore
+            .getAllTraces()
+            .flatMap((trace) => trace.spans)
+            .filter((span) => span.type === 'component')
 
+        const spansByUid = new Map<number, Span[]>()
+
+        for (const span of componentSpans) {
+            const uidValue = span.metadata?.uid
+            const uid = typeof uidValue === 'number' ? uidValue : Number(uidValue)
+
+            if (!Number.isFinite(uid)) {
+                continue
+            }
+
+            const list = spansByUid.get(uid) ?? []
+            list.push(span)
+            spansByUid.set(uid, list)
+        }
+
+        for (const [uid, entry] of entries.entries()) {
+            const spans = spansByUid.get(uid) ?? []
+            spans.sort((a, b) => a.startTime - b.startTime)
+
+            const timeline: RenderEvent[] = spans.slice(-MAX_TIMELINE).map((span) => {
+                const lifecycle = span.metadata?.lifecycle === 'mounted' ? 'mount' : 'update'
+                const routeValue = span.metadata?.route
+                const route = typeof routeValue === 'string' && routeValue.length > 0 ? routeValue : entry.route
+
+                return {
+                    kind: lifecycle,
+                    t: span.startTime,
+                    durationMs: Math.round((span.durationMs ?? 0) * 10) / 10,
+                    route,
+                }
+            })
+
+            const mountCount = spans.filter((span) => span.metadata?.lifecycle === 'mounted').length
+            const rerenders = spans.filter((span) => span.metadata?.lifecycle !== 'mounted').length
+            const totalMs = spans.reduce((sum, span) => sum + (span.durationMs ?? 0), 0)
+            const eventsCount = Math.max(mountCount + rerenders, 1)
+
+            entry.mountCount = mountCount
+            entry.rerenders = rerenders
+            entry.totalMs = Math.round(totalMs * 10) / 10
+            entry.avgMs = Math.round((totalMs / eventsCount) * 10) / 10
+            entry.timeline = timeline
+            entry.triggers = []
+            refreshEntryRect(uid)
+        }
+    }
+
+    nuxtApp.vueApp.mixin({
         mounted(this: ComponentPublicInstance) {
             const entry = ensureEntry(this)
 
@@ -259,58 +207,17 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 return
             }
 
-            entry.mountCount++
-
-            // isPersistent is set directly in reset() for any component that
-            // survives a navigation — no uid snapshot needed here.
-
-            // Initial mount is NOT a re-render — don't count it.
-            // Only count if the component re-mounts on the same page (v-if toggle etc.)
             const isHydration = options.isHydrating?.() ?? false
 
-            if (isHydration && entry.mountCount === 1) {
+            if (isHydration && entry.mountCount === 0) {
                 entry.isHydrationMount = true
-            } else if (entry.mountCount > 1) {
-                entry.rerenders++
             }
 
-            _liveElements.set(entry.uid, this.$el)
-            markRectDirty(entry.uid)
-
-            // Persistent components re-mounting after navigation are NOT new renders —
-            // they kept their DOM. Only record the timeline event for genuine first mounts
-            // and explicit re-mounts (v-if etc.), not navigation-triggered re-attachments.
-            if (!entry.isPersistent || entry.mountCount === 1) {
-                recordRenderDuration(entry, 'mount')
-            } else {
-                // Still clear the start time so it doesn't bleed into the next event
-                renderStartTimes.delete(entry.uid)
-            }
+            liveElements.set(entry.uid, this.$el as Element)
+            refreshEntryRect(entry.uid)
 
             markDirty()
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
-        },
-
-        beforeUpdate(this: ComponentPublicInstance) {
-            startRenderTimer(this.$.uid)
-        },
-
-        renderTriggered(this: ComponentPublicInstance, { key, type }: { key: string; type: string }) {
-            const entry = ensureEntry(this)
-
-            if (!entry) {
-                return
-            }
-
-            entry.triggers.push({ key: String(key), type, timestamp: performance.now() })
-            pendingTriggeredRenders.add(entry.uid)
-
-            // Keep last 50 triggers per component
-            if (entry.triggers.length > 50) {
-                entry.triggers.shift()
-            }
-
-            markDirty()
         },
 
         updated(this: ComponentPublicInstance) {
@@ -320,25 +227,17 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 return
             }
 
-            // Count every reactive update as a re-render.
-            // renderTriggered (above) already captured which deps triggered it.
-            // We clear the pending flag regardless — it was only needed when
-            // updated() also had to filter out initial mounts (no longer the case).
-            pendingTriggeredRenders.delete(entry.uid)
-            entry.rerenders++
-
-            markRectDirty(entry.uid)
-            recordRenderDuration(entry, 'update')
+            liveElements.set(entry.uid, this.$el as Element)
+            refreshEntryRect(entry.uid)
             emit('render:update', { uid: entry.uid, renders: entry.rerenders })
+            markDirty()
         },
 
         unmounted(this: ComponentPublicInstance) {
             const uid = this.$.uid
-            pendingTriggeredRenders.delete(uid)
-            renderStartTimes.delete(uid)
-            dirtyRects.delete(uid)
-            _liveElements.delete(uid)
-            removeEntry(this)
+            liveElements.delete(uid)
+            entries.delete(uid)
+            markDirty()
             emit('render:remove', { uid })
         },
     })
@@ -373,9 +272,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     }
 
     function getAll(): RenderEntry[] {
-        // Flush any pending getBoundingClientRect() calls now — batched here so
-        // they never run in the hot mixin path during normal rendering.
-        flushDirtyRects()
+        aggregateFromComponentSpans()
 
         return [...entries.values()].map(sanitize)
     }
@@ -394,8 +291,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             return cachedSnapshot
         }
 
-        // Flush pending rect reads before serializing — same guarantee as getAll()
-        flushDirtyRects()
+        aggregateFromComponentSpans()
 
         try {
             cachedSnapshot = JSON.stringify([...entries.values()].map(sanitize)) ?? '[]'

@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { useDevtoolsClient, onDevtoolsClientConnected } from '@nuxt/devtools-kit/iframe-client'
 import type { ObservatorySnapshot, ObservatoryServerFunctions, ObservatoryClientFunctions } from '@observatory/types/rpc'
-import type { FetchEntry, ProvideEntry, InjectEntry, ComposableEntry, RenderEntry, TransitionEntry } from '@observatory/types/snapshot'
+import type { FetchEntry, ProvideEntry, InjectEntry, ComposableEntry, RenderEntry, TransitionEntry, TraceEntry } from '@observatory/types/snapshot'
 
 type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] }
 
@@ -10,6 +10,7 @@ const provideInject = ref<ProvideInjectSnapshot>({ provides: [], injects: [] })
 const composables = ref<ComposableEntry[]>([])
 const renders = ref<RenderEntry[]>([])
 const transitions = ref<TransitionEntry[]>([])
+const traces = ref<TraceEntry[]>([])
 const connected = ref(false)
 const features = ref<ObservatorySnapshot['features']>({})
 const debugRpc = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debugRpc')
@@ -50,6 +51,7 @@ function applySnapshot(data: ObservatorySnapshot) {
     composables.value = cloneArray(data.composables as ComposableEntry[] | undefined)
     renders.value = normalizeRenderEntries(data.renders as RenderEntry[] | undefined)
     transitions.value = cloneArray(data.transitions as TransitionEntry[] | undefined)
+    traces.value = cloneArray(data.traces as TraceEntry[] | undefined)
     features.value = data.features || {}
 
     // If the server snapshot disagrees with the user's requested mode,
@@ -79,6 +81,7 @@ function applySnapshot(data: ObservatorySnapshot) {
             composables: composables.value.length,
             renders: renders.value.length,
             transitions: transitions.value.length,
+            traces: traces.value.length,
         })
     }
 }
@@ -224,6 +227,7 @@ export function useObservatoryData() {
         composables,
         renders,
         transitions,
+        traces,
         features,
         connected,
         refresh,

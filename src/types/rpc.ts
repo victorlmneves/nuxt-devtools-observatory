@@ -18,6 +18,7 @@ export interface ObservatorySnapshot {
     composables?: unknown[]
     renders?: unknown[]
     transitions?: unknown[]
+    traces?: unknown[]
     features?: {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
@@ -25,6 +26,7 @@ export interface ObservatorySnapshot {
         composableNavigationMode?: 'route' | 'session'
         renderHeatmap?: boolean
         transitionTracker?: boolean
+        traceViewer?: boolean
     }
 }
 

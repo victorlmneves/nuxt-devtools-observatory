@@ -232,6 +232,9 @@ export default defineNuxtModule<ModuleOptions>({
                 './runtime/composables/provide-inject-registry'
             )
             aliases['nuxt-devtools-observatory/runtime/fetch-registry'] = resolver.resolve('./runtime/composables/fetch-registry')
+            aliases['nuxt-devtools-observatory/runtime/async-data-instrumentation'] = resolver.resolve(
+                './runtime/instrumentation/asyncData'
+            )
             ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
@@ -287,6 +290,7 @@ export default defineNuxtModule<ModuleOptions>({
             composables: [],
             renders: [],
             transitions: [],
+            traces: [],
             features: {
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
@@ -294,6 +298,7 @@ export default defineNuxtModule<ModuleOptions>({
                 composableNavigationMode: resolved.composableNavigationMode,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
+                traceViewer: true,
             },
         }
 

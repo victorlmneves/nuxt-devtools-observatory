@@ -34,7 +34,8 @@ export function fetchInstrumentPlugin(): Plugin {
                 id.includes('node_modules') ||
                 id.includes('composable-registry') ||
                 id.includes('provide-inject-registry') ||
-                id.includes('fetch-registry')
+                id.includes('fetch-registry') ||
+                id.includes('instrumentation/asyncData')
             ) {
                 return
             }
@@ -67,11 +68,11 @@ export function fetchInstrumentPlugin(): Plugin {
 
                 let modified = false
                 let needsFetchCallHelper = false
-                let needsFetchHandlerHelper = false
+                let needsTracedAsyncDataHelper = false
 
                 // Inject imports at top if not present
                 const hasFetchCallImport = scriptCode.includes('__devFetchCall')
-                const hasFetchHandlerImport = scriptCode.includes('__devFetchHandler')
+                const hasTracedAsyncDataImport = scriptCode.includes('useTracedAsyncData')
 
                 traverse(ast, {
                     CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
@@ -94,7 +95,7 @@ export function fetchInstrumentPlugin(): Plugin {
                             path.parent &&
                             t.isCallExpression(path.parent) &&
                             t.isIdentifier(path.parent.callee) &&
-                            ['__devFetchCall', '__devFetchHandler'].includes(path.parent.callee.name)
+                            ['__devFetchCall', 'useTracedAsyncData'].includes(path.parent.callee.name)
                         ) {
                             return
                         }
@@ -165,45 +166,21 @@ export function fetchInstrumentPlugin(): Plugin {
 
                         // Replace with correct signature
                         if ((originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') && handlerArg) {
-                            const wrappedHandler = t.arrowFunctionExpression(
-                                [t.restElement(t.identifier('args'))],
-                                t.conditionalExpression(
-                                    t.logicalExpression(
-                                        '&&',
-                                        t.memberExpression(t.identifier('process'), t.identifier('dev')),
-                                        t.memberExpression(t.identifier('process'), t.identifier('client'))
-                                    ),
-                                    t.callExpression(
-                                        t.callExpression(t.identifier('__devFetchHandler'), [
-                                            handlerArg,
-                                            keyArg ?? t.stringLiteral(key),
-                                            meta,
-                                        ]),
-                                        [t.spreadElement(t.identifier('args'))]
-                                    ),
-                                    t.callExpression(handlerArg, [t.spreadElement(t.identifier('args'))])
-                                )
-                            )
-                            ;(
-                                wrappedHandler as t.ArrowFunctionExpression & { __observatoryTransformed?: boolean }
-                            ).__observatoryTransformed = true
-                            needsFetchHandlerHelper = true
+                            const rewrittenArgs = keyArg
+                                ? [keyArg, handlerArg, optsArg ?? t.objectExpression([])]
+                                : [handlerArg]
+                            const handlerIndex = keyArg ? 1 : 0
 
-                            if (keyArg) {
-                                // useAsyncData(key, handler, opts?)
-                                const newCall = t.callExpression(t.identifier(originalName), [
-                                    keyArg,
-                                    wrappedHandler,
-                                    optsArg ?? t.objectExpression([]),
-                                ]) as ObservableCallExpression
-                                newCall.__observatoryTransformed = true
-                                path.replaceWith(newCall)
-                            } else {
-                                // useAsyncData(handler)
-                                const newCall = t.callExpression(t.identifier(originalName), [wrappedHandler]) as ObservableCallExpression
-                                newCall.__observatoryTransformed = true
-                                path.replaceWith(newCall)
-                            }
+                            const newCall = t.callExpression(t.identifier('useTracedAsyncData'), [
+                                t.identifier(originalName),
+                                t.arrayExpression(rewrittenArgs),
+                                t.numericLiteral(handlerIndex),
+                                keyArg ?? t.stringLiteral(key),
+                                meta,
+                            ]) as ObservableCallExpression
+                            newCall.__observatoryTransformed = true
+                            path.replaceWith(newCall)
+                            needsTracedAsyncDataHelper = true
 
                             modified = true
                         } else {
@@ -228,13 +205,14 @@ export function fetchInstrumentPlugin(): Plugin {
                 }
 
                 // Inject the shim import at the top of the file, avoid duplicates
-                const importNames = [
-                    needsFetchCallHelper && !hasFetchCallImport ? '__devFetchCall' : '',
-                    needsFetchHandlerHelper && !hasFetchHandlerImport ? '__devFetchHandler' : '',
-                ].filter(Boolean)
-                const importStatement = importNames.length
-                    ? `import { ${importNames.join(', ')} } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
+                const fetchImportNames = [needsFetchCallHelper && !hasFetchCallImport ? '__devFetchCall' : ''].filter(Boolean)
+                const fetchImportStatement = fetchImportNames.length
+                    ? `import { ${fetchImportNames.join(', ')} } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
                     : ''
+                const asyncDataImportStatement = needsTracedAsyncDataHelper && !hasTracedAsyncDataImport
+                    ? `import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation';\n`
+                    : ''
+                const importStatement = fetchImportStatement + asyncDataImportStatement
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
                 let finalCode: string
