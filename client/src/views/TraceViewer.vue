@@ -163,8 +163,7 @@ async function handleImport() {
 
     try {
         parsed = await importJson()
-    }
-    catch (err) {
+    } catch (err) {
         if (err instanceof Error && err.message !== 'cancelled') {
             alert(`Import failed: ${err.message}`)
         }
@@ -174,10 +173,10 @@ async function handleImport() {
     const file = parsed as ObservatoryExportFile<TraceEntry>
 
     if (
-        file?.type !== 'observatory-traces'
-        || file?.version !== '1'
-        || !Array.isArray(file?.data)
-        || (file.data.length > 0 && (!file.data[0]?.id || !file.data[0]?.name || !Array.isArray(file.data[0]?.spans)))
+        file?.type !== 'observatory-traces' ||
+        file?.version !== '1' ||
+        !Array.isArray(file?.data) ||
+        (file.data.length > 0 && (!file.data[0]?.id || !file.data[0]?.name || !Array.isArray(file.data[0]?.spans)))
     ) {
         alert('Invalid observatory traces file.')
         return
@@ -202,12 +201,7 @@ function handleBackToLive() {
             <div class="trace-viewer__title">Trace Viewer</div>
             <div class="trace-viewer__header-actions">
                 <div class="trace-viewer__count muted text-sm">{{ traceCountLabel }}</div>
-                <button
-                    v-if="isImportMode"
-                    class="trace-viewer__import-mode-btn"
-                    title="Return to live data"
-                    @click="handleBackToLive"
-                >
+                <button v-if="isImportMode" class="trace-viewer__import-mode-btn" title="Return to live data" @click="handleBackToLive">
                     ← live
                 </button>
                 <button
@@ -218,13 +212,7 @@ function handleBackToLive() {
                 >
                     ↓ export
                 </button>
-                <button
-                    class="trace-viewer__action-btn"
-                    title="Import traces from JSON file"
-                    @click="handleImport"
-                >
-                    ↑ import
-                </button>
+                <button class="trace-viewer__action-btn" title="Import traces from JSON file" @click="handleImport">↑ import</button>
                 <button
                     :class="{ 'trace-viewer__filter-btn--active': showFilters }"
                     class="trace-viewer__filter-btn"

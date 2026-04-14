@@ -699,8 +699,7 @@ async function handleImport() {
 
     try {
         parsed = await importJson()
-    }
-    catch (err) {
+    } catch (err) {
         if (err instanceof Error && err.message !== 'cancelled') {
             alert(`Import failed: ${err.message}`)
         }
@@ -710,10 +709,10 @@ async function handleImport() {
     const file = parsed as ObservatoryExportFile<RenderEntry>
 
     if (
-        file?.type !== 'observatory-renders'
-        || file?.version !== '1'
-        || !Array.isArray(file?.data)
-        || (file.data.length > 0 && (file.data[0]?.uid === undefined || !file.data[0]?.name || !file.data[0]?.file))
+        file?.type !== 'observatory-renders' ||
+        file?.version !== '1' ||
+        !Array.isArray(file?.data) ||
+        (file.data.length > 0 && (file.data[0]?.uid === undefined || !file.data[0]?.name || !file.data[0]?.file))
     ) {
         alert('Invalid observatory renders file.')
         return
@@ -778,12 +777,8 @@ function formatTimestamp(t: number): string {
             <button :class="{ active: frozen }" class="render-heatmap__freeze tracker-toolbar__spacer" @click="toggleFreeze">
                 {{ frozen && isImportedSnapshot ? 'unfreeze (imported)' : frozen ? 'unfreeze' : 'freeze snapshot' }}
             </button>
-            <button class="render-heatmap__action-btn" title="Export render data as JSON" @click="handleExport">
-                ↓ export
-            </button>
-            <button class="render-heatmap__action-btn" title="Import render data from JSON file" @click="handleImport">
-                ↑ import
-            </button>
+            <button class="render-heatmap__action-btn" title="Export render data as JSON" @click="handleExport">↓ export</button>
+            <button class="render-heatmap__action-btn" title="Import render data from JSON file" @click="handleImport">↑ import</button>
         </div>
 
         <div class="render-heatmap__stats tracker-stats-row">
