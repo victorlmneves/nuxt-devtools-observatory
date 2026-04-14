@@ -2,6 +2,8 @@
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
+import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
+import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
 import type { RenderEntry, RenderEvent } from '@observatory/types/snapshot'
 
 interface ComponentNode {
@@ -197,6 +199,7 @@ const activeThreshold = computed({
 })
 const activeHotOnly = ref(false)
 const frozen = ref(false)
+const isImportedSnapshot = ref(false)
 const search = ref('')
 const activeSelectedId = ref<string | null>(null)
 const activeRootId = ref<string | null>(null)
@@ -671,6 +674,7 @@ function updateSearch(event: Event) {
 function toggleFreeze() {
     if (frozen.value) {
         frozen.value = false
+        isImportedSnapshot.value = false
         frozenSnapshot.value = []
 
         return
@@ -678,6 +682,45 @@ function toggleFreeze() {
 
     frozenSnapshot.value = JSON.parse(JSON.stringify(renders.value)) as RenderEntry[]
     frozen.value = true
+}
+
+function handleExport() {
+    exportJson(`observatory-renders-${Date.now()}.json`, {
+        type: 'observatory-renders',
+        version: '1',
+        exportedAt: Date.now(),
+        count: displayEntries.value.length,
+        data: displayEntries.value,
+    })
+}
+
+async function handleImport() {
+    let parsed: unknown
+
+    try {
+        parsed = await importJson()
+    } catch (err) {
+        if (err instanceof Error && err.message !== 'cancelled') {
+            alert(`Import failed: ${err.message}`)
+        }
+        return
+    }
+
+    const file = parsed as ObservatoryExportFile<RenderEntry>
+
+    if (
+        file?.type !== 'observatory-renders' ||
+        file?.version !== '1' ||
+        !Array.isArray(file?.data) ||
+        (file.data.length > 0 && (file.data[0]?.uid === undefined || !file.data[0]?.name || !file.data[0]?.file))
+    ) {
+        alert('Invalid observatory renders file.')
+        return
+    }
+
+    frozenSnapshot.value = file.data
+    frozen.value = true
+    isImportedSnapshot.value = true
 }
 
 function basename(file: string) {
@@ -732,8 +775,10 @@ function formatTimestamp(t: number): string {
                 <option v-for="r in knownRoutes" :key="r" :value="r">{{ r }}</option>
             </select>
             <button :class="{ active: frozen }" class="render-heatmap__freeze tracker-toolbar__spacer" @click="toggleFreeze">
-                {{ frozen ? 'unfreeze' : 'freeze snapshot' }}
+                {{ frozen && isImportedSnapshot ? 'unfreeze (imported)' : frozen ? 'unfreeze' : 'freeze snapshot' }}
             </button>
+            <button class="render-heatmap__action-btn" title="Export render data as JSON" @click="handleExport">↓ export</button>
+            <button class="render-heatmap__action-btn" title="Import render data from JSON file" @click="handleImport">↑ import</button>
         </div>
 
         <div class="render-heatmap__stats tracker-stats-row">
@@ -950,6 +995,23 @@ function formatTimestamp(t: number): string {
 
 .render-heatmap__threshold-range {
     width: 90px;
+}
+
+.render-heatmap__action-btn {
+    padding: 3px 8px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 11px;
+    border-radius: 3px;
+    transition: all 0.12s;
+    font-family: var(--mono);
+}
+
+.render-heatmap__action-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text);
 }
 
 .stat-sub {
