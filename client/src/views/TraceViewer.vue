@@ -6,9 +6,14 @@ import WaterfallView from '@observatory-client/components/WaterfallView.vue'
 import SpanInspector from '@observatory-client/components/SpanInspector.vue'
 import TraceFilter from '@observatory-client/components/TraceFilter.vue'
 import { useTraceFilter } from '@observatory-client/composables/useTraceFilter'
+import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
+import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
 import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
 
 const { traces, connected } = useObservatoryData()
+
+const importedTraces = ref<TraceEntry[]>([])
+const isImportMode = computed(() => importedTraces.value.length > 0)
 
 const selectedTraceId = ref<string | null>(null)
 const selectedSpan = ref<TraceSpan | undefined>(undefined)
@@ -27,7 +32,8 @@ const {
 } = useTraceFilter()
 
 const sortedTraces = computed(() => {
-    return [...traces.value].sort((a, b) => b.startTime - a.startTime)
+    const source = isImportMode.value ? importedTraces.value : traces.value
+    return [...source].sort((a, b) => b.startTime - a.startTime)
 })
 
 const filteredTraces = computed(() => {
@@ -35,11 +41,13 @@ const filteredTraces = computed(() => {
 })
 
 const traceCountLabel = computed(() => {
+    const suffix = isImportMode.value ? ' (imported)' : ''
+
     if (!hasActiveFilters.value) {
-        return `${sortedTraces.value.length} traces`
+        return `${sortedTraces.value.length} traces${suffix}`
     }
 
-    return `Showing ${filteredTraces.value.length} of ${sortedTraces.value.length} traces`
+    return `Showing ${filteredTraces.value.length} of ${sortedTraces.value.length} traces${suffix}`
 })
 
 const selectedTrace = computed(() => {
@@ -139,6 +147,52 @@ function handleClearFilters() {
 function handleSpanTypesUpdate(value: Set<string>) {
     selectedSpanTypes.value = value
 }
+
+function handleExport() {
+    exportJson(`observatory-traces-${Date.now()}.json`, {
+        type: 'observatory-traces',
+        version: '1',
+        exportedAt: Date.now(),
+        count: traces.value.length,
+        data: traces.value,
+    })
+}
+
+async function handleImport() {
+    let parsed: unknown
+
+    try {
+        parsed = await importJson()
+    }
+    catch (err) {
+        if (err instanceof Error && err.message !== 'cancelled') {
+            alert(`Import failed: ${err.message}`)
+        }
+        return
+    }
+
+    const file = parsed as ObservatoryExportFile<TraceEntry>
+
+    if (
+        file?.type !== 'observatory-traces'
+        || file?.version !== '1'
+        || !Array.isArray(file?.data)
+        || (file.data.length > 0 && (!file.data[0]?.id || !file.data[0]?.name || !Array.isArray(file.data[0]?.spans)))
+    ) {
+        alert('Invalid observatory traces file.')
+        return
+    }
+
+    importedTraces.value = file.data
+    selectedTraceId.value = null
+    selectedSpan.value = undefined
+}
+
+function handleBackToLive() {
+    importedTraces.value = []
+    selectedTraceId.value = null
+    selectedSpan.value = undefined
+}
 </script>
 
 <template>
@@ -148,6 +202,29 @@ function handleSpanTypesUpdate(value: Set<string>) {
             <div class="trace-viewer__title">Trace Viewer</div>
             <div class="trace-viewer__header-actions">
                 <div class="trace-viewer__count muted text-sm">{{ traceCountLabel }}</div>
+                <button
+                    v-if="isImportMode"
+                    class="trace-viewer__import-mode-btn"
+                    title="Return to live data"
+                    @click="handleBackToLive"
+                >
+                    ← live
+                </button>
+                <button
+                    class="trace-viewer__action-btn"
+                    title="Export traces as JSON"
+                    :disabled="traces.length === 0 && !isImportMode"
+                    @click="handleExport"
+                >
+                    ↓ export
+                </button>
+                <button
+                    class="trace-viewer__action-btn"
+                    title="Import traces from JSON file"
+                    @click="handleImport"
+                >
+                    ↑ import
+                </button>
                 <button
                     :class="{ 'trace-viewer__filter-btn--active': showFilters }"
                     class="trace-viewer__filter-btn"
@@ -363,6 +440,44 @@ function handleSpanTypesUpdate(value: Set<string>) {
     background: var(--accent-bg);
     border-color: var(--accent);
     color: var(--accent);
+}
+
+.trace-viewer__action-btn {
+    padding: 3px 8px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 11px;
+    border-radius: 3px;
+    transition: all 0.12s;
+    font-family: var(--mono);
+}
+
+.trace-viewer__action-btn:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--text);
+}
+
+.trace-viewer__action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.trace-viewer__import-mode-btn {
+    padding: 3px 8px;
+    background: var(--accent-bg);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 11px;
+    border-radius: 3px;
+    transition: all 0.12s;
+    font-family: var(--mono);
+}
+
+.trace-viewer__import-mode-btn:hover {
+    opacity: 0.8;
 }
 
 .trace-viewer__container {
