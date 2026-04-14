@@ -2,13 +2,14 @@
 
 # Nuxt DevTools Observatory
 
-Nuxt DevTools module providing five missing observability features:
+Nuxt DevTools module providing six missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
+- **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, and navigation events in a unified Flamegraph and Waterfall view
 
 ## Documentation website
 
@@ -40,7 +41,8 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `provideInjectGraph` (boolean) — Enable provide/inject graph
 - `composableTracker` (boolean) — Enable composable tracker
 - `renderHeatmap` (boolean) — Enable render heatmap
-- `transitionTracker` (boolean) — Enable transition tracker
+- `transitionTracker` (boolean) — Enable transition tracker (set via `OBSERVATORY_TRANSITION_TRACKER`)
+- `traceViewer` (boolean) — Enable trace viewer tab with per-route Flamegraph and Waterfall (set via `OBSERVATORY_TRACE_VIEWER`)
 - `composableNavigationMode` (string, 'route' | 'session') — Composable tracker mode: 'route' clears entries on page navigation (default), 'session' persists entries across navigation for historical inspection (`OBSERVATORY_COMPOSABLE_NAVIGATION_MODE`)
 - `heatmapThresholdCount` (number) — Highlight components with N+ renders in heatmap
 - `heatmapThresholdTime` (number) — Highlight components with render time above this (ms)
@@ -68,6 +70,7 @@ export default defineNuxtConfig({
         composableTracker: true, // Enable composable tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
+        traceViewer: true, // Enable trace viewer
         composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
         heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
@@ -85,7 +88,7 @@ export default defineNuxtConfig({
 })
 ```
 
-Open the Nuxt DevTools panel — five new tabs will appear.
+Open the Nuxt DevTools panel — six new tabs will appear.
 
 The DevTools client SPA is served same-origin via the Nuxt dev server at `/__observatory/`.
 
@@ -227,6 +230,55 @@ The panel provides:
 - The route filter shows components active on a route but cannot hide persistent
   components (they appear on every route by definition)
 
+### Trace Viewer
+
+[![Trace Viewer](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/trace-viewer.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/trace-viewer.png)
+
+The Trace Viewer automatically collects per-route traces that span the full lifecycle of
+each page visit. Every significant event is recorded as a typed span and grouped into a
+single `TraceEntry` per navigation, so you can see everything that happened — in order —
+after a route change.
+
+**Span types collected:**
+
+| Type         | Emitted by                        | What it measures                                     |
+| ------------ | --------------------------------- | ---------------------------------------------------- |
+| `navigation` | `router.afterEach` hook           | Route change from → to, duration                     |
+| `component`  | Vue mixin lifecycle hooks         | Exact `mounted` / `updated` hook cost                |
+| `render`     | `beforeMount` → `mounted` bracket | Real DOM-patching time per component mount/update    |
+| `fetch`      | `useFetch` / `useAsyncData` shim  | Network request start, server/client origin, latency |
+| `composable` | `__trackComposable` shim          | Setup phase of every tracked `useXxx()` call         |
+| `transition` | `<Transition>` wrapper            | Full enter/leave lifecycle phase                     |
+
+**Render span tracking:**
+Real render time is measured by storing `performance.now()` in a `WeakMap<ComponentPublicInstance, number>` inside `beforeMount` / `beforeUpdate`, then reading it back in the corresponding `mounted` / `updated` hooks. This produces a `type: 'render'` span whose duration is the actual DOM-patching cost, separately from the `component:mounted` hook span (which only measures the hook body itself).
+
+**Trace anchoring:**
+Each `TraceEntry` is anchored to the `startTime` of its first span, so bar positions in the timeline are always relative to the first event in the trace rather than the time the trace object was created.
+
+The panel provides:
+
+- **Trace list** — every captured route visit shown with name, total duration, and span count; click to open
+- **Flamegraph tab** — collapsible span tree with horizontal duration bars, depth-based indentation, parent–child nesting, and a selected-span highlight (purple tint)
+- **Waterfall tab** — spans grouped by type with a shared horizontal timeline, group headers, and status badges
+- **Span inspector** — clicking any span opens a detail panel showing type, status, duration, start offset, and all metadata fields
+- **Filter panel** — filter by span type and free-text search across span names and metadata
+- **Duration labels** — spans narrower than 5 % of the timeline render their label outside the bar for readability
+- **In-progress traces** — active traces show `~Xms` (computed from the latest span end offset) rather than a hard "in progress" label
+
+**What it tells you:**
+
+- Mount order and render cost of every component on the route
+- Whether render time is dominated by the component `setup()` / lifecycle hooks or by actual DOM patching
+- Which `useFetch` calls are in the critical path and how long each took
+- Whether composable setup is adding meaningful latency
+- Which components are slow to mount and might benefit from `<Suspense>` or lazy loading
+
+**Known gaps:**
+
+- SSR spans are not yet captured — only client-side navigation traces are collected
+- Re-render counts are tracked by Render Heatmap; the Trace Viewer records individual render events but does not aggregate them
+
 ### Transition Tracker
 
 [![Transition Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/transition-tracker.png)
@@ -276,6 +328,12 @@ const result = useMyComposable()
 
 - [ ] Reverse lookup by object identity rather than key name only
 - [ ] Deep search inside nested `reactive` object properties
+
+### Trace Viewer
+
+- [ ] SSR span collection (server-side navigation and composable setup)
+- [ ] Cross-trace comparison view
+- [ ] Export traces as JSON
 
 ## Development
 
@@ -341,7 +399,8 @@ client/
         ├── ProvideInjectGraph.vue      ← provide/inject tab UI
         ├── ComposableTracker.vue       ← Composable tab UI
         ├── RenderHeatmap.vue           ← Heatmap tab UI
-        └── TransitionTimeline.vue      ← Transition tracker tab UI
+        ├── TransitionTimeline.vue      ← Transition tracker tab UI
+        └── TraceViewer.vue             ← Trace viewer tab UI (Flamegraph + Waterfall + Inspector)
 
 playground/
 ├── app.vue                             ← Demo app shell used during local development

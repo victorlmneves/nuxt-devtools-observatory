@@ -12,12 +12,22 @@ const screenshots = [
   { name: 'composable-tracker', path: '/composables', file: 'docs/screenshots/composable-tracker.png' },
   { name: 'render-heatmap', path: '/heatmap', file: 'docs/screenshots/render-heatmap.png' },
   { name: 'transition-tracker', path: '/transitions', file: 'docs/screenshots/transition-tracker.png' },
+  { name: 'trace-viewer', path: '/traces', file: 'docs/screenshots/trace-viewer.png' },
 ];
 
 // Example mock data for all trackers (customize as needed)
 const mockData = {
   type: 'observatory:snapshot',
   data: {
+    features: {
+      fetchDashboard: true,
+      provideInjectGraph: true,
+      composableTracker: true,
+      renderHeatmap: true,
+      transitionTracker: true,
+      traceViewer: true,
+      composableNavigationMode: 'route',
+    },
     fetch: [
       { id: '1', key: 'products-get', url: '/api/products', status: 'ok', origin: 'csr', startTime: Date.now() - 10000, endTime: Date.now() - 9900, ms: 100, size: 512, cached: false, payload: { products: [1,2,3] } },
       { id: '2', key: 'products-post', url: '/api/products', status: 'ok', origin: 'csr', startTime: Date.now() - 9000, endTime: Date.now() - 8900, ms: 100, size: 128, cached: false, payload: { id: 4 } },
@@ -77,6 +87,94 @@ const mockData = {
       { id: 't6', transitionName: 'zoom', parentComponent: 'App', direction: 'enter', phase: 'entered', startTime: Date.now() - 6000, endTime: Date.now() - 5900, durationMs: 100, cancelled: false, appear: true },
       { id: 't7', transitionName: 'zoom', parentComponent: 'App', direction: 'leave', phase: 'leave-cancelled', startTime: Date.now() - 7000, endTime: Date.now() - 6900, durationMs: 100, cancelled: true, appear: false },
     ],
+    traces: (() => {
+      // Helper: build a realistic per-route trace with multiple span types.
+      const t0 = performance.now() - 3500; // shop trace started ~3.5 s ago
+      const t1 = performance.now() - 1800; // dashboard trace started ~1.8 s ago
+      const t2 = performance.now() - 400;  // settings trace still active
+
+      /** @param {string} traceId @param {string} id @param {string} name @param {string} type @param {number} start @param {number} durationMs @param {string} [parentSpanId] @param {Record<string,unknown>} [meta] */
+      const span = (traceId, id, name, type, start, durationMs, parentSpanId, meta) => ({
+        id,
+        traceId,
+        parentSpanId,
+        name,
+        type,
+        startTime: start,
+        endTime: start + durationMs,
+        durationMs,
+        status: 'ok',
+        metadata: meta ?? {},
+      });
+
+      // ── Trace 1: /shop page load ──────────────────────────────────────────
+      const shopSpans = [
+        span('trace-shop', 's-nav',   'navigation',           'navigation', t0 +  0, 12,  undefined, { from: '/', to: '/shop' }),
+        span('trace-shop', 's-r0',    'render:mount',         'render',     t0 +  1, 18,  's-nav',   { componentName: 'NuxtPage',     uid: 1, lifecycle: 'render:mount' }),
+        span('trace-shop', 's-c0',    'NuxtPage.mounted',     'component',  t0 + 19, 2,   's-r0',   { componentName: 'NuxtPage',     uid: 1, lifecycle: 'mounted' }),
+        span('trace-shop', 's-f1',    '/api/products',        'fetch',      t0 + 21, 85,  's-nav',   { method: 'GET', url: '/api/products', origin: 'csr' }),
+        span('trace-shop', 's-comp1', 'useCart',              'composable', t0 + 22, 3,   's-nav',   { composableName: 'useCart',     file: 'useCart.ts' }),
+        span('trace-shop', 's-comp2', 'useProductFilter',     'composable', t0 + 25, 4,   's-nav',   { composableName: 'useProductFilter', file: 'useProductFilter.ts' }),
+        span('trace-shop', 's-r1',    'render:mount',         'render',     t0 + 30, 22,  's-nav',   { componentName: 'HeavyList',    uid: 4, lifecycle: 'render:mount' }),
+        span('trace-shop', 's-c1',    'HeavyList.mounted',    'component',  t0 + 52, 1,   's-r1',   { componentName: 'HeavyList',    uid: 4, lifecycle: 'mounted' }),
+        span('trace-shop', 's-r2',    'render:mount',         'render',     t0 + 54, 8,   's-nav',   { componentName: 'PriceDisplay', uid: 5, lifecycle: 'render:mount' }),
+        span('trace-shop', 's-c2',    'PriceDisplay.mounted', 'component',  t0 + 62, 1,   's-r2',   { componentName: 'PriceDisplay', uid: 5, lifecycle: 'mounted' }),
+        span('trace-shop', 's-r3',    'render:mount',         'render',     t0 + 64, 5,   's-nav',   { componentName: 'CartDrawer',   uid: 6, lifecycle: 'render:mount' }),
+        span('trace-shop', 's-c3',    'CartDrawer.mounted',   'component',  t0 + 69, 1,   's-r3',   { componentName: 'CartDrawer',   uid: 6, lifecycle: 'mounted' }),
+        span('trace-shop', 's-tr1',   'fade enter',           'transition', t0 + 70, 200, 's-nav',   { transitionName: 'fade', direction: 'enter', phase: 'entered' }),
+      ];
+      const shopEndTime = Math.max(...shopSpans.map(s => s.endTime));
+
+      // ── Trace 2: /dashboard page load ────────────────────────────────────
+      const dashSpans = [
+        span('trace-dash', 'd-nav',   'navigation',             'navigation', t1 +  0, 10,  undefined, { from: '/shop', to: '/dashboard' }),
+        span('trace-dash', 'd-f1',    '/api/analytics',         'fetch',      t1 + 11, 120, 'd-nav',   { method: 'GET', url: '/api/analytics', origin: 'csr' }),
+        span('trace-dash', 'd-f2',    '/api/orders',            'fetch',      t1 + 11, 60,  'd-nav',   { method: 'GET', url: '/api/orders',    origin: 'csr' }),
+        span('trace-dash', 'd-comp1', 'useDashboard',           'composable', t1 + 12, 5,   'd-nav',   { composableName: 'useDashboard', file: 'useDashboard.ts' }),
+        span('trace-dash', 'd-r1',    'render:mount',           'render',     t1 + 18, 30,  'd-nav',   { componentName: 'StatsCard',     uid: 10, lifecycle: 'render:mount' }),
+        span('trace-dash', 'd-c1',    'StatsCard.mounted',      'component',  t1 + 48, 1,   'd-r1',   { componentName: 'StatsCard',     uid: 10, lifecycle: 'mounted' }),
+        span('trace-dash', 'd-r2',    'render:mount',           'render',     t1 + 50, 14,  'd-nav',   { componentName: 'DataTable',     uid: 11, lifecycle: 'render:mount' }),
+        span('trace-dash', 'd-c2',    'DataTable.mounted',      'component',  t1 + 64, 2,   'd-r2',   { componentName: 'DataTable',     uid: 11, lifecycle: 'mounted' }),
+        span('trace-dash', 'd-tr1',   'slide enter',            'transition', t1 + 66, 180, 'd-nav',   { transitionName: 'slide', direction: 'enter', phase: 'entered' }),
+      ];
+      const dashEndTime = Math.max(...dashSpans.map(s => s.endTime));
+
+      // ── Trace 3: /settings (still active) ────────────────────────────────
+      const settingsSpans = [
+        span('trace-settings', 'st-nav',  'navigation',          'navigation', t2 +  0, 8,  undefined, { from: '/dashboard', to: '/settings' }),
+        span('trace-settings', 'st-comp', 'useUserPreferences',  'composable', t2 +  9, 4,  'st-nav',  { composableName: 'useUserPreferences', file: 'useUserPreferences.ts' }),
+        span('trace-settings', 'st-r1',  'render:mount',         'render',     t2 + 13, 12, 'st-nav',  { componentName: 'SettingsPanel', uid: 20, lifecycle: 'render:mount' }),
+        span('trace-settings', 'st-c1',  'SettingsPanel.mounted','component',  t2 + 25, 1,  'st-r1',  { componentName: 'SettingsPanel', uid: 20, lifecycle: 'mounted' }),
+      ];
+
+      return [
+        {
+          id: 'trace-shop',
+          name: '/shop',
+          startTime: t0,
+          endTime: shopEndTime,
+          durationMs: shopEndTime - t0,
+          status: 'ok',
+          spans: shopSpans,
+        },
+        {
+          id: 'trace-dash',
+          name: '/dashboard',
+          startTime: t1,
+          endTime: dashEndTime,
+          durationMs: dashEndTime - t1,
+          status: 'ok',
+          spans: dashSpans,
+        },
+        {
+          id: 'trace-settings',
+          name: '/settings',
+          startTime: t2,
+          status: 'active',
+          spans: settingsSpans,
+        },
+      ];
+    })(),
   },
 };
 
@@ -136,6 +234,14 @@ const mockData = {
         if (firstRow) firstRow.click();
       });
       await page.waitForTimeout(200);
+    } else if (tab.name === 'trace-viewer') {
+      // Wait for the trace list to render then click the first row
+      await page.waitForSelector('.trace-viewer__trace-row', { timeout: 5000 });
+      await page.evaluate(() => {
+        const firstRow = document.querySelector('.trace-viewer__trace-row');
+        if (firstRow) firstRow.click();
+      });
+      await page.waitForTimeout(400);
     }
     // Save screenshot
     await page.screenshot({ path: path.resolve(tab.file), fullPage: true });
