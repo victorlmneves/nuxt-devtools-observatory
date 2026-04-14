@@ -1,7 +1,32 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
-import { createApp, defineComponent, h, TriggerOpTypes, effect, type ComponentPublicInstance } from 'vue'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { createApp, defineComponent, h, type ComponentPublicInstance } from 'vue'
 import { setupRenderRegistry } from '@observatory/runtime/composables/render-registry'
+import { traceStore } from '@observatory/runtime/tracing/traceStore'
+
+beforeEach(() => {
+    traceStore.clear()
+})
+
+/**
+ * Creates and immediately ends a component span in the global traceStore.
+ * Used to populate aggregateFromComponentSpans() with test data.
+ */
+function addComponentSpan(uid: number, lifecycle: 'mounted' | 'updated', options: { startTime?: number; durationMs?: number; route?: string } = {}) {
+    const { startTime = performance.now(), durationMs = 10, route = '/' } = options
+    const traceId = `test-component-${uid}-${lifecycle}-${Math.random()}`
+    const span = traceStore.addSpan({
+        traceId,
+        name: `component:${lifecycle}`,
+        type: 'component',
+        startTime,
+        metadata: { uid, lifecycle, route },
+    })
+    traceStore.endSpan(span.id, traceId, {
+        endTime: startTime + durationMs,
+        status: 'ok',
+    })
+}
 
 function makeNuxtApp(app: ReturnType<typeof createApp>) {
     return { vueApp: app }
@@ -64,7 +89,7 @@ describe('setupRenderRegistry', () => {
         expect(mixinsAfter).toBe(mixinsBefore + 1)
     })
 
-    it('increments the renders counter when a render-triggered update fires', () => {
+    it('increments the renders counter when an update fires', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -73,24 +98,17 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(42)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            effect: effect(() => {}).effect,
-            key: 'items',
-            type: TriggerOpTypes.SET,
-        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            effect: effect(() => {}).effect,
-            key: 'items',
-            type: TriggerOpTypes.SET,
-        })
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
+
+        // Simulate two reactive re-renders via spans
+        addComponentSpan(42, 'updated')
+        addComponentSpan(42, 'updated')
 
         const entries = getAll()
 
         expect(entries).toHaveLength(1)
         expect(entries[0].uid).toBe(42)
-        expect(entries[0].rerenders).toBe(2) // two renderTriggered+updated cycles
+        expect(entries[0].rerenders).toBe(2)
     })
 
     it('counts updated() even without a preceding renderTriggered (parent-driven re-renders)', () => {
@@ -106,10 +124,13 @@ describe('setupRenderRegistry', () => {
         // They must be counted, otherwise most real-world re-renders are invisible.
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
+        // Add one re-render span (lifecycle !== 'mounted') to simulate the update
+        addComponentSpan(44, 'updated')
+
         expect(getAll()[0].rerenders).toBe(1)
     })
 
-    it('getAll() returns entries even when they are below the heatmap threshold', () => {
+    it('getAll() returns all entries regardless of update count', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -119,34 +140,18 @@ describe('setupRenderRegistry', () => {
         const instA = fakeCPI(1, 'CompA')
         const instB = fakeCPI(2, 'CompB')
 
-        // CompA fires updated twice — below threshold of 3
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instA, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
+        // Create entries for both components
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instA)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instA, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instA)
+        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
 
-        // CompB fires updated three times — meets threshold
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instB, {
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instB)
+        // CompA fired updated twice
+        addComponentSpan(1, 'updated')
+        addComponentSpan(1, 'updated')
+
+        // CompB fired updated three times
+        addComponentSpan(2, 'updated')
+        addComponentSpan(2, 'updated')
+        addComponentSpan(2, 'updated')
 
         const visible = getAll()
 
@@ -163,6 +168,9 @@ describe('setupRenderRegistry', () => {
 
         const instance = fakeCPI(7, 'MountedOnly')
         ;(mixin.mounted as (this: ComponentPublicInstance) => void).call(instance)
+
+        // Simulate a mount span (lifecycle='mounted' → mountCount++, not rerenders)
+        addComponentSpan(7, 'mounted')
 
         const entries = getAll()
 
@@ -186,7 +194,7 @@ describe('setupRenderRegistry', () => {
         expect(getAll()).toEqual([])
     })
 
-    it('accumulates renderTriggered trigger entries with key and type', () => {
+    it('triggers field is always empty — trigger tracking was removed in span-based implementation', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -194,23 +202,14 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(10)
-
-        // Fire renderTriggered before updated so the entry exists
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            effect: effect(() => {}).effect,
-            key: 'count',
-            type: TriggerOpTypes.SET,
-        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
 
-        expect(entry.triggers).toHaveLength(1)
-        expect(entry.triggers[0].key).toBe('count')
-        expect(entry.triggers[0].type).toBe(TriggerOpTypes.SET)
+        expect(entry.triggers).toHaveLength(0)
     })
 
-    it('keeps at most 50 trigger entries per component', () => {
+    it('triggers is always empty regardless of update count — trigger tracking removed', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
 
@@ -219,16 +218,12 @@ describe('setupRenderRegistry', () => {
 
         const instance = fakeCPI(20)
 
-        // Fire 60 renderTriggered events
+        // Fire many updated events
         for (let i = 0; i < 60; i++) {
-            ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-                key: `k${i}`,
-                type: TriggerOpTypes.SET,
-            })
+            ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
         }
-        ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
-        expect(getAll()[0].triggers).toHaveLength(50)
+        expect(getAll()[0].triggers).toHaveLength(0)
     })
 
     it('sets the component name from instance.$.type.__name', () => {
@@ -239,10 +234,6 @@ describe('setupRenderRegistry', () => {
         const mixin = mixins[mixins.length - 1]
 
         const instance = fakeCPI(5, 'ProductCard', 'ProductCard.vue')
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            key: 'visible',
-            type: TriggerOpTypes.SET,
-        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
@@ -272,10 +263,6 @@ describe('setupRenderRegistry', () => {
             $parent: null,
         } as unknown as ComponentPublicInstance
 
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            key: 'visible',
-            type: TriggerOpTypes.SET,
-        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
@@ -310,10 +297,6 @@ describe('setupRenderRegistry', () => {
             },
         } as unknown as ComponentPublicInstance
 
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-            key: 'visible',
-            type: TriggerOpTypes.SET,
-        })
         ;(mixin.updated as (this: ComponentPublicInstance) => void).call(instance)
 
         const entry = getAll()[0]
@@ -361,11 +344,7 @@ describe('RenderEntry interface — children field removed (fix: render-registry
 
 // ── describeElement / resolveTypeLabel / inferAnonymousLabel coverage ────
 
-function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance, key = 'count') {
-    ;(mixin.renderTriggered as (this: import('vue').ComponentPublicInstance, e: { key: string; type: string }) => void).call(instance, {
-        key,
-        type: TriggerOpTypes.SET,
-    })
+function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance) {
     ;(mixin.updated as (this: import('vue').ComponentPublicInstance) => void).call(instance)
 }
 
@@ -743,9 +722,11 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
 
         const cpi = fakeCPI(10)
         mixin.mounted?.call(cpi)
-        mixin.mounted?.call(cpi) // render it twice
 
-        expect(getAll()[0].rerenders).toBe(1) // 2nd mount counts as rerender
+        // Simulate one re-render
+        addComponentSpan(10, 'updated')
+
+        expect(getAll()[0].rerenders).toBe(1)
 
         reset()
 
@@ -755,7 +736,7 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         expect(getAll()[0].triggers).toEqual([])
     })
 
-    it('beforeUpdate calls startRenderTimer for re-renders', () => {
+    it('beforeUpdate is a no-op in the mixin (render timing is tracked via component spans)', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
         const mixin = app._context.mixins[app._context.mixins.length - 1]
@@ -763,12 +744,10 @@ describe('setupRenderRegistry — reset() and navigationRender window', () => {
         const cpi = fakeCPI(30)
         // Mount first
         mixin.mounted?.call(cpi)
-        // Then trigger update cycle
-        mixin.beforeUpdate?.call(cpi)
-        mixin.renderTriggered?.call(cpi, { effect: effect(() => {}).effect, target: {}, key: 'count', type: TriggerOpTypes.SET })
-        mixin.updated?.call(cpi)
+        // Simulate a reactive update via a component span
+        addComponentSpan(30, 'updated')
 
-        expect(getAll()[0].rerenders).toBe(1) // only the reactive update counts
+        expect(getAll()[0].rerenders).toBe(1)
     })
 
     it('syncRect returns undefined rect when $el has no getBoundingClientRect', () => {
@@ -848,6 +827,9 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
         const cpi = fakeCPI(300)
         mixin.mounted?.call(cpi)
 
+        // Add a mounted span so mountCount is populated
+        addComponentSpan(300, 'mounted')
+
         expect(getAll()[0].isHydrationMount).toBe(true)
         expect(getAll()[0].rerenders).toBe(0) // hydration mount is not a rerender
         expect(getAll()[0].mountCount).toBe(1)
@@ -867,17 +849,21 @@ describe('setupRenderRegistry — isPersistent and isHydrationMount', () => {
         expect(getAll()[0].isHydrationMount).toBe(false)
     })
 
-    it('re-mounting the same component (mountCount > 1) counts as a rerender', () => {
+    it('re-mounting the same component increments mountCount (re-mounts are not counted as rerenders)', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(400)
-        mixin.mounted?.call(cpi) // first mount — not a rerender
-        mixin.mounted?.call(cpi) // second mount (v-if re-toggle) — counts as rerender
+        mixin.mounted?.call(cpi) // first mount
+        mixin.mounted?.call(cpi) // second mount (v-if re-toggle)
+
+        // Add two mounted spans — both count toward mountCount, not rerenders
+        addComponentSpan(400, 'mounted')
+        addComponentSpan(400, 'mounted')
 
         expect(getAll()[0].mountCount).toBe(2)
-        expect(getAll()[0].rerenders).toBe(1)
+        expect(getAll()[0].rerenders).toBe(0) // re-mounts create 'mounted' spans, not rerenders
     })
 })
 
@@ -889,13 +875,15 @@ describe('setupRenderRegistry — reset() preserves mountCount', () => {
 
         const cpi = fakeCPI(500)
         mixin.mounted?.call(cpi)
+        addComponentSpan(500, 'mounted')
+        addComponentSpan(500, 'updated') // one re-render before reset
         expect(getAll()[0].mountCount).toBe(1)
 
         reset()
 
-        // mountCount survives — still reflects the page lifetime
+        // mountCount survives — still reflects the page lifetime (allSpans, not filtered)
         expect(getAll()[0].mountCount).toBe(1)
-        // But rerenders and timing are cleared
+        // But rerenders and timing are cleared (postResetSpans = 0)
         expect(getAll()[0].rerenders).toBe(0)
         expect(getAll()[0].totalMs).toBe(0)
     })
@@ -907,12 +895,14 @@ describe('setupRenderRegistry — reset() preserves mountCount', () => {
 
         const cpi = fakeCPI(501)
         mixin.mounted?.call(cpi) // mountCount = 1
+        addComponentSpan(501, 'mounted')
         reset()
-        mixin.mounted?.call(cpi) // mountCount = 2 (re-mount after reset)
+        mixin.mounted?.call(cpi) // re-mount after reset
+        addComponentSpan(501, 'mounted') // 2nd mounted span — allSpans has 2 mounts → mountCount = 2
 
-        // mountCount = 2 means it re-mounted → counts as a rerender
         expect(getAll()[0].mountCount).toBe(2)
-        expect(getAll()[0].rerenders).toBe(1)
+        // The re-mount creates a 'mounted' span (not 'updated'), so rerenders stays 0
+        expect(getAll()[0].rerenders).toBe(0)
     })
 })
 
@@ -923,8 +913,10 @@ describe('setupRenderRegistry — timeline', () => {
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(600)
-        mixin.beforeMount?.call(cpi)
         mixin.mounted?.call(cpi)
+
+        // Add a mounted component span (simulates what component instrumentation records)
+        addComponentSpan(600, 'mounted', { startTime: 100, durationMs: 5 })
 
         const entry = getAll()[0]
         expect(entry.timeline).toHaveLength(1)
@@ -939,10 +931,11 @@ describe('setupRenderRegistry — timeline', () => {
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(601)
-        mixin.beforeMount?.call(cpi)
         mixin.mounted?.call(cpi)
-        mixin.beforeUpdate?.call(cpi)
         mixin.updated?.call(cpi)
+
+        addComponentSpan(601, 'mounted', { startTime: 100, durationMs: 5 })
+        addComponentSpan(601, 'updated', { startTime: 200, durationMs: 3 })
 
         const entry = getAll()[0]
         expect(entry.timeline).toHaveLength(2)
@@ -955,31 +948,29 @@ describe('setupRenderRegistry — timeline', () => {
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(602)
-        mixin.beforeMount?.call(cpi)
         mixin.mounted?.call(cpi)
+        addComponentSpan(602, 'mounted', { startTime: 100 })
         expect(getAll()[0].timeline).toHaveLength(1)
 
         reset()
+        // No new spans after reset → timeline is empty (postResetSpans = [])
         expect(getAll()[0].timeline).toHaveLength(0)
     })
 
-    it('timeline includes the triggerKey when renderTriggered fired before updated', () => {
+    it('timeline entries do not include triggerKey — trigger tracking was removed', () => {
         const app = createApp({})
         const { getAll } = setupRenderRegistry(makeNuxtApp(app))
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(603)
-        mixin.beforeMount?.call(cpi)
         mixin.mounted?.call(cpi)
-        ;(mixin.renderTriggered as (this: ComponentPublicInstance, e: { key: string; type: string }) => void).call(cpi, {
-            key: 'count',
-            type: 'set',
-        })
-        mixin.beforeUpdate?.call(cpi)
         mixin.updated?.call(cpi)
 
+        addComponentSpan(603, 'mounted', { startTime: 100 })
+        addComponentSpan(603, 'updated', { startTime: 200 })
+
         const updateEvent = getAll()[0].timeline.find((e) => e.kind === 'update')
-        expect(updateEvent?.triggerKey).toBe('set: count')
+        expect(updateEvent?.triggerKey).toBeUndefined()
     })
 
     it('timeline stores the route each event happened on', () => {
@@ -989,8 +980,10 @@ describe('setupRenderRegistry — timeline', () => {
 
         setRoute('/products')
         const cpi = fakeCPI(604)
-        mixin.beforeMount?.call(cpi)
         mixin.mounted?.call(cpi)
+
+        // Span must carry the route in metadata for aggregateFromComponentSpans to pick it up
+        addComponentSpan(604, 'mounted', { startTime: 100, route: '/products' })
 
         expect(getAll()[0].timeline[0].route).toBe('/products')
     })
@@ -1042,18 +1035,17 @@ describe('setupRenderRegistry — persistent component double-count fix', () => 
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(800)
-        mixin.beforeMount?.call(cpi)
-        mixin.mounted?.call(cpi) // first mount — recorded in timeline
+        mixin.mounted?.call(cpi)
+        addComponentSpan(800, 'mounted', { startTime: 100 }) // first mount — recorded in timeline
 
         reset() // simulates navigation — this component survives → isPersistent = true
 
-        mixin.beforeMount?.call(cpi) // re-attach after navigation
-        mixin.mounted?.call(cpi)
+        mixin.mounted?.call(cpi) // re-attach after navigation — no new span (not adding one)
 
         const entry = getAll()[0]
         // The re-mount after navigation should NOT appear in the timeline
         expect(entry.isPersistent).toBe(true)
-        expect(entry.timeline).toHaveLength(0) // reset() cleared previous; new mount not recorded
+        expect(entry.timeline).toHaveLength(0) // no post-reset spans → empty timeline
     })
 
     it('reactive updates on a persistent component ARE still recorded in the timeline', () => {
@@ -1062,23 +1054,19 @@ describe('setupRenderRegistry — persistent component double-count fix', () => 
         const mixin = app._context.mixins[app._context.mixins.length - 1]
 
         const cpi = fakeCPI(801)
-        mixin.beforeMount?.call(cpi)
         mixin.mounted?.call(cpi)
+        addComponentSpan(801, 'mounted', { startTime: 100 })
         reset()
-        mixin.beforeMount?.call(cpi)
-        // re-attach after navigation — isPersistent is now true, no timeline event recorded,
-        // but mountCount becomes 2 so rerenders gets +1 (existing behaviour preserved)
-        mixin.mounted?.call(cpi)
-
-        // A real reactive update fires after navigation
-        mixin.beforeUpdate?.call(cpi)
+        mixin.mounted?.call(cpi) // re-attach after navigation — isPersistent is now true, no span added
         mixin.updated?.call(cpi)
+        // A real reactive update fires after navigation
+        addComponentSpan(801, 'updated', { durationMs: 5 })
 
         const entry = getAll()[0]
         // timeline has only the reactive update event (not the navigation re-attach)
         expect(entry.timeline).toHaveLength(1)
         expect(entry.timeline[0].kind).toBe('update')
-        // rerenders = 1 from re-attach (mountCount > 1) + 1 from reactive update = 2
-        expect(entry.rerenders).toBe(2)
+        // rerenders = 1 (only the post-reset 'updated' span counts)
+        expect(entry.rerenders).toBe(1)
     })
 })

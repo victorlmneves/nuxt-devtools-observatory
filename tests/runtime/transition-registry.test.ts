@@ -2,6 +2,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createApp, defineComponent, h, ref, nextTick } from 'vue'
 import { setupTransitionRegistry, createTrackedTransition } from '@observatory/runtime/composables/transition-registry'
+import { traceStore } from '@observatory/runtime/tracing/traceStore'
+
+beforeEach(() => {
+    traceStore.clear()
+})
 
 // ── setupTransitionRegistry ──────────────────────────────────────────────
 
@@ -610,6 +615,7 @@ describe('createTrackedTransition — interrupted and leave-cancelled paths', ()
         await nextTick()
 
         const afterUnmount = reg.getAll().find((e) => e.direction === 'leave')
+
         if (afterUnmount) {
             expect(['interrupted', 'left', 'leave-cancelled']).toContain(afterUnmount.phase)
         }
