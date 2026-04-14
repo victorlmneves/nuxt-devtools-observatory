@@ -4,6 +4,10 @@ import { startSpan } from '../tracing/tracing'
 
 const instrumentedApps = new WeakSet<App>()
 
+// Stores the performance.now() timestamp recorded in beforeMount/beforeUpdate
+// so the corresponding mounted/updated hook can compute the real render duration.
+const renderStartTimes = new WeakMap<ComponentPublicInstance, number>()
+
 function getComponentFile(instance: ComponentPublicInstance) {
     return (instance.$.type as { __file?: string }).__file
 }
@@ -74,6 +78,42 @@ function trackLifecycle(instance: ComponentPublicInstance, lifecycle: 'mounted' 
     })
 }
 
+function trackRender(instance: ComponentPublicInstance, phase: 'mount' | 'update', startTime: number, endTime: number) {
+    if (!shouldTrack(instance)) {
+        return
+    }
+
+    const componentName = getComponentName(instance)
+    const file = getComponentFile(instance)
+    const uid = instance.$.uid
+    const route = typeof window !== 'undefined' ? window.location.pathname : '/'
+
+    const span = startSpan({
+        name: 'component:render',
+        type: 'render',
+        startTime,
+        metadata: {
+            lifecycle: `render:${phase}`,
+            componentName,
+            uid,
+            file,
+            route,
+        },
+    })
+
+    span.end({
+        endTime,
+        status: 'ok',
+        metadata: {
+            lifecycle: `render:${phase}`,
+            componentName,
+            uid,
+            file,
+            route,
+        },
+    })
+}
+
 export function setupComponentInstrumentation(nuxtApp: NuxtApp) {
     const app = nuxtApp.vueApp
 
@@ -84,11 +124,37 @@ export function setupComponentInstrumentation(nuxtApp: NuxtApp) {
     instrumentedApps.add(app)
 
     app.mixin({
+        beforeMount(this: ComponentPublicInstance) {
+            if (shouldTrack(this)) {
+                renderStartTimes.set(this, performance.now())
+            }
+        },
+
         mounted(this: ComponentPublicInstance) {
+            const startTime = renderStartTimes.get(this)
+            renderStartTimes.delete(this)
+
+            if (startTime !== undefined) {
+                trackRender(this, 'mount', startTime, performance.now())
+            }
+
             trackLifecycle(this, 'mounted')
         },
 
+        beforeUpdate(this: ComponentPublicInstance) {
+            if (shouldTrack(this)) {
+                renderStartTimes.set(this, performance.now())
+            }
+        },
+
         updated(this: ComponentPublicInstance) {
+            const startTime = renderStartTimes.get(this)
+            renderStartTimes.delete(this)
+
+            if (startTime !== undefined) {
+                trackRender(this, 'update', startTime, performance.now())
+            }
+
             trackLifecycle(this, 'updated')
         },
     })
