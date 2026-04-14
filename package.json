@@ -27,6 +27,10 @@
         "./runtime/fetch-registry": {
             "types": "./dist/runtime/composables/fetch-registry.d.ts",
             "import": "./dist/runtime/composables/fetch-registry.js"
+        },
+        "./runtime/async-data-instrumentation": {
+            "types": "./dist/runtime/instrumentation/asyncData.d.ts",
+            "import": "./dist/runtime/instrumentation/asyncData.js"
         }
     },
     "files": [

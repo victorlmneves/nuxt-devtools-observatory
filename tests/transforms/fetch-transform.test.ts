@@ -28,8 +28,8 @@ describe('fetchInstrumentPlugin', () => {
             expect(fetchResult).not.toBeNull()
             expect(fetchResult!.code).toContain('__devFetchCall(useFetch,')
             expect(lazyFetchResult!.code).toContain('__devFetchCall(useLazyFetch,')
-            expect(asyncDataResult!.code).toContain('__devFetchHandler')
-            expect(lazyAsyncDataResult!.code).toContain('__devFetchHandler')
+            expect(asyncDataResult!.code).toContain('useTracedAsyncData(useAsyncData,')
+            expect(lazyAsyncDataResult!.code).toContain('useTracedAsyncData(useLazyAsyncData,')
         })
 
         it('leaves useAsyncData with no handler untouched (unrecognised call shape)', () => {
@@ -49,13 +49,21 @@ describe('fetchInstrumentPlugin', () => {
         it('injects the handler helper import for wrapped async-data handlers', () => {
             const result = transform(`useAsyncData(() => $fetch('/api/test'))`)
 
-            expect(result!.code).toContain("import { __devFetchHandler } from 'nuxt-devtools-observatory/runtime/fetch-registry'")
+            expect(result!.code).toContain("import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation'")
         })
 
-        it('does not duplicate the import when both helpers are already present in the source', () => {
-            const code = `import { __devFetchCall, __devFetchHandler } from 'nuxt-devtools-observatory/runtime/fetch-registry';\nuseFetch('/api/test')`
+        it('does not duplicate the fetch-call import when it is already present in the source', () => {
+            const code = `import { __devFetchCall } from 'nuxt-devtools-observatory/runtime/fetch-registry';\nuseFetch('/api/test')`
             const result = transform(code)
-            const count = (result!.code.match(/import.*__devFetch(Call|Handler)/g) ?? []).length
+            const count = (result!.code.match(/import.*__devFetchCall/g) ?? []).length
+
+            expect(count).toBe(1)
+        })
+
+        it('does not duplicate the async-data import when it is already present in the source', () => {
+            const code = `import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation';\nuseAsyncData(() => $fetch('/api/test'))`
+            const result = transform(code)
+            const count = (result!.code.match(/import.*useTracedAsyncData/g) ?? []).length
 
             expect(count).toBe(1)
         })

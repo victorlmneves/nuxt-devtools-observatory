@@ -62,6 +62,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     const HIDE_INTERNALS = config.heatmapHideInternals ?? false
     let dirty = true
     let cachedSnapshot = '[]'
+    let resetTimestamp = 0
     const liveElements = new Map<number, Element | undefined>()
 
     function markDirty() {
@@ -134,6 +135,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
     }
 
     function reset() {
+        resetTimestamp = performance.now()
+
         for (const entry of entries.values()) {
             entry.isPersistent = true
             entry.rerenders = 0
@@ -152,7 +155,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             .flatMap((trace) => trace.spans)
             .filter((span) => span.type === 'component')
 
-        const spansByUid = new Map<number, Span[]>()
+        const allSpansByUid = new Map<number, Span[]>()
+        const postResetSpansByUid = new Map<number, Span[]>()
 
         for (const span of componentSpans) {
             const uidValue = span.metadata?.uid
@@ -162,16 +166,22 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 continue
             }
 
-            const list = spansByUid.get(uid) ?? []
-            list.push(span)
-            spansByUid.set(uid, list)
+            const allList = allSpansByUid.get(uid) ?? []
+            allList.push(span)
+            allSpansByUid.set(uid, allList)
+
+            if (span.startTime >= resetTimestamp) {
+                const postList = postResetSpansByUid.get(uid) ?? []
+                postList.push(span)
+                postResetSpansByUid.set(uid, postList)
+            }
         }
 
         for (const [uid, entry] of entries.entries()) {
-            const spans = spansByUid.get(uid) ?? []
-            spans.sort((a, b) => a.startTime - b.startTime)
+            const allSpans = (allSpansByUid.get(uid) ?? []).sort((a, b) => a.startTime - b.startTime)
+            const postResetSpans = (postResetSpansByUid.get(uid) ?? []).sort((a, b) => a.startTime - b.startTime)
 
-            const timeline: RenderEvent[] = spans.slice(-MAX_TIMELINE).map((span) => {
+            const timeline: RenderEvent[] = postResetSpans.slice(-MAX_TIMELINE).map((span) => {
                 const lifecycle = span.metadata?.lifecycle === 'mounted' ? 'mount' : 'update'
                 const routeValue = span.metadata?.route
                 const route = typeof routeValue === 'string' && routeValue.length > 0 ? routeValue : entry.route
@@ -184,10 +194,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 }
             })
 
-            const mountCount = spans.filter((span) => span.metadata?.lifecycle === 'mounted').length
-            const rerenders = spans.filter((span) => span.metadata?.lifecycle !== 'mounted').length
-            const totalMs = spans.reduce((sum, span) => sum + (span.durationMs ?? 0), 0)
-            const eventsCount = Math.max(mountCount + rerenders, 1)
+            const mountCount = allSpans.filter((span) => span.metadata?.lifecycle === 'mounted').length
+            const rerenders = postResetSpans.filter((span) => span.metadata?.lifecycle !== 'mounted').length
+            const totalMs = postResetSpans.reduce((sum, span) => sum + (span.durationMs ?? 0), 0)
+            const eventsCount = Math.max(postResetSpans.length, 1)
 
             entry.mountCount = mountCount
             entry.rerenders = rerenders
