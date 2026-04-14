@@ -278,8 +278,8 @@ export default defineNuxtModule<ModuleOptions>({
             addPlugin(resolver.resolve('./runtime/plugin'))
         }
 
-        // ── Nitro plugin for SSR fetch capture ────────────────────────────────
-        if (resolved.fetchDashboard) {
+        // ── Nitro plugin for SSR fetch capture / trace injection ──────────────
+        if (resolved.fetchDashboard || (resolved.traceViewer && resolved.instrumentServer)) {
             addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
         }
 

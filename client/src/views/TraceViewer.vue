@@ -19,6 +19,8 @@ const selectedTraceId = ref<string | null>(null)
 const selectedSpan = ref<TraceSpan | undefined>(undefined)
 const viewMode = ref<'overview' | 'flamegraph' | 'waterfall'>('overview')
 const showFilters = ref(false)
+const renderSummaryOpen = ref(true)
+const highlightedUid = ref<string | number | undefined>(undefined)
 
 const {
     searchQuery,
@@ -56,6 +58,84 @@ const selectedTrace = computed(() => {
     }
 
     return filteredTraces.value.find((t) => t.id === selectedTraceId.value)
+})
+
+/** Aggregate render spans in the selected trace by component UID. */
+interface RenderSummaryRow {
+    uid: string | number
+    componentName: string
+    file: string
+    mountCount: number
+    rerenderCount: number
+    totalMs: number
+    avgMs: number
+}
+
+const renderSummary = computed<RenderSummaryRow[]>(() => {
+    if (!selectedTrace.value) {
+        return []
+    }
+
+    const byUid = new Map<string | number, { spans: TraceSpan[]; name: string; file: string }>()
+
+    for (const span of selectedTrace.value.spans) {
+        if (span.type !== 'render') {
+            continue
+        }
+
+        const m = span.metadata as Record<string, unknown> | undefined
+
+        if (!m) {
+            continue
+        }
+
+        const uid = (m.uid as string | number | undefined) ?? span.id
+        const name = String(m.componentName ?? '')
+        const file = String(m.file ?? '')
+
+        if (!byUid.has(uid)) {
+            byUid.set(uid, { spans: [], name, file })
+        }
+
+        byUid.get(uid)!.spans.push(span)
+    }
+
+    const rows: RenderSummaryRow[] = []
+
+    for (const [uid, { spans, name, file }] of byUid) {
+        let mountCount = 0
+        let rerenderCount = 0
+        let totalMs = 0
+
+        for (const span of spans) {
+            const lifecycle = String((span.metadata as Record<string, unknown> | undefined)?.lifecycle ?? '')
+            const dur = span.durationMs ?? 0
+
+            if (lifecycle === 'render:mount') {
+                mountCount++
+            } else {
+                rerenderCount++
+            }
+
+            totalMs += dur
+        }
+
+        const totalRenders = mountCount + rerenderCount
+        rows.push({
+            uid,
+            componentName: name || String(uid),
+            file,
+            mountCount,
+            rerenderCount,
+            totalMs,
+            avgMs: totalRenders > 0 ? totalMs / totalRenders : 0,
+        })
+    }
+
+    // Sort by total re-renders descending, then by total time.
+    rows.sort((a, b) => b.rerenderCount - a.rerenderCount || b.totalMs - a.totalMs)
+
+    return rows
 })
 
 function elapsedFromSpans(trace: TraceEntry): number | undefined {
@@ -137,6 +217,7 @@ function getSpanDisplayName(span: TraceSpan): string {
 function selectTrace(trace: TraceEntry) {
     selectedTraceId.value = trace.id
     selectedSpan.value = undefined
+    highlightedUid.value = undefined
 }
 
 function handleClearFilters() {
@@ -190,6 +271,13 @@ async function handleImport() {
 function handleBackToLive() {
     importedTraces.value = []
     selectedTraceId.value = null
+    selectedSpan.value = undefined
+    highlightedUid.value = undefined
+}
+
+function handleRenderSummaryRowClick(uid: string | number) {
+    // Toggle highlight: clicking the already-highlighted row deselects it.
+    highlightedUid.value = highlightedUid.value === uid ? undefined : uid
     selectedSpan.value = undefined
 }
 </script>
@@ -343,7 +431,12 @@ function handleBackToLive() {
                                 <div
                                     v-for="span in selectedTrace.spans"
                                     :key="span.id"
-                                    :class="{ 'trace-viewer__span-item--selected': selectedSpan?.id === span.id }"
+                                    :class="{
+                                        'trace-viewer__span-item--selected': selectedSpan?.id === span.id,
+                                        'trace-viewer__span-item--highlighted':
+                                            highlightedUid !== undefined &&
+                                            (span.metadata as Record<string, unknown> | undefined)?.uid === highlightedUid,
+                                    }"
                                     class="trace-viewer__span-item"
                                     @click="selectedSpan = span"
                                 >
@@ -354,6 +447,53 @@ function handleBackToLive() {
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Render Summary panel — shown when the trace has render spans -->
+                            <template v-if="renderSummary.length > 0">
+                                <div class="trace-viewer__render-summary-header" @click="renderSummaryOpen = !renderSummaryOpen">
+                                    <span class="trace-viewer__render-summary-toggle">{{ renderSummaryOpen ? '▾' : '▸' }}</span>
+                                    <span class="trace-viewer__render-summary-title">Render Summary</span>
+                                    <span class="trace-viewer__render-summary-count muted">{{ renderSummary.length }} components</span>
+                                    <span
+                                        v-if="highlightedUid !== undefined"
+                                        class="trace-viewer__render-summary-clear"
+                                        @click.stop="highlightedUid = undefined"
+                                    >
+                                        ✕ clear
+                                    </span>
+                                </div>
+                                <div v-if="renderSummaryOpen" class="trace-viewer__render-summary-table-wrap">
+                                    <table class="data-table trace-viewer__render-summary-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Component</th>
+                                                <th title="Times the component was mounted">Mounts</th>
+                                                <th title="Reactive re-renders after initial mount">Re-renders</th>
+                                                <th title="Average render duration">Avg</th>
+                                                <th title="Sum of all render durations">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr
+                                                v-for="row in renderSummary"
+                                                :key="row.uid"
+                                                :class="{ 'trace-viewer__render-summary-row--active': highlightedUid === row.uid }"
+                                                class="trace-viewer__render-summary-row"
+                                                :title="row.file"
+                                                @click="handleRenderSummaryRowClick(row.uid)"
+                                            >
+                                                <td class="mono">{{ row.componentName }}</td>
+                                                <td class="mono">{{ row.mountCount }}</td>
+                                                <td class="mono" :class="{ 'trace-viewer__render-hot': row.rerenderCount > 3 }">
+                                                    {{ row.rerenderCount }}
+                                                </td>
+                                                <td class="mono">{{ formatDuration(row.avgMs) }}</td>
+                                                <td class="mono">{{ formatDuration(row.totalMs) }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- Flamegraph -->
@@ -673,6 +813,90 @@ function handleBackToLive() {
     border-left: 1px solid var(--border);
     background: var(--bg);
     overflow: auto;
+}
+
+.trace-viewer__span-item--highlighted {
+    background: color-mix(in srgb, var(--purple, #a855f7) 8%, transparent);
+    border-left: 2px solid var(--purple, #a855f7);
+}
+
+.trace-viewer__render-summary-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3, var(--bg2, var(--bg)));
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.trace-viewer__render-summary-header:hover {
+    background: var(--bg2, var(--bg));
+}
+
+.trace-viewer__render-summary-toggle {
+    font-size: 10px;
+    color: var(--text3, var(--text2, var(--text)));
+    width: 12px;
+    flex-shrink: 0;
+}
+
+.trace-viewer__render-summary-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2, var(--text));
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.trace-viewer__render-summary-count {
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text3, var(--text2, var(--text)));
+}
+
+.trace-viewer__render-summary-clear {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.trace-viewer__render-summary-clear:hover {
+    text-decoration: underline;
+}
+
+.trace-viewer__render-summary-table-wrap {
+    flex-shrink: 0;
+    max-height: 200px;
+    overflow: auto;
+    border-bottom: 1px solid var(--border);
+}
+
+.trace-viewer__render-summary-table {
+    width: 100%;
+}
+
+.trace-viewer__render-summary-row {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.trace-viewer__render-summary-row:hover {
+    background: var(--bg2, var(--bg));
+}
+
+.trace-viewer__render-summary-row--active {
+    background: color-mix(in srgb, var(--purple, #a855f7) 8%, transparent);
+    border-left: 2px solid var(--purple, #a855f7);
+}
+
+.trace-viewer__render-hot {
+    color: var(--orange, #f97316);
+    font-weight: 600;
 }
 
 @media (max-width: 1024px) {
