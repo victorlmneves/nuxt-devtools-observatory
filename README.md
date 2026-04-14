@@ -2,6 +2,9 @@
 
 # Nuxt DevTools Observatory
 
+> [!WARNING]
+> **Performance note:** Instrumentation wraps every useFetch, composable, and lifecycle hook. In large apps this can slow down the DevTools UI or increase memory usage. Disable unused features via the observatory config.
+
 Nuxt DevTools module providing six missing observability features:
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
@@ -381,16 +384,26 @@ src/
 │   ├── provide-inject-transform.ts     ← AST wraps provide/inject
 │   ├── composable-transform.ts         ← AST wraps useX() composables
 │   └── transition-transform.ts         ← Virtual vue proxy — overrides Transition export
-├── runtime/
-│   ├── plugin.ts                       ← Client runtime bootstrap + RPC/Vite WS bridge
-│   └── composables/
-│       ├── fetch-registry.ts           ← Fetch tracking store + __devFetch shim
-│       ├── provide-inject-registry.ts  ← Injection tracking + __devProvide/__devInject
-│       ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
-│       ├── render-registry.ts          ← Render performance data via PerformanceObserver
-│       └── transition-registry.ts      ← Transition lifecycle store
-└── nitro/
-    └── fetch-capture.ts                ← SSR-side fetch timing
+└── runtime/
+    ├── plugin.ts                       ← Client runtime bootstrap + RPC/Vite WS bridge
+    ├── composables/
+    │   ├── fetch-registry.ts           ← Fetch tracking store + __devFetch shim
+    │   ├── provide-inject-registry.ts  ← Injection tracking + __devProvide/__devInject
+    │   ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
+    │   ├── render-registry.ts          ← Render performance data via PerformanceObserver
+    │   └── transition-registry.ts      ← Transition lifecycle store
+    ├── instrumentation/
+    │   ├── route.ts                    ← router.afterEach hook — opens/closes traces per navigation
+    │   ├── component.ts                ← Vue mixin lifecycle hooks — component + render spans
+    │   ├── fetch.ts                    ← useFetch/useAsyncData span recording
+    │   └── asyncData.ts                ← useAsyncData-specific span handling
+    ├── tracing/
+    │   ├── trace.ts                    ← Span + Trace types (server-side internal)
+    │   ├── traceStore.ts               ← In-memory Map<string, Trace> store
+    │   ├── tracing.ts                  ← Span open/close helpers
+    │   └── context.ts                  ← Current-trace context (per async task)
+    └── nitro/
+        └── fetch-capture.ts            ← SSR-side fetch timing
 
 client/
 ├── index.html
@@ -402,12 +415,16 @@ client/
     ├── style.css                       ← Design system
     ├── components/
     ├── composables/
-    │   └── useExportImport.ts          ← JSON export (download) and import (file picker) utilities
+    │   ├── useExportImport.ts          ← JSON export (download) and import (file picker) utilities
+    │   ├── useResizablePane.ts         ← Resizable split-pane drag handle
+    │   └── useTraceFilter.ts           ← Trace filter state and filtering logic
     ├── stores/
     └── views/
         ├── FetchDashboard.vue          ← useFetch tab UI
         ├── ProvideInjectGraph.vue      ← provide/inject tab UI
         ├── ComposableTracker.vue       ← Composable tab UI
+        ├── ComponentBlock.vue          ← Shared component detail block
+        ├── ValueInspector.vue          ← Inline JSON value inspector
         ├── RenderHeatmap.vue           ← Heatmap tab UI
         ├── TransitionTimeline.vue      ← Transition tracker tab UI
         └── TraceViewer.vue             ← Trace viewer tab UI (Flamegraph + Waterfall + Inspector)
@@ -417,17 +434,30 @@ playground/
 ├── nuxt.config.ts
 ├── composables/
 │   ├── useCounter.ts                   ← Clean composable (properly cleaned up)
-│   └── useLeakyPoller.ts               ← Intentionally leaky (for demo)
+│   ├── useLeakyPoller.ts               ← Intentionally leaky (for demo)
+│   ├── useCart.ts                      ← Cart state composable
+│   ├── useDashboard.ts                 ← Dashboard data composable
+│   ├── useLeakyCartAudit.ts            ← Leaky audit poller (for demo)
+│   ├── usePersistentCartSummary.ts     ← Cart summary across navigations
+│   ├── useProductFilter.ts             ← Product search/filter state
+│   └── useUserPreferences.ts           ← User preferences store
 ├── components/
 │   ├── ThemeConsumer.vue               ← Successfully injects 'theme'
 │   ├── MissingProviderConsumer.vue     ← Injects 'cartContext' (no provider — red node)
 │   ├── LeakyComponent.vue              ← Mounts useLeakyPoller
+│   ├── LeakyCartMonitor.vue            ← Mounts useLeakyCartAudit
 │   ├── HeavyList.vue                   ← Re-renders on every shuffle (heatmap demo)
 │   ├── PriceDisplay.vue                ← Leaf component with high render count
+│   ├── CartDrawer.vue                  ← Cart sidebar
+│   ├── CartItem.vue                    ← Individual cart item row
+│   ├── DataTable.vue                   ← Generic sortable table
+│   ├── SettingsPanel.vue               ← Settings form panel
+│   ├── StatsCard.vue                   ← Stat metric card
 │   └── transitions/
 │       ├── FadeBox.vue                 ← Healthy enter/leave transition
 │       ├── BrokenTransition.vue        ← Missing CSS classes (enter fires but stays in entering)
-│       └── CancelledTransition.vue     ← Rapid toggle triggers enter-cancelled / leave-cancelled
+│       ├── CancelledTransition.vue     ← Rapid toggle triggers enter-cancelled / leave-cancelled
+│       └── InterruptedTransition.vue   ← Back-to-back transitions trigger interrupted phase
 └── server/api/
     └── product.ts                      ← Mock API endpoint
 
