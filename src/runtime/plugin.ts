@@ -32,6 +32,7 @@ export default defineNuxtPlugin(() => {
         composableTracker?: boolean
         renderHeatmap?: boolean
         transitionTracker?: boolean
+        traceViewer?: boolean
         heatmapHideInternals?: boolean
     }
 
@@ -82,8 +83,10 @@ export default defineNuxtPlugin(() => {
     // so that shims injected by the Vite transforms find the registry already
     // in place rather than silently no-opping on the first render.
     if (import.meta.client) {
-        setupComponentInstrumentation(nuxtApp)
-        setupFetchInstrumentation(nuxtApp)
+        if (config.traceViewer) {
+            setupComponentInstrumentation(nuxtApp)
+            setupFetchInstrumentation(nuxtApp)
+        }
 
         // Always clear any previous registry to avoid cross-project state
         delete (window as ObservatoryWindow).__observatory__
@@ -197,9 +200,11 @@ export default defineNuxtPlugin(() => {
     if (import.meta.client) {
         const router = useRouter()
 
-        setupRouteInstrumentation(nuxtApp, {
-            getCurrentPath: () => router.currentRoute.value.path ?? '/',
-        })
+        if (config.traceViewer) {
+            setupRouteInstrumentation(nuxtApp, {
+                getCurrentPath: () => router.currentRoute.value.path ?? '/',
+            })
+        }
 
         // router.beforeEach fires BEFORE Vue renders anything for the new route —
         // no new setup() has run yet, so clearing here is safe and race-free.
@@ -321,27 +326,29 @@ export default defineNuxtPlugin(() => {
                 hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
         }
 
-        snapshot.traces = traceStore.getAllTraces().map((trace) => ({
-            id: trace.id,
-            name: trace.name,
-            startTime: trace.startTime,
-            endTime: trace.endTime,
-            durationMs: trace.durationMs,
-            status: trace.status,
-            metadata: trace.metadata,
-            spans: trace.spans.map((span) => ({
-                id: span.id,
-                traceId: span.traceId,
-                parentSpanId: span.parentSpanId,
-                name: span.name,
-                type: span.type,
-                startTime: span.startTime,
-                endTime: span.endTime,
-                durationMs: span.durationMs,
-                status: span.status,
-                metadata: span.metadata,
-            })),
-        }))
+        snapshot.traces = config.traceViewer
+            ? traceStore.getAllTraces().map((trace) => ({
+                  id: trace.id,
+                  name: trace.name,
+                  startTime: trace.startTime,
+                  endTime: trace.endTime,
+                  durationMs: trace.durationMs,
+                  status: trace.status,
+                  metadata: trace.metadata,
+                  spans: trace.spans.map((span) => ({
+                      id: span.id,
+                      traceId: span.traceId,
+                      parentSpanId: span.parentSpanId,
+                      name: span.name,
+                      type: span.type,
+                      startTime: span.startTime,
+                      endTime: span.endTime,
+                      durationMs: span.durationMs,
+                      status: span.status,
+                      metadata: span.metadata,
+                  })),
+              }))
+            : []
 
         snapshot.features = {
             fetchDashboard: !!registries.fetch,
@@ -350,7 +357,7 @@ export default defineNuxtPlugin(() => {
             composableNavigationMode,
             renderHeatmap: !!registries.render,
             transitionTracker: !!registries.transition,
-            traceViewer: true,
+            traceViewer: !!config.traceViewer,
         }
 
         return snapshot as ObservatorySnapshot
