@@ -74,6 +74,12 @@ function getSpanWidth(span: TraceSpan): number {
     return Math.max(2, Math.min(100 - left, width))
 }
 
+function isNarrowBar(span: TraceSpan): boolean {
+    const width = ((span.durationMs || 0) / timelineDuration.value) * 100
+
+    return width < 5
+}
+
 function formatDuration(durationMs?: number) {
     if (!durationMs) {
         return '0ms'
@@ -210,8 +216,15 @@ function getSpanTooltip(span: TraceSpan): string {
                                 }"
                                 :title="getSpanTooltip(span)"
                             >
-                                <span class="waterfall__bar-duration">{{ formatDuration(span.durationMs) }}</span>
+                                <span v-if="!isNarrowBar(span)" class="waterfall__bar-duration">{{ formatDuration(span.durationMs) }}</span>
                             </div>
+                            <span
+                                v-if="isNarrowBar(span)"
+                                class="waterfall__bar-duration-outside"
+                                :style="{ left: `calc(${getSpanX(span)}% + 4px)` }"
+                            >
+                                {{ formatDuration(span.durationMs) }}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -365,6 +378,16 @@ function getSpanTooltip(span: TraceSpan): string {
 .waterfall__bar-duration {
     font-size: 9px;
     white-space: nowrap;
+}
+
+.waterfall__bar-duration-outside {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    white-space: nowrap;
+    color: var(--text);
+    pointer-events: none;
 }
 
 .waterfall__empty {

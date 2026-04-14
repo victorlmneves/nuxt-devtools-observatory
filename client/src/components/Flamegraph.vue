@@ -53,6 +53,7 @@ const timelineDuration = computed(() => {
     for (const span of props.trace.spans) {
         const endTime = span.endTime ?? span.startTime + (span.durationMs ?? 0)
         const endOffset = endTime - props.trace.startTime
+
         if (endOffset > maxEndOffset) {
             maxEndOffset = endOffset
         }
@@ -71,6 +72,12 @@ function getBarPosition(span: TraceSpan): { left: string; width: string } {
         left: `${Math.min(100, Math.max(0, left))}%`,
         width: `${Math.max(0.5, Math.min(100 - Math.max(0, left), width))}%`,
     }
+}
+
+function isNarrowBar(span: TraceSpan): boolean {
+    const width = ((span.durationMs || 0) / timelineDuration.value) * 100
+
+    return width < 5
 }
 
 function formatDuration(durationMs?: number) {
@@ -222,8 +229,11 @@ const flattenedTree = computed(() => {
                         :title="getSpanTooltip(node)"
                         @click="emit('select-span', node)"
                     >
-                        <span class="flamegraph__bar-label">{{ formatDuration(node.durationMs) }}</span>
+                        <span v-if="!isNarrowBar(node)" class="flamegraph__bar-label">{{ formatDuration(node.durationMs) }}</span>
                     </div>
+                    <span v-if="isNarrowBar(node)" class="flamegraph__bar-label-outside" :style="{ left: getBarPosition(node).left }">
+                        {{ formatDuration(node.durationMs) }}
+                    </span>
                 </div>
             </div>
 
@@ -383,6 +393,17 @@ const flattenedTree = computed(() => {
     font-size: 9px;
     white-space: nowrap;
     padding: 0 4px;
+}
+
+.flamegraph__bar-label-outside {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    white-space: nowrap;
+    color: var(--text);
+    padding-left: 4px;
+    pointer-events: none;
 }
 
 .flamegraph__empty {
