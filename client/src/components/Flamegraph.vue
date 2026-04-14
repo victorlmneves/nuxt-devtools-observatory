@@ -156,12 +156,12 @@ function getSpanColorClass(type: string) {
     return colors[type] || 'bg-gray-500'
 }
 
-function renderNode(node: TraceNode, depth: number = 0): TraceNode[] {
+function renderNode(node: TraceNode): TraceNode[] {
     const result: TraceNode[] = [node]
 
     if (expandedNodes.value.has(node.id) && node.children.length > 0) {
         for (const child of node.children) {
-            result.push(...renderNode(child, depth + 1))
+            result.push(...renderNode(child))
         }
     }
 

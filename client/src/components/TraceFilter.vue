@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TraceEntry } from '@observatory/types/snapshot'
-import { useTraceFilter } from '@observatory-client/composables/useTraceFilter'
+import { getSpanTypesFromTraces } from '@observatory-client/composables/useTraceFilter'
 
 interface Props {
     traces: TraceEntry[]
@@ -23,8 +23,6 @@ const emit = defineEmits<{
     'update:route': [value: string]
     'clear-filters': []
 }>()
-
-const { getSpanTypesFromTraces } = useTraceFilter()
 
 const availableSpanTypes = computed(() => getSpanTypesFromTraces(props.traces))
 

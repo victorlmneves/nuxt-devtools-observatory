@@ -41,6 +41,7 @@ export function startSpan(input: StartSpanInput, options: StartSpanOptions = {})
             id: activeTraceId,
             name: options.traceName ?? input.name,
             metadata: options.traceMetadata,
+            startTime: input.startTime,
         })
     }
 

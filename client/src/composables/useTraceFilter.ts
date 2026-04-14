@@ -1,12 +1,16 @@
 import { computed, ref } from 'vue'
 import type { TraceEntry } from '@observatory/types/snapshot'
 
-export interface TraceFilterOptions {
-    searchQuery: string
-    spanTypes: Set<string>
-    minDuration: number
-    maxDuration: number
-    routeFilter: string
+export function getSpanTypesFromTraces(traces: TraceEntry[]): string[] {
+    const types = new Set<string>()
+
+    for (const trace of traces) {
+        for (const span of trace.spans) {
+            types.add(span.type)
+        }
+    }
+
+    return Array.from(types).sort()
 }
 
 export function useTraceFilter() {
@@ -15,18 +19,6 @@ export function useTraceFilter() {
     const minDuration = ref<number>(0)
     const maxDuration = ref<number>(Infinity)
     const routeFilter = ref<string>('')
-
-    function getSpanTypesFromTraces(traces: TraceEntry[]): string[] {
-        const types = new Set<string>()
-
-        for (const trace of traces) {
-            for (const span of trace.spans) {
-                types.add(span.type)
-            }
-        }
-
-        return Array.from(types).sort()
-    }
 
     function matchesSearch(trace: TraceEntry, query: string): boolean {
         if (!query) {
@@ -164,7 +156,6 @@ export function useTraceFilter() {
         minDuration,
         maxDuration,
         routeFilter,
-        getSpanTypesFromTraces,
         filterTraces,
         toggleSpanType,
         clearFilters,
