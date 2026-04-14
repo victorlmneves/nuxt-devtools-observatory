@@ -78,6 +78,79 @@ export default defineNuxtPlugin(() => {
         registries.transition = setupTransitionRegistry()
     }
 
+    // Read the SSR trace injected by the Nitro plugin and merge its spans into
+    // the client traceStore so the Trace Viewer shows an `ssr:` prefixed trace
+    // for the initial page load alongside the subsequent client navigations.
+    function mergeSsrSpans() {
+        if (!import.meta.client) {
+            return
+        }
+
+        const el = document.getElementById('__observatory_ssr_spans__')
+
+        if (!el) {
+            return
+        }
+
+        let record: {
+            traceId: string
+            name: string
+            spans: Array<{
+                id: string
+                name: string
+                type: string
+                startTime: number
+                endTime?: number
+                durationMs?: number
+                status: 'ok' | 'error' | 'active'
+                metadata?: Record<string, unknown>
+            }>
+        }
+
+        try {
+            record = JSON.parse(el.textContent ?? '')
+        } catch {
+            return
+        }
+
+        if (!record?.traceId || !Array.isArray(record.spans)) {
+            return
+        }
+
+        // Anchor the SSR trace just before now so it appears at the top of the
+        // trace list (most recent). Span times are relative to request start
+        // (startTime: 0 = request began), so we compute an absolute base by
+        // subtracting the navigation span duration from performance.now().
+        const navDurationMs = record.spans[0]?.durationMs ?? 0
+        const traceStartTime = performance.now() - navDurationMs
+
+        traceStore.createTrace({
+            id: record.traceId,
+            name: record.name,
+            startTime: traceStartTime,
+            metadata: { origin: 'ssr' },
+        })
+
+        for (const span of record.spans) {
+            traceStore.addSpan({
+                id: span.id,
+                traceId: record.traceId,
+                name: span.name,
+                type: span.type,
+                startTime: traceStartTime + span.startTime,
+                endTime: span.endTime !== undefined ? traceStartTime + span.endTime : undefined,
+                status: span.status,
+                metadata: { ...(span.metadata ?? {}), origin: 'ssr' },
+            })
+        }
+
+        traceStore.endTrace(record.traceId, {
+            endTime: traceStartTime + navDurationMs,
+            status: 'ok',
+            metadata: { origin: 'ssr' },
+        })
+    }
+
     // Expose registries globally so Vite transform shims can reach them.
     // This must happen synchronously — before any component setup() runs —
     // so that shims injected by the Vite transforms find the registry already
@@ -86,6 +159,9 @@ export default defineNuxtPlugin(() => {
         if (config.traceViewer) {
             setupComponentInstrumentation(nuxtApp)
             setupFetchInstrumentation(nuxtApp)
+            // Pick up SSR spans injected into the HTML by the Nitro plugin and
+            // merge them into the client traceStore as a standalone SSR trace.
+            mergeSsrSpans()
         }
 
         // Always clear any previous registry to avoid cross-project state

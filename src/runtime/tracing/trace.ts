@@ -1,5 +1,6 @@
 export type SpanType =
     | 'render'
+    | 'component'
     | 'transition'
     | 'fetch'
     | 'composable'
