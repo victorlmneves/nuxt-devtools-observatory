@@ -118,3 +118,27 @@ export interface TransitionEntry {
     appear: boolean
     mode?: string
 }
+
+export interface TraceSpan {
+    id: string
+    traceId: string
+    parentSpanId?: string
+    name: string
+    type: string
+    startTime: number
+    endTime?: number
+    durationMs?: number
+    status: 'active' | 'ok' | 'error' | 'cancelled'
+    metadata?: Record<string, unknown>
+}
+
+export interface TraceEntry {
+    id: string
+    name: string
+    startTime: number
+    endTime?: number
+    durationMs?: number
+    status: 'active' | 'ok' | 'error' | 'cancelled'
+    metadata?: Record<string, unknown>
+    spans: TraceSpan[]
+}

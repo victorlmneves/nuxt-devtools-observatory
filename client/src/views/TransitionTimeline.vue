@@ -28,12 +28,7 @@ const filtered = computed(() => {
         list = list.filter((e) => e.phase === 'entered' || e.phase === 'left')
     }
 
-    return list.sort((a, b) => {
-        const aTime = a.endTime ?? a.startTime
-        const bTime = b.endTime ?? b.startTime
-
-        return bTime - aTime
-    })
+    return list.sort((a, b) => a.startTime - b.startTime)
 })
 
 const stats = computed(() => ({

@@ -6,6 +6,7 @@ import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
 import RenderHeatmap from './views/RenderHeatmap.vue'
 import TransitionTimeline from './views/TransitionTimeline.vue'
+import TraceViewer from './views/TraceViewer.vue'
 
 const pathMap: Record<string, string> = {
     fetch: 'fetch',
@@ -13,6 +14,7 @@ const pathMap: Record<string, string> = {
     composables: 'composable',
     heatmap: 'heatmap',
     transitions: 'transitions',
+    traces: 'traces',
 }
 
 const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
@@ -28,6 +30,7 @@ const tabs = computed(() => {
         f.composableTracker && { id: 'composable', label: 'Composables', icon: '⬡' },
         f.renderHeatmap && { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
         f.transitionTracker && { id: 'transitions', label: 'Transitions', icon: '⬡' },
+        f.traceViewer && { id: 'traces', label: 'Traces', icon: '⬡' },
     ].filter((tab): tab is { id: string; label: string; icon: string } => Boolean(tab))
 })
 </script>
@@ -48,6 +51,7 @@ const tabs = computed(() => {
             <ComposableTracker v-else-if="activeTab === 'composable'" />
             <RenderHeatmap v-else-if="activeTab === 'heatmap'" />
             <TransitionTimeline v-else-if="activeTab === 'transitions'" />
+            <TraceViewer v-else-if="activeTab === 'traces'" />
         </main>
     </div>
 </template>

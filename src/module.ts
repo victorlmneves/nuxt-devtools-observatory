@@ -92,6 +92,12 @@ export interface ModuleOptions {
     transitionTracker?: boolean
 
     /**
+     * Enable the trace viewer tab (per-route component + fetch + composable + render spans)
+     * @default true
+     */
+    traceViewer?: boolean
+
+    /**
      * Hide node_modules/internal components in the render heatmap
      * @default false
      */
@@ -125,6 +131,7 @@ const defaults = {
     composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
     renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
     transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
+    traceViewer: process.env.OBSERVATORY_TRACE_VIEWER === 'true',
     heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3,
     heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600,
     maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
@@ -189,6 +196,9 @@ export default defineNuxtModule<ModuleOptions>({
             transitionTracker:
                 options.transitionTracker ??
                 (process.env.OBSERVATORY_TRANSITION_TRACKER ? process.env.OBSERVATORY_TRANSITION_TRACKER === 'true' : true),
+            traceViewer:
+                options.traceViewer ??
+                (process.env.OBSERVATORY_TRACE_VIEWER ? process.env.OBSERVATORY_TRACE_VIEWER === 'true' : true),
             instrumentServer:
                 options.instrumentServer ??
                 (process.env.OBSERVATORY_INSTRUMENT_SERVER
@@ -232,6 +242,9 @@ export default defineNuxtModule<ModuleOptions>({
                 './runtime/composables/provide-inject-registry'
             )
             aliases['nuxt-devtools-observatory/runtime/fetch-registry'] = resolver.resolve('./runtime/composables/fetch-registry')
+            aliases['nuxt-devtools-observatory/runtime/async-data-instrumentation'] = resolver.resolve(
+                './runtime/instrumentation/asyncData'
+            )
             ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
@@ -287,6 +300,7 @@ export default defineNuxtModule<ModuleOptions>({
             composables: [],
             renders: [],
             transitions: [],
+            traces: [],
             features: {
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
@@ -294,6 +308,7 @@ export default defineNuxtModule<ModuleOptions>({
                 composableNavigationMode: resolved.composableNavigationMode,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
+                traceViewer: !!resolved.traceViewer,
             },
         }
 
@@ -399,6 +414,7 @@ export default defineNuxtModule<ModuleOptions>({
             composableTracker: resolved.composableTracker,
             renderHeatmap: resolved.renderHeatmap,
             transitionTracker: resolved.transitionTracker,
+            traceViewer: resolved.traceViewer,
             maxFetchEntries: resolved.maxFetchEntries,
             maxPayloadBytes: resolved.maxPayloadBytes,
             maxTransitions: resolved.maxTransitions,
