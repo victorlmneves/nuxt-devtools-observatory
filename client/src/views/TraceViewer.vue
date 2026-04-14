@@ -50,12 +50,80 @@ const selectedTrace = computed(() => {
     return filteredTraces.value.find((t) => t.id === selectedTraceId.value)
 })
 
-function formatDuration(durationMs?: number) {
-    if (durationMs === undefined) {
-        return 'in progress'
+function elapsedFromSpans(trace: TraceEntry): number | undefined {
+    if (!trace.spans.length) {
+        return undefined
     }
 
-    return `${Math.round(durationMs * 10) / 10}ms`
+    let max = 0
+
+    for (const span of trace.spans) {
+        const end = span.endTime ?? span.startTime + (span.durationMs ?? 0)
+        const offset = end - trace.startTime
+
+        if (offset > max) {
+            max = offset
+        }
+    }
+
+    return max > 0 ? max : undefined
+}
+
+function formatDuration(durationMs?: number, trace?: TraceEntry): string {
+    if (durationMs !== undefined) {
+        return `${Math.round(durationMs * 10) / 10}ms`
+    }
+
+    if (trace) {
+        const elapsed = elapsedFromSpans(trace)
+
+        if (elapsed !== undefined) {
+            return `~${Math.round(elapsed * 10) / 10}ms`
+        }
+    }
+
+    return 'active'
+}
+
+function asString(val: unknown): string {
+    return typeof val === 'string' ? val : ''
+}
+
+function getSpanDisplayName(span: TraceSpan): string {
+    const m = span.metadata as Record<string, unknown> | undefined
+
+    if (!m) {
+        return span.name
+    }
+
+    const componentName = asString(m.componentName)
+    const lifecycle = asString(m.lifecycle)
+    const uid = m.uid !== undefined ? String(m.uid) : ''
+    const method = asString(m.method)
+    const url = asString(m.url)
+    const route = asString(m.route) || asString(m.path)
+
+    if (componentName && lifecycle) {
+        return uid ? `${componentName}.${lifecycle} #${uid}` : `${componentName}.${lifecycle}`
+    }
+
+    if (componentName) {
+        return uid ? `${componentName} #${uid}` : componentName
+    }
+
+    if (method && url) {
+        return `${method} ${url}`
+    }
+
+    if (url) {
+        return url
+    }
+
+    if (route) {
+        return `${span.name} (${route})`
+    }
+
+    return span.name
 }
 
 function selectTrace(trace: TraceEntry) {
@@ -134,7 +202,7 @@ function handleSpanTypesUpdate(value: Set<string>) {
                                 @click="selectTrace(trace)"
                             >
                                 <td class="mono">{{ trace.name }}</td>
-                                <td class="mono">{{ formatDuration(trace.durationMs) }}</td>
+                                <td class="mono">{{ formatDuration(trace.durationMs, trace) }}</td>
                                 <td class="mono">{{ trace.spans.length }}</td>
                             </tr>
                             <tr v-if="!filteredTraces.length">
@@ -192,7 +260,9 @@ function handleSpanTypesUpdate(value: Set<string>) {
                                 </div>
                                 <div>
                                     <div class="trace-viewer__overview-label">Duration</div>
-                                    <div class="trace-viewer__overview-value">{{ formatDuration(selectedTrace.durationMs) }}</div>
+                                    <div class="trace-viewer__overview-value">
+                                        {{ formatDuration(selectedTrace.durationMs, selectedTrace) }}
+                                    </div>
                                 </div>
                                 <div>
                                     <div class="trace-viewer__overview-label">Spans</div>
@@ -212,7 +282,7 @@ function handleSpanTypesUpdate(value: Set<string>) {
                                     class="trace-viewer__span-item"
                                     @click="selectedSpan = span"
                                 >
-                                    <div class="trace-viewer__span-name">{{ span.name }}</div>
+                                    <div class="trace-viewer__span-name">{{ getSpanDisplayName(span) }}</div>
                                     <div class="trace-viewer__span-meta">
                                         <span class="trace-viewer__span-type">{{ span.type }}</span>
                                         <span class="trace-viewer__span-duration">{{ formatDuration(span.durationMs) }}</span>
@@ -223,7 +293,7 @@ function handleSpanTypesUpdate(value: Set<string>) {
 
                         <!-- Flamegraph -->
                         <div v-if="viewMode === 'flamegraph'" class="trace-viewer__flamegraph">
-                            <Flamegraph :trace="selectedTrace" @select-span="selectedSpan = $event" />
+                            <Flamegraph :trace="selectedTrace" :selected-span-id="selectedSpan?.id" @select-span="selectedSpan = $event" />
                         </div>
 
                         <!-- Waterfall -->
@@ -335,11 +405,11 @@ function handleSpanTypesUpdate(value: Set<string>) {
 }
 
 .trace-viewer__trace-row:hover {
-    background: var(--bg-secondary);
+    background: var(--bg2, var(--bg));
 }
 
 .trace-viewer__trace-row--selected {
-    background: var(--bg-tertiary);
+    background: var(--bg2, var(--bg));
     border-left: 2px solid var(--accent);
 }
 
@@ -362,30 +432,37 @@ function handleSpanTypesUpdate(value: Set<string>) {
 .trace-viewer__tabs {
     display: flex;
     gap: 0;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg);
+    border-bottom: 0.5px solid var(--border);
+    background: var(--bg3);
     flex-shrink: 0;
+    padding: 8px 4px 0;
 }
 
 .trace-viewer__tab {
-    padding: 8px 16px;
-    background: none;
+    padding: 6px 12px 8px;
+    background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    color: var(--text-secondary);
+    margin-bottom: -1px;
+    color: var(--text3);
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
-    transition: all 0.2s;
+    transition:
+        color 0.12s,
+        border-color 0.12s;
+    border-radius: 0;
 }
 
 .trace-viewer__tab:hover {
     color: var(--text);
+    background: transparent;
 }
 
 .trace-viewer__tab--active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
+    color: var(--purple);
+    border-bottom-color: var(--purple);
+    background: transparent;
 }
 
 .trace-viewer__visualization {
@@ -406,14 +483,14 @@ function handleSpanTypesUpdate(value: Set<string>) {
     gap: 24px;
     padding: 16px;
     border-bottom: 1px solid var(--border);
-    background: var(--bg-secondary);
+    background: var(--bg2, var(--bg));
     flex-shrink: 0;
 }
 
 .trace-viewer__overview-label {
     font-size: 10px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 4px;
@@ -435,17 +512,17 @@ function handleSpanTypesUpdate(value: Set<string>) {
 
 .trace-viewer__span-item {
     padding: 8px 16px;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border);
     cursor: pointer;
     transition: background 0.2s;
 }
 
 .trace-viewer__span-item:hover {
-    background: var(--bg-secondary);
+    background: var(--bg2, var(--bg));
 }
 
 .trace-viewer__span-item--selected {
-    background: var(--bg-tertiary);
+    background: var(--bg2, var(--bg));
     border-left: 2px solid var(--accent);
 }
 
@@ -463,12 +540,13 @@ function handleSpanTypesUpdate(value: Set<string>) {
     gap: 8px;
     margin-top: 4px;
     font-size: 10px;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
 }
 
 .trace-viewer__span-type {
     padding: 2px 6px;
-    background: var(--bg-secondary);
+    background: var(--bg2, var(--bg));
+    border: 1px solid var(--border);
     border-radius: 3px;
 }
 

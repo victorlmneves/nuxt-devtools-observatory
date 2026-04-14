@@ -8,11 +8,6 @@ interface Props {
 
 const props = defineProps<Props>()
 
-interface SpanGroup {
-    type: string
-    spans: TraceSpan[]
-}
-
 const spansByType = computed(() => {
     const groups: Record<string, TraceSpan[]> = {}
 
@@ -43,16 +38,40 @@ const spansByType = computed(() => {
         })
 })
 
-const minTime = computed(() => props.trace.startTime)
-const maxTime = computed(() => props.trace.endTime || props.trace.startTime)
-const duration = computed(() => maxTime.value - minTime.value || 1)
+const timelineDuration = computed(() => {
+    if (props.trace.durationMs && props.trace.durationMs > 0) {
+        return props.trace.durationMs
+    }
+
+    if (props.trace.endTime && props.trace.endTime > props.trace.startTime) {
+        return props.trace.endTime - props.trace.startTime
+    }
+
+    let maxEndOffset = 0
+
+    for (const span of props.trace.spans) {
+        const endTime = span.endTime ?? span.startTime + (span.durationMs ?? 0)
+        const endOffset = endTime - props.trace.startTime
+
+        if (endOffset > maxEndOffset) {
+            maxEndOffset = endOffset
+        }
+    }
+
+    return maxEndOffset || 1
+})
 
 function getSpanX(span: TraceSpan): number {
-    return ((span.startTime - minTime.value) / duration.value) * 100
+    const left = ((span.startTime - props.trace.startTime) / timelineDuration.value) * 100
+
+    return Math.min(100, Math.max(0, left))
 }
 
 function getSpanWidth(span: TraceSpan): number {
-    return ((span.durationMs || 0) / duration.value) * 100
+    const left = getSpanX(span)
+    const width = ((span.durationMs || 0) / timelineDuration.value) * 100
+
+    return Math.max(2, Math.min(100 - left, width))
 }
 
 function formatDuration(durationMs?: number) {
@@ -94,6 +113,61 @@ function getStatusColor(status: string) {
 
     return statusColors[status] || 'border-gray-400'
 }
+
+function asString(val: unknown): string {
+    return typeof val === 'string' ? val : ''
+}
+
+function getSpanDisplayName(span: TraceSpan): string {
+    const m = span.metadata as Record<string, unknown> | undefined
+
+    if (!m) {
+        return span.name
+    }
+
+    const componentName = asString(m.componentName)
+    const lifecycle = asString(m.lifecycle)
+    const uid = m.uid !== undefined ? String(m.uid) : ''
+    const method = asString(m.method)
+    const url = asString(m.url)
+    const route = asString(m.route) || asString(m.path)
+
+    if (componentName && lifecycle) {
+        return uid ? `${componentName}.${lifecycle} #${uid}` : `${componentName}.${lifecycle}`
+    }
+
+    if (componentName) {
+        return uid ? `${componentName} #${uid}` : componentName
+    }
+
+    if (method && url) {
+        return `${method} ${url}`
+    }
+
+    if (url) {
+        return url
+    }
+
+    if (route) {
+        return `${span.name} (${route})`
+    }
+
+    return span.name
+}
+
+function getSpanTooltip(span: TraceSpan): string {
+    const displayName = getSpanDisplayName(span)
+    const duration = formatDuration(span.durationMs)
+    const m = span.metadata as Record<string, unknown> | undefined
+    const route = m ? asString(m.route) || asString(m.path) : ''
+    let tooltip = `${displayName} — ${duration} (${span.status})`
+
+    if (route && !displayName.includes(route)) {
+        tooltip += ` [${route}]`
+    }
+
+    return tooltip
+}
 </script>
 
 <template>
@@ -103,10 +177,10 @@ function getStatusColor(status: string) {
             <div class="waterfall__timeline-col">
                 <div class="waterfall__time-markers">
                     <div class="waterfall__time-marker">0ms</div>
-                    <div class="waterfall__time-marker">{{ Math.round(duration / 4) }}ms</div>
-                    <div class="waterfall__time-marker">{{ Math.round(duration / 2) }}ms</div>
-                    <div class="waterfall__time-marker">{{ Math.round((duration * 3) / 4) }}ms</div>
-                    <div class="waterfall__time-marker">{{ Math.round(duration) }}ms</div>
+                    <div class="waterfall__time-marker">{{ formatDuration(timelineDuration / 4) }}</div>
+                    <div class="waterfall__time-marker">{{ formatDuration(timelineDuration / 2) }}</div>
+                    <div class="waterfall__time-marker">{{ formatDuration((timelineDuration * 3) / 4) }}</div>
+                    <div class="waterfall__time-marker">{{ formatDuration(timelineDuration) }}</div>
                 </div>
             </div>
         </div>
@@ -124,7 +198,7 @@ function getStatusColor(status: string) {
                 <div class="waterfall__group-spans">
                     <div v-for="span in group.spans" :key="span.id" class="waterfall__span-row">
                         <div class="waterfall__span-label">
-                            <span :title="span.name">{{ span.name }}</span>
+                            <span :title="getSpanTooltip(span)">{{ getSpanDisplayName(span) }}</span>
                         </div>
                         <div class="waterfall__span-bar-container">
                             <div
@@ -134,7 +208,7 @@ function getStatusColor(status: string) {
                                     left: `${getSpanX(span)}%`,
                                     width: `${Math.max(1, getSpanWidth(span))}%`,
                                 }"
-                                :title="`${span.name} - ${formatDuration(span.durationMs)} (${span.status})`"
+                                :title="getSpanTooltip(span)"
                             >
                                 <span class="waterfall__bar-duration">{{ formatDuration(span.durationMs) }}</span>
                             </div>
@@ -163,7 +237,8 @@ function getStatusColor(status: string) {
     position: sticky;
     top: 0;
     z-index: 20;
-    background: var(--bg-secondary);
+    background: var(--bg2, var(--bg));
+    box-shadow: 0 1px 0 var(--border);
     border-bottom: 1px solid var(--border);
 }
 
@@ -188,7 +263,7 @@ function getStatusColor(status: string) {
 
 .waterfall__time-marker {
     font-size: 10px;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
     flex: 1;
     text-align: center;
 }
@@ -199,18 +274,18 @@ function getStatusColor(status: string) {
 }
 
 .waterfall__group {
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border);
 }
 
 .waterfall__group-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--bg-tertiary);
+    background: var(--bg2, var(--bg));
     padding: 8px 16px;
     font-weight: 600;
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
 }
 
 .waterfall__group-type {
@@ -227,7 +302,8 @@ function getStatusColor(status: string) {
 }
 
 .waterfall__group-count {
-    background: var(--bg-secondary);
+    background: var(--bg);
+    border: 1px solid var(--border);
     padding: 2px 6px;
     border-radius: 3px;
     font-size: 10px;
@@ -242,7 +318,7 @@ function getStatusColor(status: string) {
     display: flex;
     height: 28px;
     align-items: center;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border);
 }
 
 .waterfall__span-label {
@@ -294,7 +370,7 @@ function getStatusColor(status: string) {
 .waterfall__empty {
     padding: 32px 16px;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
 }
 
 /* Color utilities */

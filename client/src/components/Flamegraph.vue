@@ -9,6 +9,7 @@ interface TraceNode extends TraceSpan {
 
 interface Props {
     trace: TraceEntry
+    selectedSpanId?: string
 }
 
 const props = defineProps<Props>()
@@ -57,7 +58,8 @@ const timelineDuration = computed(() => {
         }
     }
 
-    return maxEndOffset || 1
+    // Add 10% padding so the rightmost span isn't clipped at 100%
+    return maxEndOffset > 0 ? maxEndOffset * 1.1 : 1
 })
 
 function getBarPosition(span: TraceSpan): { left: string; width: string } {
@@ -67,7 +69,7 @@ function getBarPosition(span: TraceSpan): { left: string; width: string } {
 
     return {
         left: `${Math.min(100, Math.max(0, left))}%`,
-        width: `${Math.max(2, Math.min(100 - Math.max(0, left), width))}%`,
+        width: `${Math.max(0.5, Math.min(100 - Math.max(0, left), width))}%`,
     }
 }
 
@@ -85,6 +87,60 @@ function formatDuration(durationMs?: number) {
     }
 
     return `${(durationMs / 1000).toFixed(2)}s`
+}
+
+function asString(value: unknown): string | undefined {
+    return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function asNumber(value: unknown): number | undefined {
+    return typeof value === 'number' ? value : undefined
+}
+
+function getSpanDisplayName(span: TraceSpan): string {
+    const metadata = span.metadata ?? {}
+    const lifecycle = asString(metadata.lifecycle)
+    const componentName = asString(metadata.componentName)
+    const uid = asNumber(metadata.uid)
+    const route = asString(metadata.route) ?? asString(metadata.path)
+    const method = asString(metadata.method)
+    const url = asString(metadata.url)
+
+    if (componentName && lifecycle) {
+        return uid !== undefined ? `${componentName}.${lifecycle} #${uid}` : `${componentName}.${lifecycle}`
+    }
+
+    if (componentName) {
+        return uid !== undefined ? `${componentName} #${uid}` : componentName
+    }
+
+    if (method && url) {
+        return `${method} ${url}`
+    }
+
+    if (url) {
+        return url
+    }
+
+    if (route) {
+        return `${span.name} (${route})`
+    }
+
+    return span.name
+}
+
+function getSpanTooltip(span: TraceSpan): string {
+    const metadata = span.metadata ?? {}
+    const displayName = getSpanDisplayName(span)
+    const status = span.status
+    const duration = formatDuration(span.durationMs)
+    const route = asString(metadata.route) ?? asString(metadata.path)
+
+    if (route) {
+        return `${displayName} - ${duration} (${status}) [${route}]`
+    }
+
+    return `${displayName} - ${duration} (${status})`
 }
 
 function getSpanColorClass(type: string) {
@@ -130,13 +186,18 @@ const flattenedTree = computed(() => {
     <div class="flamegraph">
         <div class="flamegraph__timeline-header">
             <div class="flamegraph__time-label">0ms</div>
-            <div class="flamegraph__time-label">{{ Math.round(timelineDuration / 2) }}ms</div>
-            <div class="flamegraph__time-label">{{ Math.round(timelineDuration) }}ms</div>
+            <div class="flamegraph__time-label">{{ formatDuration(timelineDuration / 2) }}</div>
+            <div class="flamegraph__time-label">{{ formatDuration(timelineDuration) }}</div>
         </div>
 
         <div class="flamegraph__rows">
-            <div v-for="{ node, displayDepth } in flattenedTree" :key="node.id" class="flamegraph__row">
-                <div class="flamegraph__label" :style="{ paddingLeft: `${displayDepth * 16}px` }">
+            <div
+                v-for="{ node, displayDepth } in flattenedTree"
+                :key="node.id"
+                :class="{ 'flamegraph__row--selected': node.id === props.selectedSpanId }"
+                class="flamegraph__row"
+            >
+                <div class="flamegraph__label" :style="{ paddingLeft: `calc(8px + ${displayDepth * 16}px)` }">
                     <button
                         v-if="node.children.length > 0"
                         :class="{
@@ -148,7 +209,7 @@ const flattenedTree = computed(() => {
                         ▶
                     </button>
                     <button class="flamegraph__node-button" @click="emit('select-span', node)">
-                        <span class="flamegraph__span-name">{{ node.name }}</span>
+                        <span class="flamegraph__span-name">{{ getSpanDisplayName(node) }}</span>
                         <span class="flamegraph__span-type">{{ node.type }}</span>
                     </button>
                 </div>
@@ -158,7 +219,7 @@ const flattenedTree = computed(() => {
                         class="flamegraph__bar"
                         :class="getSpanColorClass(node.type)"
                         :style="getBarPosition(node)"
-                        :title="`${node.name} - ${formatDuration(node.durationMs)} (${node.status})`"
+                        :title="getSpanTooltip(node)"
                         @click="emit('select-span', node)"
                     >
                         <span class="flamegraph__bar-label">{{ formatDuration(node.durationMs) }}</span>
@@ -191,13 +252,14 @@ const flattenedTree = computed(() => {
     position: sticky;
     top: 0;
     min-width: 0;
-    background: var(--bg-secondary);
+    background: var(--bg2, var(--bg));
+    box-shadow: 0 1px 0 var(--border);
     z-index: 10;
 }
 
 .flamegraph__time-label {
     font-size: 10px;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
     padding: 0 8px;
 }
 
@@ -210,9 +272,18 @@ const flattenedTree = computed(() => {
 .flamegraph__row {
     display: flex;
     height: 28px;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border);
     align-items: center;
     min-width: 0;
+    cursor: pointer;
+}
+
+.flamegraph__row--selected {
+    background: var(--tracker-tint-purple-soft, rgba(127, 119, 221, 0.08));
+}
+
+.flamegraph__row--selected .flamegraph__span-name {
+    color: var(--purple, var(--accent));
 }
 
 .flamegraph__label {
@@ -248,7 +319,7 @@ const flattenedTree = computed(() => {
     margin: 0;
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
     cursor: pointer;
     font-size: 10px;
     transition: transform 0.2s;
@@ -272,9 +343,9 @@ const flattenedTree = computed(() => {
 
 .flamegraph__span-type {
     padding: 2px 6px;
-    background: var(--bg-tertiary);
+    background: var(--bg2, var(--bg));
     border-radius: 3px;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
     font-size: 9px;
     flex-shrink: 0;
 }
@@ -317,7 +388,7 @@ const flattenedTree = computed(() => {
 .flamegraph__empty {
     padding: 32px 16px;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--text2, var(--text));
 }
 
 /* Color utilities */
