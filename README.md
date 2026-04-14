@@ -224,6 +224,11 @@ The panel provides:
   panel's identity section has an `open ↗` button; both call Vite's built-in
   `/__open-in-editor` endpoint to open the component's source file in the configured
   editor
+- **Export / Import** — `↓ export` downloads the current render data (live or frozen
+  snapshot) as a `.json` file; `↑ import` loads a previously exported file and
+  automatically enters freeze mode so the imported snapshot is displayed in place of
+  live data; the freeze button label changes to `unfreeze (imported)` to signal the
+  import state
 
 **Known gaps:**
 
@@ -265,6 +270,10 @@ The panel provides:
 - **Filter panel** — filter by span type and free-text search across span names and metadata
 - **Duration labels** — spans narrower than 5 % of the timeline render their label outside the bar for readability
 - **In-progress traces** — active traces show `~Xms` (computed from the latest span end offset) rather than a hard "in progress" label
+- **Export / Import** — `↓ export` downloads all captured traces as a `.json` file
+  (always exports the full unfiltered dataset); `↑ import` loads a previously exported
+  file and freezes the view on the imported data; a `← live` button returns to the
+  live stream; the trace count label shows `(imported)` while viewing imported data
 
 **What it tells you:**
 
@@ -333,7 +342,6 @@ const result = useMyComposable()
 
 - [ ] SSR span collection (server-side navigation and composable setup)
 - [ ] Cross-trace comparison view
-- [ ] Export traces as JSON
 
 ## Development
 
@@ -393,6 +401,8 @@ client/
     ├── main.ts
     ├── style.css                       ← Design system
     ├── components/
+    ├── composables/
+    │   └── useExportImport.ts          ← JSON export (download) and import (file picker) utilities
     ├── stores/
     └── views/
         ├── FetchDashboard.vue          ← useFetch tab UI
