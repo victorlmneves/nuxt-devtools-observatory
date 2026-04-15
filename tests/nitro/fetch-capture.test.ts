@@ -47,6 +47,9 @@ describe('fetch-capture nitro plugin', () => {
 
         expect(typeof event.context.__observatoryRequestId).toBe('string')
         expect((event.context.__observatoryRequestId as string).length).toBeGreaterThan(0)
+
+        const globalCtx = (globalThis as { __observatorySsrContext__?: { __observatoryRequestId?: string } }).__observatorySsrContext__
+        expect(globalCtx?.__observatoryRequestId).toBe(event.context.__observatoryRequestId)
     })
 
     it('sets the x-observatory-ssr-ms response header after a response', () => {
@@ -60,6 +63,8 @@ describe('fetch-capture nitro plugin', () => {
         const lastCall = setResponseHeader.mock.calls.at(-1)!
         expect(lastCall[1]).toBe('x-observatory-ssr-ms')
         expect(Number(lastCall[2])).toBeGreaterThanOrEqual(0)
+
+        expect((globalThis as { __observatorySsrContext__?: unknown }).__observatorySsrContext__).toBeUndefined()
     })
 
     it('the elapsed ms in the header is a non-negative integer', () => {

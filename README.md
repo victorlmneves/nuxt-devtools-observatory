@@ -165,27 +165,22 @@ wraps them with a tracking shim (`__trackComposable`) that:
 The panel provides:
 
 - **Navigation mode toggle** — switch between 'route' mode (clears entries on navigation) and 'session' mode (persists entries across pages). In session mode, a "clear session" button appears to manually reset the history
-- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search across composable name, source file, ref key names, and ref values
+- **Filtering** by status (all / mounted / unmounted / leaks only) and free-text search across composable name, source file, ref key names, ref values, and nested reactive object properties
 - **Recency-first ordering** — newest entries appear first, with layout-level composables pinned to the top (layout composables persist across page navigation)
 - **Inline ref chip preview** — up to three reactive values shown on the card without expanding, with distinct styling for `ref`, `computed`, and `reactive` types
 - **Collapsible ref values** — long objects and arrays automatically collapse with a chevron toggle to expand them inline in the detail view with full pretty-printed JSON
 - **Global state badges** — keys shared across instances are highlighted in amber with a `global` badge and an explanatory banner when expanded
 - **Change history** — a scrollable log of the last 50 value mutations with key, new value, and relative timestamp
 - **Lifecycle summary** — shows whether `onMounted`/`onUnmounted` were registered and whether watchers and intervals were properly cleaned up
-- **Reverse lookup** — clicking any ref key opens a panel listing every other composable instance that exposes a key with the same name, with its composable name, file, and route
+- **Reverse lookup** — clicking any ref key opens a panel listing related composable instances. For shared/global refs it matches by shared object identity; otherwise it falls back to key-name matching
 - **Inline value editing** — writable `ref` values have an `edit` button; clicking opens a JSON textarea that applies the new value directly to the live ref in the running app
 - **Jump to editor** — an `open ↗` button in the context section opens the composable's source file in the configured editor
-
-**Known gaps:**
-
-- Reverse lookup matches by key name only, not by object identity
-- Search does not look inside nested `reactive` object properties
 
 ### Render Heatmap
 
 [![Render Heatmap](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/render-heatmap.png)
 
-Uses Vue's built-in `renderTriggered` mixin hook and `app.config.performance = true`.
+Uses Vue lifecycle instrumentation with `app.config.performance = true`.
 Accurate duration is measured by bracketing each `beforeMount`/`mounted` and
 `beforeUpdate`/`updated` cycle with `performance.now()` timestamps.
 Component bounding boxes are captured via `$el.getBoundingClientRect()` for the DOM
@@ -197,8 +192,7 @@ last). Every mount and update cycle appends an event recording:
 - `kind` — `mount` or `update`
 - `t` — `performance.now()` timestamp
 - `durationMs` — measured render duration
-- `triggerKey` — the reactive dep that caused the update (when `renderTriggered` fired
-  before `updated`), formatted as `type: key`
+- `triggerKey` — optional reactive dep label for the update (when available)
 - `route` — the route path at the time of the render
 
 A `route` field on each entry records which route the component was first seen on.
@@ -249,14 +243,15 @@ after a route change.
 
 **Span types collected:**
 
-| Type         | Emitted by                        | What it measures                                     |
-| ------------ | --------------------------------- | ---------------------------------------------------- |
-| `navigation` | `router.afterEach` hook           | Route change from → to, duration                     |
-| `component`  | Vue mixin lifecycle hooks         | Exact `mounted` / `updated` hook cost                |
-| `render`     | `beforeMount` → `mounted` bracket | Real DOM-patching time per component mount/update    |
-| `fetch`      | `useFetch` / `useAsyncData` shim  | Network request start, server/client origin, latency |
-| `composable` | `__trackComposable` shim          | Setup phase of every tracked `useXxx()` call         |
-| `transition` | `<Transition>` wrapper            | Full enter/leave lifecycle phase                     |
+| Type         | Emitted by                        | What it measures                                       |
+| ------------ | --------------------------------- | ------------------------------------------------------ |
+| `navigation` | `router.afterEach` hook           | Route change from → to, duration                       |
+| `component`  | Vue mixin lifecycle hooks         | Exact `mounted` / `updated` hook cost                  |
+| `render`     | `beforeMount` → `mounted` bracket | Real DOM-patching time per component mount/update      |
+| `fetch`      | `useFetch` / `useAsyncData` shim  | Network request start, server/client origin, latency   |
+| `server`     | Nitro SSR lifecycle hooks         | Server-side phase timing (e.g. `render:html`)          |
+| `composable` | `__trackComposable` shim          | Setup phase of tracked `useXxx()` calls (client + SSR) |
+| `transition` | `<Transition>` wrapper            | Full enter/leave lifecycle phase                       |
 
 **Render span tracking:**
 Real render time is measured by storing `performance.now()` in a `WeakMap<ComponentPublicInstance, number>` inside `beforeMount` / `beforeUpdate`, then reading it back in the corresponding `mounted` / `updated` hooks. This produces a `type: 'render'` span whose duration is the actual DOM-patching cost, separately from the `component:mounted` hook span (which only measures the hook body itself).
@@ -277,6 +272,9 @@ The panel provides:
   (always exports the full unfiltered dataset); `↑ import` loads a previously exported
   file and freezes the view on the imported data; a `← live` button returns to the
   live stream; the trace count label shows `(imported)` while viewing imported data
+- **Cross-trace render comparison** — compares render behavior across filtered traces,
+  with per-component average re-renders per trace, selected-trace value, and delta
+  versus baseline
 
 **What it tells you:**
 
@@ -285,11 +283,6 @@ The panel provides:
 - Which `useFetch` calls are in the critical path and how long each took
 - Whether composable setup is adding meaningful latency
 - Which components are slow to mount and might benefit from `<Suspense>` or lazy loading
-
-**Known gaps:**
-
-- SSR spans are not yet captured — only client-side navigation traces are collected
-- Re-render counts are tracked by Render Heatmap; the Trace Viewer records individual render events but does not aggregate them
 
 ### Transition Tracker
 
@@ -336,15 +329,7 @@ const result = useMyComposable()
 
 ## Roadmap
 
-### Composable Tracker
-
-- [ ] Reverse lookup by object identity rather than key name only
-- [ ] Deep search inside nested `reactive` object properties
-
-### Trace Viewer
-
-- [ ] SSR span collection (server-side navigation and composable setup)
-- [ ] Cross-trace comparison view
+- [ ] Dedicated cross-trace comparison UI polish (sorting, stronger visual deltas, and quick filtering)
 
 ## Development
 
@@ -390,7 +375,7 @@ src/
     │   ├── fetch-registry.ts           ← Fetch tracking store + __devFetch shim
     │   ├── provide-inject-registry.ts  ← Injection tracking + __devProvide/__devInject
     │   ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
-    │   ├── render-registry.ts          ← Render performance data via PerformanceObserver
+    │   ├── render-registry.ts          ← Render registry (timeline, route attribution, bbox snapshots)
     │   └── transition-registry.ts      ← Transition lifecycle store
     ├── instrumentation/
     │   ├── route.ts                    ← router.afterEach hook — opens/closes traces per navigation
@@ -403,7 +388,7 @@ src/
     │   ├── tracing.ts                  ← Span open/close helpers
     │   └── context.ts                  ← Current-trace context (per async task)
     └── nitro/
-        └── fetch-capture.ts            ← SSR-side fetch timing
+      └── fetch-capture.ts            ← SSR request tracing bridge (fetch + server phases + context)
 
 client/
 ├── index.html
@@ -415,6 +400,8 @@ client/
     ├── style.css                       ← Design system
     ├── components/
     ├── composables/
+    │   ├── composable-search.ts        ← Deep nested composable search matching utilities
+    │   ├── trace-render-aggregation.ts ← Per-trace and cross-trace render aggregation helpers
     │   ├── useExportImport.ts          ← JSON export (download) and import (file picker) utilities
     │   ├── useResizablePane.ts         ← Resizable split-pane drag handle
     │   └── useTraceFilter.ts           ← Trace filter state and filtering logic
