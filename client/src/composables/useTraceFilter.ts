@@ -65,11 +65,7 @@ export function useTraceFilter() {
         return false
     }
 
-    function matchesDurationFilter(
-        trace: TraceEntry,
-        min: number,
-        max: number
-    ): boolean {
+    function matchesDurationFilter(trace: TraceEntry, min: number, max: number): boolean {
         const hasExplicitDurationFilter = min > 0 || max < Infinity
 
         if (trace.durationMs === undefined) {

@@ -7,13 +7,7 @@ interface SearchBudget {
     nodes: number
 }
 
-function valueMatchesQuery(
-    value: unknown,
-    query: string,
-    seen: WeakSet<object>,
-    budget: SearchBudget,
-    depth = 0,
-): boolean {
+function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>, budget: SearchBudget, depth = 0): boolean {
     if (budget.nodes >= MAX_SEARCH_NODES) {
         return false
     }

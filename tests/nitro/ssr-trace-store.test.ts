@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-    createSsrRecord,
-    addSsrFetchSpan,
-    addSsrPhaseSpan,
-    drainSsrRecord,
-} from '@observatory/runtime/nitro/ssr-trace-store'
+import { createSsrRecord, addSsrFetchSpan, addSsrPhaseSpan, drainSsrRecord } from '@observatory/runtime/nitro/ssr-trace-store'
 
 // Each test uses a unique requestId so module-level `pending` Map state does
 // not bleed between tests even if a record is never drained.

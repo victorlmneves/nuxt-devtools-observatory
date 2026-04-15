@@ -12,6 +12,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `composableTracker`
 - `renderHeatmap`
 - `transitionTracker`
+- `traceViewer`
 
 ## Runtime behavior
 

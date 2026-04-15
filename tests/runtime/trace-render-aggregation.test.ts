@@ -9,7 +9,7 @@ function renderSpan(
     componentName: string,
     file: string,
     lifecycle: 'render:mount' | 'render:update',
-    durationMs: number,
+    durationMs: number
 ): TraceSpan {
     return {
         id,

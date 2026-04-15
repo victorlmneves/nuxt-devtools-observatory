@@ -98,9 +98,7 @@ describe('useTracedAsyncData', () => {
     describe('handler wrapping on failure', () => {
         it('ends span with error status when the handler rejects', async () => {
             const handler = vi.fn().mockRejectedValue(new Error('fetch failed'))
-            const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) =>
-                wrappedHandler().catch(() => {}),
-            )
+            const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) => wrappedHandler().catch(() => {}))
 
             await useTracedAsyncData(originalFn, ['key', handler], 1, 'key', BASE_META)
 
@@ -109,9 +107,7 @@ describe('useTracedAsyncData', () => {
 
         it('records the error message in span metadata', async () => {
             const handler = vi.fn().mockRejectedValue(new Error('something broke'))
-            const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) =>
-                wrappedHandler().catch(() => {}),
-            )
+            const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) => wrappedHandler().catch(() => {}))
 
             await useTracedAsyncData(originalFn, ['key', handler], 1, 'key', BASE_META)
 
@@ -123,9 +119,7 @@ describe('useTracedAsyncData', () => {
             const handler = vi.fn().mockRejectedValue(originalError)
             const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) => wrappedHandler())
 
-            await expect(useTracedAsyncData(originalFn, ['key', handler], 1, 'key', BASE_META)).rejects.toBe(
-                originalError,
-            )
+            await expect(useTracedAsyncData(originalFn, ['key', handler], 1, 'key', BASE_META)).rejects.toBe(originalError)
 
             expect(getSpans()[0].status).toBe('error')
         })
@@ -143,9 +137,7 @@ describe('useTracedAsyncData', () => {
 
         it('calls originalFn with the modified args array', async () => {
             const handler = vi.fn().mockResolvedValue(null)
-            const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) =>
-                wrappedHandler().catch(() => {}),
-            )
+            const originalFn = vi.fn().mockImplementation((_key, wrappedHandler) => wrappedHandler().catch(() => {}))
 
             await useTracedAsyncData(originalFn, ['key', handler], 1, 'key', BASE_META)
 

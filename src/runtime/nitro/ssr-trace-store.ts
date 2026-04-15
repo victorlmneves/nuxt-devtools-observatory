@@ -91,7 +91,7 @@ export function addSsrFetchSpan(
         endMs: number
         statusCode?: number
         error?: boolean
-    },
+    }
 ): void {
     const record = pending.get(requestId)
 
@@ -139,7 +139,7 @@ export function addSsrPhaseSpan(
         endMs: number
         error?: boolean
         metadata?: Record<string, unknown>
-    },
+    }
 ): void {
     const record = pending.get(requestId)
 

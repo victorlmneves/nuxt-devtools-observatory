@@ -109,7 +109,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         return entries.get(uid)!
     }
 
-
     function refreshEntryRect(uid: number) {
         const entry = entries.get(uid)
 

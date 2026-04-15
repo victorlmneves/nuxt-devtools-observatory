@@ -60,6 +60,13 @@ const featureCards = [
         to: '/feature-guides/transition-tracker',
     },
     {
+        title: 'Trace Viewer',
+        description:
+            'Inspect per-route spans with overview, flamegraph, waterfall, and cross-trace render comparison for fast regression triage.',
+        icon: 'i-lucide-gantt-chart-square',
+        to: '/feature-guides/trace-viewer',
+    },
+    {
         title: 'API Reference',
         description: 'Check module options, RPC contracts, and snapshot structures against the implementation shipped in this repository.',
         icon: 'i-lucide-braces',
@@ -102,7 +109,7 @@ const quickLinks = [
                 <div class="landing-hero-copy">
                     <p>
                         Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, provide/inject chains, renders,
-                        and transitions so you can debug app behavior from the same place you inspect the rest of Nuxt.
+                        transitions, and route traces so you can debug app behavior from the same place you inspect the rest of Nuxt.
                     </p>
                 </div>
             </template>
@@ -260,7 +267,7 @@ const quickLinks = [
         </UPageHero>
 
         <UPageSection
-            title="Built around the five panels you actually use while debugging"
+            title="Built around the six tabs you actually use while debugging"
             description="Each guide maps directly to the playground scenarios and the runtime registries behind the module."
         >
             <UPageGrid>

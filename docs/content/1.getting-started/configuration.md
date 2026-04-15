@@ -14,6 +14,7 @@ export default defineNuxtConfig({
         composableTracker: true, // Enable composable tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
+        traceViewer: true, // Enable trace viewer
         composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
         heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)

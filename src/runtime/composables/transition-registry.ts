@@ -121,7 +121,8 @@ export function setupTransitionRegistry() {
     }
 
     function toTransitionEntry(base: Omit<TransitionEntry, 'durationMs'>, span?: Span): TransitionEntry {
-        const durationMs = span?.durationMs ?? (base.endTime !== undefined ? Math.round((base.endTime - base.startTime) * 10) / 10 : undefined)
+        const durationMs =
+            span?.durationMs ?? (base.endTime !== undefined ? Math.round((base.endTime - base.startTime) * 10) / 10 : undefined)
 
         return {
             id: base.id,
