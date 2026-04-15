@@ -26,6 +26,11 @@ const viewMode = ref<'overview' | 'flamegraph' | 'waterfall'>('overview')
 const showFilters = ref(false)
 const renderSummaryOpen = ref(true)
 const crossTraceSummaryOpen = ref(true)
+const crossTraceSortBy = ref<'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName'>('avgRerendersPerTrace')
+const crossTraceSortDir = ref<'asc' | 'desc'>('desc')
+const crossTraceOnlyRegressions = ref(false)
+const crossTraceOnlyComparable = ref(false)
+const crossTraceSearch = ref('')
 const highlightedUid = ref<string | number | undefined>(undefined)
 const highlightedComponentKey = ref<string | undefined>(undefined)
 
@@ -72,6 +77,53 @@ const renderSummary = computed<TraceRenderStatsRow[]>(() => buildRenderSummaryFo
 const crossTraceRenderSummary = computed(() => {
     return buildCrossTraceRenderSummary(filteredTraces.value, selectedTrace.value?.id)
 })
+
+const crossTraceRows = computed(() => {
+    const q = crossTraceSearch.value.trim().toLowerCase()
+
+    let rows = crossTraceRenderSummary.value.filter((row) => {
+        if (crossTraceOnlyRegressions.value && (row.deltaVsBaseline ?? 0) <= 0) {
+            return false
+        }
+
+        if (crossTraceOnlyComparable.value && row.selectedRerenders === undefined) {
+            return false
+        }
+
+        if (q) {
+            const nameMatch = row.componentName.toLowerCase().includes(q)
+            const fileMatch = row.file.toLowerCase().includes(q)
+
+            if (!nameMatch && !fileMatch) {
+                return false
+            }
+        }
+
+        return true
+    })
+
+    rows = [...rows].sort((a, b) => {
+        const key = crossTraceSortBy.value
+        const dir = crossTraceSortDir.value === 'asc' ? 1 : -1
+
+        if (key === 'componentName') {
+            return a.componentName.localeCompare(b.componentName) * dir
+        }
+
+        if (key === 'deltaVsBaseline') {
+            const av = a.deltaVsBaseline ?? Number.NEGATIVE_INFINITY
+            const bv = b.deltaVsBaseline ?? Number.NEGATIVE_INFINITY
+
+            return (av - bv) * dir
+        }
+
+        return ((a[key] as number) - (b[key] as number)) * dir
+    })
+
+    return rows
+})
+
+const crossTraceRegressionsCount = computed(() => crossTraceRenderSummary.value.filter((row) => (row.deltaVsBaseline ?? 0) > 0).length)
 
 function elapsedFromSpans(trace: TraceEntry): number | undefined {
     if (!trace.spans.length) {
@@ -235,8 +287,43 @@ function formatDelta(value?: number): string {
     return `${rounded}`
 }
 
+function deltaToneClass(value?: number): string {
+    if (value === undefined) {
+        return 'trace-viewer__delta--na'
+    }
+
+    if (value > 0) {
+        return 'trace-viewer__delta--regression'
+    }
+
+    if (value < 0) {
+        return 'trace-viewer__delta--improvement'
+    }
+
+    return 'trace-viewer__delta--neutral'
+}
+
+function cycleCrossTraceSort(next: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName') {
+    if (crossTraceSortBy.value === next) {
+        crossTraceSortDir.value = crossTraceSortDir.value === 'desc' ? 'asc' : 'desc'
+
+        return
+    }
+
+    crossTraceSortBy.value = next
+    crossTraceSortDir.value = next === 'componentName' ? 'asc' : 'desc'
+}
+
+function sortIndicator(key: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName') {
+    if (crossTraceSortBy.value !== key) {
+        return ''
+    }
+
+    return crossTraceSortDir.value === 'desc' ? ' ↓' : ' ↑'
+}
+
 function handleCrossTraceRowClick(componentKey: string) {
-    const row = crossTraceRenderSummary.value.find((item) => item.componentKey === componentKey)
+    const row = crossTraceRows.value.find((item) => item.componentKey === componentKey)
 
     if (!row || row.selectedUid === undefined) {
         highlightedUid.value = undefined
@@ -478,9 +565,13 @@ function handleCrossTraceRowClick(componentKey: string) {
                                 <div class="trace-viewer__render-summary-header" @click="crossTraceSummaryOpen = !crossTraceSummaryOpen">
                                     <span class="trace-viewer__render-summary-toggle">{{ crossTraceSummaryOpen ? '▾' : '▸' }}</span>
                                     <span class="trace-viewer__render-summary-title">Cross-Trace Render Comparison</span>
-                                    <span class="trace-viewer__render-summary-count muted"
-                                        >{{ crossTraceRenderSummary.length }} components · {{ filteredTraces.length }} traces</span
-                                    >
+                                    <span class="trace-viewer__render-summary-count muted">
+                                        {{ crossTraceRenderSummary.length }} components · {{ filteredTraces.length }} traces
+                                    </span>
+                                    <span class="trace-viewer__render-summary-count muted">
+                                        {{ crossTraceRegressionsCount }} regressions
+                                    </span>
+                                    <span class="trace-viewer__mobile-hint muted">mobile mode: condensed columns</span>
                                     <span
                                         v-if="highlightedComponentKey !== undefined"
                                         class="trace-viewer__render-summary-clear"
@@ -493,38 +584,91 @@ function handleCrossTraceRowClick(componentKey: string) {
                                     </span>
                                 </div>
                                 <div v-if="crossTraceSummaryOpen" class="trace-viewer__render-summary-table-wrap">
+                                    <div class="trace-viewer__comparison-toolbar">
+                                        <button
+                                            :class="{ 'trace-viewer__comparison-chip--active': crossTraceOnlyRegressions }"
+                                            class="trace-viewer__comparison-chip"
+                                            @click="crossTraceOnlyRegressions = !crossTraceOnlyRegressions"
+                                        >
+                                            regressions only
+                                        </button>
+                                        <button
+                                            :class="{ 'trace-viewer__comparison-chip--active': crossTraceOnlyComparable }"
+                                            class="trace-viewer__comparison-chip"
+                                            @click="crossTraceOnlyComparable = !crossTraceOnlyComparable"
+                                        >
+                                            selected trace only
+                                        </button>
+                                        <span class="trace-viewer__comparison-spacer"></span>
+                                        <input
+                                            v-model="crossTraceSearch"
+                                            class="trace-viewer__comparison-search mono"
+                                            type="search"
+                                            placeholder="filter component..."
+                                        />
+                                    </div>
                                     <table class="data-table trace-viewer__render-summary-table">
                                         <thead>
                                             <tr>
-                                                <th>Component</th>
-                                                <th title="How many traces include this component">Traces</th>
-                                                <th title="Average re-renders per trace">Avg Re-renders</th>
-                                                <th title="Re-renders in selected trace">Selected</th>
-                                                <th title="Selected trace vs other traces baseline">Delta</th>
-                                                <th title="Average render duration across all renders">Avg ms</th>
-                                                <th title="Sum of all render duration across filtered traces">Total ms</th>
+                                                <th class="trace-viewer__sortable" @click="cycleCrossTraceSort('componentName')">
+                                                    Component{{ sortIndicator('componentName') }}
+                                                </th>
+                                                <th class="trace-viewer__col-desktop" title="How many traces include this component">
+                                                    Traces
+                                                </th>
+                                                <th
+                                                    class="trace-viewer__sortable"
+                                                    title="Average re-renders per trace"
+                                                    @click="cycleCrossTraceSort('avgRerendersPerTrace')"
+                                                >
+                                                    Avg Re-renders{{ sortIndicator('avgRerendersPerTrace') }}
+                                                </th>
+                                                <th class="trace-viewer__col-desktop" title="Re-renders in selected trace">Selected</th>
+                                                <th
+                                                    class="trace-viewer__sortable"
+                                                    title="Selected trace vs other traces baseline"
+                                                    @click="cycleCrossTraceSort('deltaVsBaseline')"
+                                                >
+                                                    Delta{{ sortIndicator('deltaVsBaseline') }}
+                                                </th>
+                                                <th class="trace-viewer__col-desktop" title="Average render duration across all renders">
+                                                    Avg ms
+                                                </th>
+                                                <th
+                                                    class="trace-viewer__sortable"
+                                                    title="Sum of all render duration across filtered traces"
+                                                    @click="cycleCrossTraceSort('totalMs')"
+                                                >
+                                                    Total ms{{ sortIndicator('totalMs') }}
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <tr
-                                                v-for="row in crossTraceRenderSummary"
+                                                v-for="row in crossTraceRows"
                                                 :key="row.componentKey"
                                                 :class="{
-                                                    'trace-viewer__render-summary-row--active': highlightedComponentKey === row.componentKey,
+                                                    'trace-viewer__render-summary-row--active':
+                                                        highlightedComponentKey === row.componentKey,
                                                 }"
                                                 class="trace-viewer__render-summary-row"
                                                 :title="row.file"
                                                 @click="handleCrossTraceRowClick(row.componentKey)"
                                             >
                                                 <td class="mono">{{ row.componentName }}</td>
-                                                <td class="mono">{{ row.tracesSeen }}</td>
+                                                <td class="mono trace-viewer__col-desktop">{{ row.tracesSeen }}</td>
                                                 <td class="mono">{{ (Math.round(row.avgRerendersPerTrace * 10) / 10).toFixed(1) }}</td>
-                                                <td class="mono">{{ row.selectedRerenders ?? 'n/a' }}</td>
-                                                <td class="mono" :class="{ 'trace-viewer__render-hot': (row.deltaVsBaseline ?? 0) > 0 }">
-                                                    {{ formatDelta(row.deltaVsBaseline) }}
+                                                <td class="mono trace-viewer__col-desktop">{{ row.selectedRerenders ?? 'n/a' }}</td>
+                                                <td class="mono">
+                                                    <span class="trace-viewer__delta" :class="deltaToneClass(row.deltaVsBaseline)">
+                                                        {{ formatDelta(row.deltaVsBaseline) }}
+                                                    </span>
                                                 </td>
-                                                <td class="mono">{{ formatDuration(row.avgMsPerRender) }}</td>
+                                                <td class="mono trace-viewer__col-desktop">{{ formatDuration(row.avgMsPerRender) }}</td>
                                                 <td class="mono">{{ formatDuration(row.totalMs) }}</td>
+                                            </tr>
+                                            <tr v-if="!crossTraceRows.length">
+                                                <td colspan="7" class="tracker-empty-cell">No components match the comparison filters.</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -905,6 +1049,12 @@ function handleCrossTraceRowClick(componentKey: string) {
     text-decoration: underline;
 }
 
+.trace-viewer__mobile-hint {
+    display: none;
+    margin-left: auto;
+    font-size: 11px;
+}
+
 .trace-viewer__render-summary-table-wrap {
     flex-shrink: 0;
     max-height: 200px;
@@ -912,8 +1062,52 @@ function handleCrossTraceRowClick(componentKey: string) {
     border-bottom: 1px solid var(--border);
 }
 
+.trace-viewer__comparison-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2, var(--bg));
+}
+
+.trace-viewer__comparison-chip {
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text2, var(--text));
+    font-size: 11px;
+    font-family: var(--mono);
+    cursor: pointer;
+}
+
+.trace-viewer__comparison-chip--active {
+    border-color: color-mix(in srgb, var(--purple, #a855f7) 55%, var(--border));
+    background: color-mix(in srgb, var(--purple, #a855f7) 15%, transparent);
+    color: var(--purple, #a855f7);
+}
+
+.trace-viewer__comparison-spacer {
+    flex: 1;
+}
+
+.trace-viewer__comparison-search {
+    min-width: 180px;
+    max-width: 240px;
+}
+
 .trace-viewer__render-summary-table {
     width: 100%;
+}
+
+.trace-viewer__sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.trace-viewer__sortable:hover {
+    color: var(--text);
 }
 
 .trace-viewer__render-summary-row {
@@ -933,6 +1127,41 @@ function handleCrossTraceRowClick(componentKey: string) {
 .trace-viewer__render-hot {
     color: var(--orange, #f97316);
     font-weight: 600;
+}
+
+.trace-viewer__delta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 46px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+}
+
+.trace-viewer__delta--regression {
+    color: var(--orange, #f97316);
+    border-color: color-mix(in srgb, var(--orange, #f97316) 40%, var(--border));
+    background: color-mix(in srgb, var(--orange, #f97316) 14%, transparent);
+}
+
+.trace-viewer__delta--improvement {
+    color: var(--green, #22c55e);
+    border-color: color-mix(in srgb, var(--green, #22c55e) 45%, var(--border));
+    background: color-mix(in srgb, var(--green, #22c55e) 14%, transparent);
+}
+
+.trace-viewer__delta--neutral {
+    color: var(--text2, var(--text));
+    border-color: var(--border);
+    background: var(--bg2, var(--bg));
+}
+
+.trace-viewer__delta--na {
+    color: var(--text3, var(--text2, var(--text)));
+    border-color: var(--border);
+    background: transparent;
 }
 
 @media (max-width: 1024px) {
@@ -957,6 +1186,25 @@ function handleCrossTraceRowClick(componentKey: string) {
         min-height: 200px;
         border-left: none;
         border-top: 1px solid var(--border);
+    }
+
+    .trace-viewer__comparison-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .trace-viewer__comparison-search {
+        min-width: 100%;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .trace-viewer__col-desktop {
+        display: none;
+    }
+
+    .trace-viewer__mobile-hint {
+        display: inline-flex;
     }
 }
 </style>
