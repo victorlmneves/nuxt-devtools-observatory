@@ -39,35 +39,38 @@ describe('fetchInstrumentPlugin', () => {
             expect(result).toBeNull()
         })
 
-        it('injects only the fetch-call helper import for useFetch', () => {
+        it('does NOT inject a fetch-call helper import — imports are Nuxt auto-imports', () => {
             const result = transform(`useFetch('/api/test')`)
 
-            expect(result!.code).toContain("import { __devFetchCall } from 'nuxt-devtools-observatory/runtime/fetch-registry'")
+            expect(result!.code).not.toContain("import { __devFetchCall }")
+            expect(result!.code).toContain('__devFetchCall')
             expect(result!.code).not.toContain('__devFetchHandler')
         })
 
-        it('injects the handler helper import for wrapped async-data handlers', () => {
+        it('does NOT inject the handler helper import — imports are Nuxt auto-imports', () => {
             const result = transform(`useAsyncData(() => $fetch('/api/test'))`)
 
-            expect(result!.code).toContain(
-                "import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation'"
-            )
+            expect(result!.code).not.toContain("import { useTracedAsyncData }")
+            expect(result!.code).toContain('useTracedAsyncData')
         })
 
-        it('does not duplicate the fetch-call import when it is already present in the source', () => {
-            const code = `import { __devFetchCall } from 'nuxt-devtools-observatory/runtime/fetch-registry';\nuseFetch('/api/test')`
+        it('does not duplicate __devFetchCall wrapping when source already contains the call', () => {
+            const code = `__devFetchCall(useFetch, '/api/test', {}, { key: 'api-test', file: 'f.ts', line: 1 })`
             const result = transform(code)
-            const count = (result!.code.match(/import.*__devFetchCall/g) ?? []).length
-
-            expect(count).toBe(1)
+            // already wrapped — transform should be a no-op (returns null or unchanged)
+            if (result !== null) {
+                const count = (result.code.match(/__devFetchCall/g) ?? []).length
+                expect(count).toBe(1)
+            }
         })
 
-        it('does not duplicate the async-data import when it is already present in the source', () => {
-            const code = `import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation';\nuseAsyncData(() => $fetch('/api/test'))`
+        it('does not duplicate useTracedAsyncData wrapping when source already contains the call', () => {
+            const code = `useTracedAsyncData(useAsyncData, [() => $fetch('/api/test')], 0, 'k', { key: 'k', file: 'f.ts', line: 1 })`
             const result = transform(code)
-            const count = (result!.code.match(/import.*useTracedAsyncData/g) ?? []).length
-
-            expect(count).toBe(1)
+            if (result !== null) {
+                const count = (result.code.match(/useTracedAsyncData/g) ?? []).length
+                expect(count).toBe(1)
+            }
         })
     })
 

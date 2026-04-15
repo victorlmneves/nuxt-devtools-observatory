@@ -152,7 +152,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         const componentSpans = traceStore
             .getAllTraces()
             .flatMap((trace) => trace.spans)
-            .filter((span) => span.type === 'render')
+            .filter((span) => span.type === 'render' || span.type === 'component')
 
         const allSpansByUid = new Map<number, Span[]>()
         const postResetSpansByUid = new Map<number, Span[]>()
@@ -181,7 +181,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             const postResetSpans = (postResetSpansByUid.get(uid) ?? []).sort((a, b) => a.startTime - b.startTime)
 
             const timeline: RenderEvent[] = postResetSpans.slice(-MAX_TIMELINE).map((span) => {
-                const lifecycle = span.metadata?.lifecycle === 'render:mount' ? 'mount' : 'update'
+                const isMountLifecycle = span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
+                const lifecycle = isMountLifecycle ? 'mount' : 'update'
                 const routeValue = span.metadata?.route
                 const route = typeof routeValue === 'string' && routeValue.length > 0 ? routeValue : entry.route
 
@@ -193,8 +194,10 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 }
             })
 
-            const mountCount = allSpans.filter((span) => span.metadata?.lifecycle === 'render:mount').length
-            const rerenders = postResetSpans.filter((span) => span.metadata?.lifecycle !== 'render:mount').length
+            const isMountSpan = (span: Span) =>
+                span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
+            const mountCount = allSpans.filter(isMountSpan).length
+            const rerenders = postResetSpans.filter((span) => !isMountSpan(span)).length
             const totalMs = postResetSpans.reduce((sum, span) => sum + (span.durationMs ?? 0), 0)
             const eventsCount = Math.max(postResetSpans.length, 1)
 

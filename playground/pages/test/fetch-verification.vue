@@ -4,16 +4,25 @@ import { ref } from 'vue'
 const fetchStatus = ref('idle')
 const fetchResult = ref('')
 const fetchCount = ref(0)
-const parallelCount = ref(0)
+
+// useFetch calls are instrumented by the Vite fetch-transform → __devFetchCall → fetch registry.
+// immediate: false / watch: false prevents fetching on mount; execute() triggers on demand.
+const { execute: runProduct } = useFetch('/api/product', { immediate: false, watch: false })
+const { execute: runStats } = useFetch('/api/stats', { immediate: false, watch: false })
+const { execute: runProducts } = useFetch('/api/products', { immediate: false, watch: false })
+const { execute: runFailed } = useFetch('/api/does-not-exist-404', { immediate: false, watch: false })
+const { execute: runP1 } = useFetch('/api/product', { key: 'verify-p1', immediate: false, watch: false })
+const { execute: runP2 } = useFetch('/api/products', { key: 'verify-p2', immediate: false, watch: false })
+const { execute: runP3 } = useFetch('/api/stats', { key: 'verify-p3', immediate: false, watch: false })
+const { execute: runP4 } = useFetch('/api/product', { key: 'verify-p4', immediate: false, watch: false })
+const { execute: runP5 } = useFetch('/api/products', { key: 'verify-p5', immediate: false, watch: false })
 
 const triggerFetch = async (): Promise<void> => {
     fetchStatus.value = 'loading'
-
     try {
-        const response = await fetch('/api/test')
-        const data = await response.json()
-        fetchResult.value = JSON.stringify(data, null, 2)
+        await runProduct()
         fetchStatus.value = 'success'
+        fetchResult.value = 'Basic fetch (/api/product) completed'
     } catch (error) {
         fetchStatus.value = 'error'
         fetchResult.value = String(error)
@@ -25,11 +34,10 @@ const triggerSlowFetch = async (): Promise<void> => {
     const startTime = performance.now()
 
     try {
-        const response = await fetch('/api/slow?delay=500')
-        const data = await response.json()
+        await runStats()
         const duration = performance.now() - startTime
-        fetchResult.value = `${JSON.stringify(data, null, 2)}\n\nTook: ${duration.toFixed(0)}ms`
         fetchStatus.value = 'success'
+        fetchResult.value = `Stats fetch completed in ${duration.toFixed(0)}ms`
     } catch (error) {
         fetchStatus.value = 'error'
         fetchResult.value = String(error)
@@ -40,10 +48,9 @@ const triggerCachedFetch = async (): Promise<void> => {
     fetchStatus.value = 'loading'
 
     try {
-        const response = await fetch('/api/cached-data')
-        const data = await response.json()
-        fetchResult.value = JSON.stringify(data, null, 2)
+        await runProducts()
         fetchStatus.value = 'success'
+        fetchResult.value = 'Products fetch completed'
     } catch (error) {
         fetchStatus.value = 'error'
         fetchResult.value = String(error)
@@ -54,32 +61,27 @@ const triggerFailedFetch = async (): Promise<void> => {
     fetchStatus.value = 'loading'
 
     try {
-        await fetch('/api/does-not-exist-404')
+        await runFailed()
         fetchStatus.value = 'success'
-    } catch (error) {
-        console.error('Fetch failed as expected:', error)
+    } catch {
         fetchStatus.value = 'error'
-        fetchResult.value = '404 Not Found - Expected error'
+        fetchResult.value = '404 error captured as expected'
     }
 }
 
 const triggerParallelFetches = async (): Promise<void> => {
     fetchStatus.value = 'loading'
-    parallelCount.value++
-    const promises = [fetch('/api/data-1'), fetch('/api/data-2'), fetch('/api/data-3'), fetch('/api/data-4'), fetch('/api/data-5')]
-    await Promise.all(promises)
+    await Promise.all([runP1(), runP2(), runP3(), runP4(), runP5()])
     fetchStatus.value = 'success'
-    fetchResult.value = `${parallelCount.value} - 5 parallel fetches completed at ${new Date().toLocaleTimeString()}`
+    fetchResult.value = `5 parallel fetches completed at ${new Date().toLocaleTimeString()}`
 }
 
 const triggerSequentialFetches = async (): Promise<void> => {
     fetchStatus.value = 'loading'
     const startTime = performance.now()
-
-    await fetch('/api/test-1')
-    await fetch('/api/test-2')
-    await fetch('/api/test-3')
-
+    await runProduct()
+    await runStats()
+    await runProducts()
     const duration = performance.now() - startTime
     fetchStatus.value = 'success'
     fetchResult.value = `3 sequential fetches completed in ${duration.toFixed(0)}ms`
@@ -89,11 +91,9 @@ const triggerLargePayload = async (): Promise<void> => {
     fetchStatus.value = 'loading'
 
     try {
-        const response = await fetch('/api/large-payload?size=5000')
-        const data = await response.json()
-        const size = JSON.stringify(data).length
-        fetchResult.value = `Large payload received: ${size} bytes (${data.items?.length || 0} items)`
+        await runProducts()
         fetchStatus.value = 'success'
+        fetchResult.value = 'Large payload fetch completed'
     } catch (error) {
         fetchStatus.value = 'error'
         fetchResult.value = String(error)
@@ -104,13 +104,18 @@ const triggerFetchByNumber = async (index: number): Promise<void> => {
     fetchStatus.value = 'loading'
 
     try {
-        const response = await fetch(`/api/test-${index}`)
-        await response.json()
-        fetchStatus.value = 'success'
+        if (index % 3 === 0) {
+            await runStats()
+        } else if (index % 2 === 0) {
+            await runProducts()
+        } else {
+            await runProduct()
+        }
+
         fetchCount.value++
+        fetchStatus.value = 'success'
         fetchResult.value = `Fetch ${index} completed (${fetchCount.value} total)`
-    } catch (error) {
-        console.error(`Fetch ${index} failed:`, error)
+    } catch {
         fetchStatus.value = 'error'
         fetchResult.value = `Fetch ${index} failed`
     }
