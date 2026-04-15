@@ -67,9 +67,7 @@ describe('setupRouteInstrumentation', () => {
             const traceId = traceStore.getAllTraces()[0].id
 
             expect((carrier as Record<string, unknown>)[TRACE_CONTEXT_KEY]).toBeDefined()
-            expect(
-                ((carrier as Record<string, unknown>)[TRACE_CONTEXT_KEY] as { currentTraceId?: string })?.currentTraceId,
-            ).toBe(traceId)
+            expect(((carrier as Record<string, unknown>)[TRACE_CONTEXT_KEY] as { currentTraceId?: string })?.currentTraceId).toBe(traceId)
         })
 
         it('cancels the previous trace when a new navigation starts', () => {
@@ -108,9 +106,7 @@ describe('setupRouteInstrumentation', () => {
             trigger('page:start')
             trigger('page:finish')
 
-            const ctx = (carrier as Record<string, unknown>)[TRACE_CONTEXT_KEY] as
-                | { currentTraceId?: string }
-                | undefined
+            const ctx = (carrier as Record<string, unknown>)[TRACE_CONTEXT_KEY] as { currentTraceId?: string } | undefined
 
             expect(ctx?.currentTraceId).toBeUndefined()
         })
@@ -156,7 +152,7 @@ describe('setupRouteInstrumentation', () => {
             trigger('page:finish')
 
             const traces = traceStore.getAllTraces()
-            
+
             expect(traces).toHaveLength(2)
             expect(traces.every((t) => t.status === 'ok')).toBe(true)
         })

@@ -197,8 +197,7 @@ export default defineNuxtModule<ModuleOptions>({
                 options.transitionTracker ??
                 (process.env.OBSERVATORY_TRANSITION_TRACKER ? process.env.OBSERVATORY_TRANSITION_TRACKER === 'true' : true),
             traceViewer:
-                options.traceViewer ??
-                (process.env.OBSERVATORY_TRACE_VIEWER ? process.env.OBSERVATORY_TRACE_VIEWER === 'true' : true),
+                options.traceViewer ?? (process.env.OBSERVATORY_TRACE_VIEWER ? process.env.OBSERVATORY_TRACE_VIEWER === 'true' : true),
             instrumentServer:
                 options.instrumentServer ??
                 (process.env.OBSERVATORY_INSTRUMENT_SERVER

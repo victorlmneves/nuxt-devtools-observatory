@@ -8,12 +8,14 @@ import type { ComponentPublicInstance } from 'vue'
 const TRACE_CONTEXT_KEY = '__observatory_trace_context__'
 
 // Build a minimal fake ComponentPublicInstance sufficient for the instrumentation hooks.
-function fakeInstance(opts: {
-    __name?: string
-    name?: string
-    __file?: string
-    uid?: number
-} = {}): ComponentPublicInstance {
+function fakeInstance(
+    opts: {
+        __name?: string
+        name?: string
+        __file?: string
+        uid?: number
+    } = {}
+): ComponentPublicInstance {
     return {
         $: {
             type: {

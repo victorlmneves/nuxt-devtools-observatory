@@ -372,7 +372,7 @@ function getSpanTooltip(span: TraceSpan): string {
 
 .waterfall__span-bar:hover {
     opacity: 0.8;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 30%);
 }
 
 .waterfall__bar-duration {

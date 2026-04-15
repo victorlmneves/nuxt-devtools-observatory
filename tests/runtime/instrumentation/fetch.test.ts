@@ -61,9 +61,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(vi.fn().mockRejectedValue(error))
             setupFetchInstrumentation(nuxtApp)
 
-            await expect(
-                (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/fail'),
-            ).rejects.toThrow('Network Error')
+            await expect((nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/fail')).rejects.toThrow('Network Error')
 
             const spans = getSpans()
 
@@ -75,9 +73,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(vi.fn().mockRejectedValue(error))
             setupFetchInstrumentation(nuxtApp)
 
-            await expect(
-                (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/missing'),
-            ).rejects.toBeDefined()
+            await expect((nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/missing')).rejects.toBeDefined()
 
             expect(getSpans()[0].metadata?.statusCode).toBe(404)
         })
@@ -87,9 +83,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(vi.fn().mockRejectedValue(error))
             setupFetchInstrumentation(nuxtApp)
 
-            await expect(
-                (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/crash'),
-            ).rejects.toBeDefined()
+            await expect((nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/crash')).rejects.toBeDefined()
 
             expect(getSpans()[0].metadata?.statusCode).toBe(500)
         })
@@ -99,9 +93,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(vi.fn().mockRejectedValue(error))
             setupFetchInstrumentation(nuxtApp)
 
-            await expect(
-                (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/forbidden'),
-            ).rejects.toBeDefined()
+            await expect((nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/forbidden')).rejects.toBeDefined()
 
             expect(getSpans()[0].metadata?.statusCode).toBe(403)
         })
@@ -111,9 +103,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(vi.fn().mockRejectedValue(originalError))
             setupFetchInstrumentation(nuxtApp)
 
-            await expect(
-                (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/err'),
-            ).rejects.toBe(originalError)
+            await expect((nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/err')).rejects.toBe(originalError)
         })
     })
 

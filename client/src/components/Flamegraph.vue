@@ -248,8 +248,7 @@ const flattenedTree = computed(() => {
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden auto;
     font-family: var(--mono);
     font-size: 11px;
 }
@@ -289,7 +288,7 @@ const flattenedTree = computed(() => {
 }
 
 .flamegraph__row--selected {
-    background: var(--tracker-tint-purple-soft, rgba(127, 119, 221, 0.08));
+    background: var(--tracker-tint-purple-soft, rgb(127 119 221 / 8%));
 }
 
 .flamegraph__row--selected .flamegraph__span-name {
@@ -386,7 +385,7 @@ const flattenedTree = computed(() => {
 
 .flamegraph__bar:hover {
     opacity: 0.8;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 30%);
 }
 
 .flamegraph__bar-label {

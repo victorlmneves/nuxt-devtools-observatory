@@ -79,10 +79,7 @@ describe('startSpan', () => {
 
     it('end() merges metadata from startSpan and end call', () => {
         const { store, carrier } = makeContext()
-        const handle = startSpan(
-            { name: 'span1', type: 'custom', metadata: { initial: 1 } },
-            { store, carrier },
-        )
+        const handle = startSpan({ name: 'span1', type: 'custom', metadata: { initial: 1 } }, { store, carrier })
         handle.end({ status: 'ok', metadata: { extra: 2 } })
 
         expect(handle.span.metadata).toMatchObject({ initial: 1, extra: 2 })
@@ -99,20 +96,14 @@ describe('startSpan', () => {
 
     it('uses traceName when creating a new trace', () => {
         const { store, carrier } = makeContext()
-        const handle = startSpan(
-            { name: 'nav-span', type: 'navigation' },
-            { store, carrier, traceName: 'route:/home' },
-        )
+        const handle = startSpan({ name: 'nav-span', type: 'navigation' }, { store, carrier, traceName: 'route:/home' })
 
         expect(handle.trace.name).toBe('route:/home')
     })
 
     it('uses traceMetadata when creating a new trace', () => {
         const { store, carrier } = makeContext()
-        const handle = startSpan(
-            { name: 'span', type: 'custom' },
-            { store, carrier, traceMetadata: { kind: 'route-navigation' } },
-        )
+        const handle = startSpan({ name: 'span', type: 'custom' }, { store, carrier, traceMetadata: { kind: 'route-navigation' } })
 
         expect(handle.trace.metadata).toMatchObject({ kind: 'route-navigation' })
     })

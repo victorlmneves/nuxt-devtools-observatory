@@ -1164,7 +1164,7 @@ function handleCrossTraceRowClick(componentKey: string) {
     background: transparent;
 }
 
-@media (max-width: 1024px) {
+@media (width <= 1024px) {
     .trace-viewer__container {
         flex-direction: column;
         gap: 0;
@@ -1198,7 +1198,7 @@ function handleCrossTraceRowClick(componentKey: string) {
     }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
     .trace-viewer__col-desktop {
         display: none;
     }

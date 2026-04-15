@@ -166,9 +166,7 @@ export function fetchInstrumentPlugin(): Plugin {
 
                         // Replace with correct signature
                         if ((originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') && handlerArg) {
-                            const rewrittenArgs = keyArg
-                                ? [keyArg, handlerArg, optsArg ?? t.objectExpression([])]
-                                : [handlerArg]
+                            const rewrittenArgs = keyArg ? [keyArg, handlerArg, optsArg ?? t.objectExpression([])] : [handlerArg]
                             const handlerIndex = keyArg ? 1 : 0
 
                             const newCall = t.callExpression(t.identifier('useTracedAsyncData'), [
@@ -209,9 +207,10 @@ export function fetchInstrumentPlugin(): Plugin {
                 const fetchImportStatement = fetchImportNames.length
                     ? `import { ${fetchImportNames.join(', ')} } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
                     : ''
-                const asyncDataImportStatement = needsTracedAsyncDataHelper && !hasTracedAsyncDataImport
-                    ? `import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation';\n`
-                    : ''
+                const asyncDataImportStatement =
+                    needsTracedAsyncDataHelper && !hasTracedAsyncDataImport
+                        ? `import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation';\n`
+                        : ''
                 const importStatement = fetchImportStatement + asyncDataImportStatement
                 const output = generate(ast, { retainLines: true }, scriptCode)
 

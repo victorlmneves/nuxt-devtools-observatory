@@ -49,7 +49,9 @@ describe('fetchInstrumentPlugin', () => {
         it('injects the handler helper import for wrapped async-data handlers', () => {
             const result = transform(`useAsyncData(() => $fetch('/api/test'))`)
 
-            expect(result!.code).toContain("import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation'")
+            expect(result!.code).toContain(
+                "import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation'"
+            )
         })
 
         it('does not duplicate the fetch-call import when it is already present in the source', () => {

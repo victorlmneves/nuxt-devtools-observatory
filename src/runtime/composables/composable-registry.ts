@@ -78,7 +78,7 @@ export function __recordSsrComposableSpan(
     meta: { file: string; line: number },
     startTime: number,
     endTime: number,
-    opts: { error?: unknown; event?: SsrObservatoryEvent } = {},
+    opts: { error?: unknown; event?: SsrObservatoryEvent } = {}
 ) {
     const eventContext = opts.event?.context ?? (globalThis as GlobalSsrContextCarrier).__observatorySsrContext__
     const requestId = eventContext?.__observatoryRequestId
