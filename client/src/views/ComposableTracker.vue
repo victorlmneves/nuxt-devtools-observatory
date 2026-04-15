@@ -6,6 +6,7 @@ import {
     editComposableValue,
     openInEditor as openInEditorFromStore,
 } from '@observatory-client/stores/observatory'
+import { matchesComposableEntryQuery } from '@observatory-client/composables/composable-search'
 import type { ComposableEntry as RuntimeComposableEntry } from '@observatory/types/snapshot'
 
 const { composables: rawEntries, connected, features, clearComposables } = useObservatoryData()
@@ -118,23 +119,8 @@ const filtered = computed(() => {
             return false
         }
 
-        const q = search.value.toLowerCase()
-
-        if (q) {
-            const matchesName = entry.name.toLowerCase().includes(q)
-            const matchesFile = entry.componentFile.toLowerCase().includes(q)
-            const matchesRef = Object.keys(entry.refs).some((k) => k.toLowerCase().includes(q))
-            const matchesVal = Object.values(entry.refs).some((v) => {
-                try {
-                    return String(JSON.stringify(v.value)).toLowerCase().includes(q)
-                } catch {
-                    return false
-                }
-            })
-
-            if (!matchesName && !matchesFile && !matchesRef && !matchesVal) {
-                return false
-            }
+        if (search.value.trim() && !matchesComposableEntryQuery(entry, search.value)) {
+            return false
         }
 
         return true
@@ -257,7 +243,7 @@ const lookupResults = computed(() => {
             (entry) =>
                 entry.name === target.composableName &&
                 entry.sharedKeyGroups?.[target.key] === target.identityGroup &&
-                target.key in entry.refs,
+                target.key in entry.refs
         )
     }
 
