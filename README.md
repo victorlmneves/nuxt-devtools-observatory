@@ -274,7 +274,8 @@ The panel provides:
   live stream; the trace count label shows `(imported)` while viewing imported data
 - **Cross-trace render comparison** — compares render behavior across filtered traces,
   with per-component average re-renders per trace, selected-trace value, and delta
-  versus baseline
+  versus baseline; includes sortable columns, quick filters (regressions/comparable),
+  in-table search, and condensed mobile columns
 
 **What it tells you:**
 
@@ -329,7 +330,7 @@ const result = useMyComposable()
 
 ## Roadmap
 
-- [ ] Dedicated cross-trace comparison UI polish (sorting, stronger visual deltas, and quick filtering)
+- [x] Dedicated cross-trace comparison UI polish (sorting, stronger visual deltas, and quick filtering)
 
 ## Development
 
@@ -414,7 +415,7 @@ client/
         ├── ValueInspector.vue          ← Inline JSON value inspector
         ├── RenderHeatmap.vue           ← Heatmap tab UI
         ├── TransitionTimeline.vue      ← Transition tracker tab UI
-        └── TraceViewer.vue             ← Trace viewer tab UI (Flamegraph + Waterfall + Inspector)
+        └── TraceViewer.vue             ← Trace viewer tab UI (Overview + Flamegraph + Waterfall + Inspector + cross-trace comparison)
 
 playground/
 ├── app.vue                             ← Demo app shell used during local development
