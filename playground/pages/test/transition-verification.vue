@@ -145,7 +145,7 @@ button:hover {
 }
 
 .transition-box h3 {
-    margin: 0 0 10px 0;
+    margin: 0 0 10px;
 }
 
 .transition-box p {
@@ -227,6 +227,7 @@ button:hover {
 }
 
 /* Broken transition - intentionally missing CSS classes */
+
 /* No CSS for .broken-* classes - this will cause errors */
 
 .info {

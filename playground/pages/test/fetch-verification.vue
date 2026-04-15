@@ -260,10 +260,9 @@ button:hover {
     background-color: #fff;
     padding: 10px;
     border-radius: 4px;
-    overflow-x: auto;
+    overflow: auto;
     font-size: 12px;
     max-height: 200px;
-    overflow-y: auto;
 }
 
 .counter {

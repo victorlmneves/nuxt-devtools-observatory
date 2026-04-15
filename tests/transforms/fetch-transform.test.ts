@@ -42,7 +42,7 @@ describe('fetchInstrumentPlugin', () => {
         it('does NOT inject a fetch-call helper import — imports are Nuxt auto-imports', () => {
             const result = transform(`useFetch('/api/test')`)
 
-            expect(result!.code).not.toContain("import { __devFetchCall }")
+            expect(result!.code).not.toContain('import { __devFetchCall }')
             expect(result!.code).toContain('__devFetchCall')
             expect(result!.code).not.toContain('__devFetchHandler')
         })
@@ -50,7 +50,7 @@ describe('fetchInstrumentPlugin', () => {
         it('does NOT inject the handler helper import — imports are Nuxt auto-imports', () => {
             const result = transform(`useAsyncData(() => $fetch('/api/test'))`)
 
-            expect(result!.code).not.toContain("import { useTracedAsyncData }")
+            expect(result!.code).not.toContain('import { useTracedAsyncData }')
             expect(result!.code).toContain('useTracedAsyncData')
         })
 

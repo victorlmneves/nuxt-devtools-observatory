@@ -320,7 +320,7 @@ button:hover {
 }
 
 .transition-box h3 {
-    margin: 0 0 10px 0;
+    margin: 0 0 10px;
     color: white;
 }
 

@@ -215,7 +215,7 @@ section {
 .verification-link:hover {
     border-color: #42b883;
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(66, 184, 131, 0.1);
+    box-shadow: 0 4px 12px rgb(66 184 131 / 10%);
 }
 
 .verification-link strong {

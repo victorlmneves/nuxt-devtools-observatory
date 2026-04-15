@@ -194,8 +194,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 }
             })
 
-            const isMountSpan = (span: Span) =>
-                span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
+            const isMountSpan = (span: Span) => span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
             const mountCount = allSpans.filter(isMountSpan).length
             const rerenders = postResetSpans.filter((span) => !isMountSpan(span)).length
             const totalMs = postResetSpans.reduce((sum, span) => sum + (span.durationMs ?? 0), 0)
