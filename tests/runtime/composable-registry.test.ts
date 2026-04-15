@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp, defineComponent, h, ref, reactive, watch, nextTick } from 'vue'
-import { setupComposableRegistry, __trackComposable } from '@observatory/runtime/composables/composable-registry'
+import { setupComposableRegistry, __trackComposable, __recordSsrComposableSpan } from '@observatory/runtime/composables/composable-registry'
+import { createSsrRecord, drainSsrRecord } from '@observatory/runtime/nitro/ssr-trace-store'
 
 type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
 
@@ -386,6 +387,63 @@ describe('__trackComposable', () => {
 
         expect(reg.getAll()[0].lifecycle.watchersCleaned).toBe(true)
         expect(reg.getAll()[0].leak).toBe(false)
+    })
+})
+
+describe('__recordSsrComposableSpan', () => {
+    it('records a composable setup span into the SSR trace record', () => {
+        const requestId = 'req-test-composable-1'
+        createSsrRecord(requestId, '/dashboard', 'GET')
+
+        __recordSsrComposableSpan('useDashboard', { file: 'composables/useDashboard.ts', line: 12 }, 110, 145, {
+            event: {
+                context: {
+                    __observatoryRequestId: requestId,
+                    __ssrFetchStart: 100,
+                },
+            },
+        })
+
+        const record = drainSsrRecord(requestId, 200)
+        const span = record?.spans.find((s) => s.name === 'composable:useDashboard')
+
+        expect(span).toBeDefined()
+        expect(span?.type).toBe('composable')
+        expect(span?.startTime).toBe(10)
+        expect(span?.endTime).toBe(45)
+        expect(span?.durationMs).toBe(35)
+        expect(span?.metadata?.phase).toBe('setup')
+        expect(span?.metadata?.file).toBe('composables/useDashboard.ts')
+        expect(span?.metadata?.line).toBe(12)
+    })
+
+    it('records an error status and message when setup throws', () => {
+        const requestId = 'req-test-composable-2'
+        createSsrRecord(requestId, '/dashboard', 'GET')
+
+        __recordSsrComposableSpan('useBroken', { file: 'composables/useBroken.ts', line: 7 }, 205, 210, {
+            error: new Error('boom'),
+            event: {
+                context: {
+                    __observatoryRequestId: requestId,
+                    __ssrFetchStart: 200,
+                },
+            },
+        })
+
+        const record = drainSsrRecord(requestId, 220)
+        const span = record?.spans.find((s) => s.name === 'composable:useBroken')
+
+        expect(span?.status).toBe('error')
+        expect(span?.metadata?.errorMessage).toBe('boom')
+    })
+
+    it('is a no-op when request context is missing', () => {
+        expect(() => {
+            __recordSsrComposableSpan('useNoop', { file: 'x.ts', line: 1 }, 0, 1, {
+                event: { context: {} },
+            })
+        }).not.toThrow()
     })
 })
 

@@ -1,4 +1,5 @@
 import { isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
+import { addSsrPhaseSpan } from '../nitro/ssr-trace-store'
 
 export interface RefChangeEvent {
     t: number // performance.now() timestamp
@@ -55,6 +56,56 @@ interface TrackedInstance {
     scope?: { effects?: RuntimeEffect[] }
     bm?: unknown[]
     um?: unknown[]
+}
+
+interface SsrObservatoryEvent {
+    context?: {
+        __observatoryRequestId?: string
+        __ssrFetchStart?: number
+    }
+}
+
+interface GlobalSsrContextCarrier {
+    __observatorySsrContext__?: SsrObservatoryEvent['context']
+}
+
+function nowMs() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now()
+}
+
+export function __recordSsrComposableSpan(
+    name: string,
+    meta: { file: string; line: number },
+    startTime: number,
+    endTime: number,
+    opts: { error?: unknown; event?: SsrObservatoryEvent } = {},
+) {
+    const eventContext = opts.event?.context ?? (globalThis as GlobalSsrContextCarrier).__observatorySsrContext__
+    const requestId = eventContext?.__observatoryRequestId
+    const requestStart = eventContext?.__ssrFetchStart
+
+    if (!requestId || typeof requestStart !== 'number') {
+        return
+    }
+
+    const metadata: Record<string, unknown> = {
+        file: meta.file,
+        line: meta.line,
+        phase: 'setup',
+    }
+
+    if (opts.error instanceof Error) {
+        metadata.errorMessage = opts.error.message
+    }
+
+    addSsrPhaseSpan(requestId, {
+        name: `composable:${name}`,
+        type: 'composable',
+        startMs: Math.max(startTime - requestStart, 0),
+        endMs: Math.max(endTime - requestStart, 0),
+        error: !!opts.error,
+        metadata,
+    })
 }
 
 /**
@@ -602,7 +653,17 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     }
 
     if (!import.meta.client) {
-        return callFn()
+        const startTime = nowMs()
+
+        try {
+            const result = callFn()
+            __recordSsrComposableSpan(name, meta, startTime, nowMs())
+
+            return result
+        } catch (error) {
+            __recordSsrComposableSpan(name, meta, startTime, nowMs(), { error })
+            throw error
+        }
     }
 
     const registry = (window as Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }).__observatory__
