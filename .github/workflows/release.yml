@@ -34,7 +34,7 @@ jobs:
 
             - name: Setup npm for trusted publishing
               run: |
-                  npm install -g npm@latest
+                  corepack enable npm
                   npm --version
 
             - name: Install dependencies
