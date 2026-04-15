@@ -1,5 +1,11 @@
 import type { NuxtApp } from '#app'
 import { startSpan } from '../tracing/tracing'
+import type { FetchEntry } from '../composables/fetch-registry'
+
+type FetchRegistry = {
+    register: (entry: FetchEntry) => void
+    update: (id: string, patch: Partial<FetchEntry>) => void
+}
 
 type FetchLike = ((request: unknown, options?: Record<string, unknown>) => Promise<unknown>) & {
     raw?: (...args: unknown[]) => Promise<unknown>
@@ -54,7 +60,7 @@ function resolveErrorStatus(error: unknown): number | undefined {
 
 const WRAPPED_FETCH_FLAG = '__observatory_wrapped_fetch__'
 
-export function setupFetchInstrumentation(nuxtApp: NuxtApp) {
+export function setupFetchInstrumentation(nuxtApp: NuxtApp, fetchRegistry?: FetchRegistry) {
     const original = nuxtApp.$fetch as FetchLike | undefined
 
     if (!original) {
@@ -69,6 +75,8 @@ export function setupFetchInstrumentation(nuxtApp: NuxtApp) {
         const url = resolveUrl(request)
         const method = resolveMethod(request, options)
         const startedAt = performance.now()
+        const entryId = `$fetch::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
+
         const span = startSpan({
             name: '$fetch',
             type: 'fetch',
@@ -78,6 +86,16 @@ export function setupFetchInstrumentation(nuxtApp: NuxtApp) {
                 method,
                 status: 'pending',
             },
+        })
+
+        fetchRegistry?.register({
+            id: entryId,
+            key: url,
+            url,
+            status: 'pending',
+            origin: 'csr',
+            startTime: startedAt,
+            cached: false,
         })
 
         return Promise.resolve(original(request, options))
@@ -92,6 +110,12 @@ export function setupFetchInstrumentation(nuxtApp: NuxtApp) {
                         status: 'ok',
                         durationMs: Math.round(durationMs * 10) / 10,
                     },
+                })
+
+                fetchRegistry?.update(entryId, {
+                    status: 'ok',
+                    endTime: performance.now(),
+                    ms: Math.round(durationMs * 10) / 10,
                 })
 
                 return result
@@ -109,6 +133,13 @@ export function setupFetchInstrumentation(nuxtApp: NuxtApp) {
                         statusCode,
                         durationMs: Math.round(durationMs * 10) / 10,
                     },
+                })
+
+                fetchRegistry?.update(entryId, {
+                    status: 'error',
+                    endTime: performance.now(),
+                    ms: Math.round(durationMs * 10) / 10,
+                    error,
                 })
 
                 throw error

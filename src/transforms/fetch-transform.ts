@@ -67,12 +67,6 @@ export function fetchInstrumentPlugin(): Plugin {
                 })
 
                 let modified = false
-                let needsFetchCallHelper = false
-                let needsTracedAsyncDataHelper = false
-
-                // Inject imports at top if not present
-                const hasFetchCallImport = scriptCode.includes('__devFetchCall')
-                const hasTracedAsyncDataImport = scriptCode.includes('useTracedAsyncData')
 
                 traverse(ast, {
                     CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
@@ -178,8 +172,6 @@ export function fetchInstrumentPlugin(): Plugin {
                             ]) as ObservableCallExpression
                             newCall.__observatoryTransformed = true
                             path.replaceWith(newCall)
-                            needsTracedAsyncDataHelper = true
-
                             modified = true
                         } else {
                             // useFetch(url, opts?) and async-data fallbacks
@@ -190,7 +182,6 @@ export function fetchInstrumentPlugin(): Plugin {
                                 meta,
                             ]) as ObservableCallExpression
                             newCall.__observatoryTransformed = true
-                            needsFetchCallHelper = true
                             path.replaceWith(newCall)
 
                             modified = true
@@ -202,24 +193,15 @@ export function fetchInstrumentPlugin(): Plugin {
                     return null
                 }
 
-                // Inject the shim import at the top of the file, avoid duplicates
-                const fetchImportNames = [needsFetchCallHelper && !hasFetchCallImport ? '__devFetchCall' : ''].filter(Boolean)
-                const fetchImportStatement = fetchImportNames.length
-                    ? `import { ${fetchImportNames.join(', ')} } from 'nuxt-devtools-observatory/runtime/fetch-registry';\n`
-                    : ''
-                const asyncDataImportStatement =
-                    needsTracedAsyncDataHelper && !hasTracedAsyncDataImport
-                        ? `import { useTracedAsyncData } from 'nuxt-devtools-observatory/runtime/async-data-instrumentation';\n`
-                        : ''
-                const importStatement = fetchImportStatement + asyncDataImportStatement
+                // Imports are registered as Nuxt auto-imports in module.ts — no injection needed here.
                 const output = generate(ast, { retainLines: true }, scriptCode)
 
                 let finalCode: string
 
                 if (isVue) {
-                    finalCode = code.slice(0, scriptStart) + importStatement + output.code + code.slice(scriptStart + scriptCode.length)
+                    finalCode = code.slice(0, scriptStart) + output.code + code.slice(scriptStart + scriptCode.length)
                 } else {
-                    finalCode = importStatement + output.code
+                    finalCode = output.code
                 }
 
                 return {

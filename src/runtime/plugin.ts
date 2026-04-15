@@ -158,10 +158,12 @@ export default defineNuxtPlugin(() => {
     if (import.meta.client) {
         if (config.traceViewer) {
             setupComponentInstrumentation(nuxtApp)
-            setupFetchInstrumentation(nuxtApp)
+            setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1])
             // Pick up SSR spans injected into the HTML by the Nitro plugin and
             // merge them into the client traceStore as a standalone SSR trace.
             mergeSsrSpans()
+        } else if (config.fetchDashboard) {
+            setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1])
         }
 
         // Always clear any previous registry to avoid cross-project state

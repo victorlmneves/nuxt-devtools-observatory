@@ -1,4 +1,4 @@
-import { defineNuxtModule, addPlugin, addServerPlugin, createResolver, addVitePlugin } from '@nuxt/kit'
+import { defineNuxtModule, addPlugin, addServerPlugin, createResolver, addVitePlugin, addImports } from '@nuxt/kit'
 import { onDevToolsInitialized, extendServerRpc } from '@nuxt/devtools-kit'
 import sirv from 'sirv'
 import { composableTrackerPlugin } from './transforms/composable-transform'
@@ -252,6 +252,12 @@ export default defineNuxtModule<ModuleOptions>({
 
         if (resolved.fetchDashboard) {
             addVitePlugin(fetchInstrumentPlugin(), vitePluginScope)
+            // Auto-import the shims injected by the transform so they resolve
+            // without needing an explicit import statement in the transformed file.
+            addImports([
+                { name: '__devFetchCall', from: resolver.resolve('./runtime/composables/fetch-registry') },
+                { name: 'useTracedAsyncData', from: resolver.resolve('./runtime/instrumentation/asyncData') },
+            ])
         }
 
         if (resolved.provideInjectGraph) {

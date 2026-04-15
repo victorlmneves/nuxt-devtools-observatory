@@ -41,9 +41,9 @@ test.describe('Home page (/)', () => {
         await page.goto('/')
         await page.waitForLoadState('networkidle')
 
-        await expect(page.getByRole('link', { name: 'Shop' })).toBeVisible()
-        await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-        await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Shop', exact: true }).first()).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Dashboard', exact: true }).first()).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Settings', exact: true }).first()).toBeVisible()
     })
 })
 
@@ -79,7 +79,7 @@ test.describe('Shop page (/shop)', () => {
         await firstAddBtn.click()
 
         // Cart count badge in the "open cart" button should show at least 1
-        const cartBtn = page.getByRole('button', { name: /cart/i })
+        const cartBtn = page.locator('.cart-btn')
 
         await expect(cartBtn).toBeVisible()
 
