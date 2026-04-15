@@ -99,9 +99,15 @@ describe('fetch-capture nitro plugin', () => {
         // The JSON must be parseable and contain a traceId and spans array.
         const match = html.bodyAppend[0].match(/>(.+)<\/script>/)
         const parsed = JSON.parse(match![1])
+
         expect(typeof parsed.traceId).toBe('string')
         expect(Array.isArray(parsed.spans)).toBe(true)
         expect(parsed.spans.length).toBeGreaterThan(0)
+
+        const names = parsed.spans.map((span: { name?: string }) => span.name)
+
+        expect(names).toContain('ssr:navigation')
+        expect(names).toContain('ssr:render:html')
     })
 
     it('does nothing in render:html when the event has no requestId', () => {
