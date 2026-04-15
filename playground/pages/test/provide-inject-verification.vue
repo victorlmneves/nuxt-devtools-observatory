@@ -40,7 +40,7 @@ const updateUserProfile = (): void => {
 }
 
 // Expose for testing
-if (import.meta.dev) {
+if (import.meta.dev && import.meta.client) {
     const win = window as unknown as { __updateUserProfile?: () => void }
     win.__updateUserProfile = updateUserProfile
 }

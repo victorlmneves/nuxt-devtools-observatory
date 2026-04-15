@@ -66,7 +66,9 @@ const useLeakyPoller = () => {
     }
 
     // Start polling immediately (this will leak if component unmounts without cleanup)
-    startPolling()
+    if (import.meta.client) {
+        startPolling()
+    }
 
     return { pollCount, stopPolling }
 }
