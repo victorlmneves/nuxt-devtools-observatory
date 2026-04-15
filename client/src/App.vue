@@ -7,6 +7,7 @@ import ComposableTracker from './views/ComposableTracker.vue'
 import RenderHeatmap from './views/RenderHeatmap.vue'
 import TransitionTimeline from './views/TransitionTimeline.vue'
 import TraceViewer from './views/TraceViewer.vue'
+import { useVirtualizationFlags } from './composables/useVirtualizationFlags'
 
 const pathMap: Record<string, string> = {
     fetch: 'fetch',
@@ -21,6 +22,9 @@ const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
 const activeTab = ref(pathMap[segment] ?? 'fetch')
 
 const { features } = useObservatoryData()
+
+// Initializes rollout flags from query params before view rendering.
+useVirtualizationFlags()
 
 const tabs = computed(() => {
     const f = features.value || {}

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
+import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
 import type { FetchEntry } from '@observatory/types/snapshot'
@@ -13,6 +16,10 @@ const filter = ref<string>('all')
 const search = ref('')
 const selectedId = ref<string | null>(null)
 const waterfallOpen = ref(true)
+const tableScrollRef = ref<HTMLElement | null>(null)
+
+const { effective: virtualizationFlags } = useVirtualizationFlags()
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 38, overscan: 12 })
 
 const entries = computed<FetchViewEntry[]>(() => {
     const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
@@ -46,6 +53,52 @@ const filtered = computed(() => {
 
         return true
     })
+})
+
+const virtualizedRowsEnabled = computed(() => virtualizationFlags.value.fetch)
+
+const rowVirtualizerOptions = computed(() => ({
+    count: filtered.value.length,
+    getScrollElement: () => tableScrollRef.value,
+    estimateSize: () => virtualizationPreset.value.rowHeight,
+    overscan: virtualizationPreset.value.overscan,
+}))
+
+const rowVirtualizer = useVirtualizer(rowVirtualizerOptions)
+
+const virtualItems = computed(() => {
+    if (!virtualizedRowsEnabled.value) {
+        return []
+    }
+
+    return rowVirtualizer.value.getVirtualItems()
+})
+
+const topVirtualPadding = computed(() => {
+    if (!virtualizedRowsEnabled.value || virtualItems.value.length === 0) {
+        return 0
+    }
+
+    return virtualItems.value[0].start
+})
+
+const bottomVirtualPadding = computed(() => {
+    if (!virtualizedRowsEnabled.value || virtualItems.value.length === 0) {
+        return 0
+    }
+
+    const total = rowVirtualizer.value.getTotalSize()
+    const last = virtualItems.value[virtualItems.value.length - 1]
+
+    return Math.max(0, total - last.end)
+})
+
+const visibleRows = computed(() => {
+    if (!virtualizedRowsEnabled.value) {
+        return filtered.value
+    }
+
+    return virtualItems.value.map((item) => filtered.value[item.index]).filter((entry): entry is FetchViewEntry => Boolean(entry))
 })
 
 const metaRows = computed(() => {
@@ -173,7 +226,7 @@ function formatSize(bytes: number) {
         </div>
 
         <div class="fetch-dashboard__split tracker-split">
-            <div class="fetch-dashboard__table tracker-table-wrap">
+            <div ref="tableScrollRef" class="fetch-dashboard__table tracker-table-wrap">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -188,7 +241,14 @@ function formatSize(bytes: number) {
                     </thead>
                     <tbody>
                         <tr
-                            v-for="entry in filtered"
+                            v-if="virtualizedRowsEnabled && topVirtualPadding > 0"
+                            class="fetch-dashboard__virtual-spacer-row"
+                            aria-hidden="true"
+                        >
+                            <td colspan="7" :style="{ height: `${topVirtualPadding}px` }"></td>
+                        </tr>
+                        <tr
+                            v-for="entry in visibleRows"
                             :key="entry.id"
                             :class="{ selected: selected?.id === entry.id }"
                             @click="selectedId = entry.id"
@@ -220,6 +280,13 @@ function formatSize(bytes: number) {
                                     ></div>
                                 </div>
                             </td>
+                        </tr>
+                        <tr
+                            v-if="virtualizedRowsEnabled && bottomVirtualPadding > 0"
+                            class="fetch-dashboard__virtual-spacer-row"
+                            aria-hidden="true"
+                        >
+                            <td colspan="7" :style="{ height: `${bottomVirtualPadding}px` }"></td>
                         </tr>
                         <tr v-if="!filtered.length">
                             <td colspan="7" class="tracker-empty-cell">
@@ -295,6 +362,12 @@ function formatSize(bytes: number) {
 
 .fetch-dashboard__bar-column {
     min-width: 80px;
+}
+
+.fetch-dashboard__virtual-spacer-row td {
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
 }
 
 .fetch-dashboard__url {
