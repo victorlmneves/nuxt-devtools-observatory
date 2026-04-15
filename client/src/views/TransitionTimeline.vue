@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
+import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
 import type { TransitionEntry } from '@observatory/types/snapshot'
@@ -11,6 +14,10 @@ type FilterMode = 'all' | 'cancelled' | 'active' | 'completed'
 const filter = ref<FilterMode>('all')
 const search = ref('')
 const selected = ref<TransitionEntry | null>(null)
+const tableScrollRef = ref<HTMLElement | null>(null)
+
+const { effective: virtualizationFlags } = useVirtualizationFlags()
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 42, overscan: 10 })
 
 const filtered = computed(() => {
     let list = [...entries.value]
@@ -62,6 +69,60 @@ const timelineGeometry = computed(() => {
         left: ((e.startTime - minT) / span) * 100,
         width: (((e.endTime ?? e.startTime + 80) - e.startTime) / span) * 100,
     }))
+})
+
+const virtualizedRowsEnabled = computed(() => virtualizationFlags.value.transitions)
+
+const tableVirtualizerOptions = computed(() => ({
+    count: filtered.value.length,
+    getScrollElement: () => tableScrollRef.value,
+    estimateSize: () => virtualizationPreset.value.rowHeight,
+    overscan: virtualizationPreset.value.overscan,
+}))
+
+const tableVirtualizer = useVirtualizer(tableVirtualizerOptions)
+
+const tableVirtualItems = computed(() => {
+    if (!virtualizedRowsEnabled.value) {
+        return []
+    }
+
+    return tableVirtualizer.value.getVirtualItems()
+})
+
+const topTablePadding = computed(() => {
+    if (!virtualizedRowsEnabled.value || tableVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    return tableVirtualItems.value[0].start
+})
+
+const bottomTablePadding = computed(() => {
+    if (!virtualizedRowsEnabled.value || tableVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    const total = tableVirtualizer.value.getTotalSize()
+    const last = tableVirtualItems.value[tableVirtualItems.value.length - 1]
+
+    return Math.max(0, total - last.end)
+})
+
+const visibleRows = computed(() => {
+    if (!virtualizedRowsEnabled.value) {
+        return filtered.value.map((entry, index) => ({
+            entry,
+            geometry: timelineGeometry.value[index],
+        }))
+    }
+
+    return tableVirtualItems.value
+        .map((item) => ({
+            entry: filtered.value[item.index],
+            geometry: timelineGeometry.value[item.index],
+        }))
+        .filter((row): row is { entry: TransitionEntry; geometry: { left: number; width: number } } => Boolean(row.entry && row.geometry))
 })
 
 function phaseColor(phase: TransitionEntry['phase']): string {
@@ -166,7 +227,7 @@ function directionColor(e: TransitionEntry): string {
         <!-- Main content -->
         <div class="transition-timeline__content tracker-split">
             <!-- Timeline table -->
-            <div class="transition-timeline__table tracker-table-wrap">
+            <div ref="tableScrollRef" class="transition-timeline__table tracker-table-wrap">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -180,39 +241,54 @@ function directionColor(e: TransitionEntry): string {
                     </thead>
                     <tbody>
                         <tr
-                            v-for="(entry, i) in filtered"
-                            :key="entry.id"
-                            :class="{ selected: selected?.id === entry.id }"
-                            @click="selected = selected?.id === entry.id ? null : entry"
+                            v-if="virtualizedRowsEnabled && topTablePadding > 0"
+                            class="transition-timeline__virtual-spacer-row"
+                            aria-hidden="true"
+                        >
+                            <td colspan="6" :style="{ height: `${topTablePadding}px` }"></td>
+                        </tr>
+                        <tr
+                            v-for="row in visibleRows"
+                            :key="row.entry.id"
+                            :class="{ selected: selected?.id === row.entry.id }"
+                            @click="selected = selected?.id === row.entry.id ? null : row.entry"
                         >
                             <td>
-                                <span class="transition-timeline__name mono">{{ entry.transitionName }}</span>
+                                <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
                             </td>
                             <td>
-                                <span class="transition-timeline__direction mono" :style="{ color: directionColor(entry) }">
-                                    {{ directionLabel(entry) }}
+                                <span class="transition-timeline__direction mono" :style="{ color: directionColor(row.entry) }">
+                                    {{ directionLabel(row.entry) }}
                                 </span>
                             </td>
                             <td>
-                                <span class="badge" :class="phaseBadgeClass(entry.phase)">{{ entry.phase }}</span>
+                                <span class="badge" :class="phaseBadgeClass(row.entry.phase)">{{ row.entry.phase }}</span>
                             </td>
                             <td class="transition-timeline__duration mono">
-                                {{ entry.durationMs !== undefined ? entry.durationMs + 'ms' : '—' }}
+                                {{ row.entry.durationMs !== undefined ? row.entry.durationMs + 'ms' : '—' }}
                             </td>
-                            <td class="transition-timeline__component muted">{{ entry.parentComponent }}</td>
+                            <td class="transition-timeline__component muted">{{ row.entry.parentComponent }}</td>
                             <td class="transition-timeline__bar-cell">
                                 <div class="transition-timeline__bar-track">
                                     <div
                                         class="transition-timeline__bar-fill"
                                         :style="{
-                                            left: timelineGeometry[i]?.left + '%',
-                                            width: Math.max(timelineGeometry[i]?.width ?? 1, 1) + '%',
-                                            background: phaseColor(entry.phase),
-                                            opacity: entry.phase === 'entering' || entry.phase === 'leaving' ? '0.55' : '1',
+                                            left: row.geometry.left + '%',
+                                            width: Math.max(row.geometry.width, 1) + '%',
+                                            background: phaseColor(row.entry.phase),
+                                            opacity: row.entry.phase === 'entering' || row.entry.phase === 'leaving' ? '0.55' : '1',
                                         }"
                                     />
                                 </div>
                             </td>
+                        </tr>
+
+                        <tr
+                            v-if="virtualizedRowsEnabled && bottomTablePadding > 0"
+                            class="transition-timeline__virtual-spacer-row"
+                            aria-hidden="true"
+                        >
+                            <td colspan="6" :style="{ height: `${bottomTablePadding}px` }"></td>
                         </tr>
 
                         <tr v-if="!filtered.length">
@@ -390,6 +466,12 @@ function directionColor(e: TransitionEntry): string {
     min-width: 0;
     border: none;
     border-radius: 0;
+}
+
+.transition-timeline__virtual-spacer-row td {
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
 }
 
 /* ── Timeline bar ────────────────────────────────────────────────────────── */

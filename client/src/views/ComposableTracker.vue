@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
+import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import {
     useObservatoryData,
     setComposableMode,
@@ -93,6 +96,10 @@ function openInEditor(file: string) {
 const filter = ref('all')
 const search = ref('')
 const expanded = ref<string | null>(null)
+const listScrollRef = ref<HTMLElement | null>(null)
+
+const { effective: virtualizationFlags } = useVirtualizationFlags()
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 88, overscan: 8 })
 
 const entries = computed<RuntimeComposableEntry[]>(() => rawEntries.value)
 
@@ -140,6 +147,54 @@ const filtered = computed(() => {
 
     // Combine: layout entries first (already sorted by recency), then regular entries
     return [...layoutEntries, ...regularEntries]
+})
+
+const virtualizedCardsEnabled = computed(() => virtualizationFlags.value.composables && expanded.value === null)
+
+const listVirtualizerOptions = computed(() => ({
+    count: filtered.value.length,
+    getScrollElement: () => listScrollRef.value,
+    estimateSize: () => virtualizationPreset.value.rowHeight,
+    overscan: virtualizationPreset.value.overscan,
+}))
+
+const listVirtualizer = useVirtualizer(listVirtualizerOptions)
+
+const listVirtualItems = computed(() => {
+    if (!virtualizedCardsEnabled.value) {
+        return []
+    }
+
+    return listVirtualizer.value.getVirtualItems()
+})
+
+const topListPadding = computed(() => {
+    if (!virtualizedCardsEnabled.value || listVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    return listVirtualItems.value[0].start
+})
+
+const bottomListPadding = computed(() => {
+    if (!virtualizedCardsEnabled.value || listVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    const total = listVirtualizer.value.getTotalSize()
+    const last = listVirtualItems.value[listVirtualItems.value.length - 1]
+
+    return Math.max(0, total - last.end)
+})
+
+const visibleEntries = computed(() => {
+    if (!virtualizedCardsEnabled.value) {
+        return filtered.value
+    }
+
+    return listVirtualItems.value
+        .map((item) => filtered.value[item.index])
+        .filter((entry): entry is RuntimeComposableEntry => Boolean(entry))
 })
 
 function lifecycleRows(entry: RuntimeComposableEntry) {
@@ -371,9 +426,15 @@ function applyEdit() {
             </button>
         </div>
 
-        <div class="composable-tracker__list">
+        <div ref="listScrollRef" class="composable-tracker__list">
             <div
-                v-for="entry in filtered"
+                v-if="virtualizedCardsEnabled && topListPadding > 0"
+                class="composable-tracker__virtual-spacer"
+                :style="{ height: `${topListPadding}px` }"
+                aria-hidden="true"
+            />
+            <div
+                v-for="entry in visibleEntries"
                 :key="entry.id"
                 class="composable-tracker__card"
                 :class="{
@@ -558,6 +619,13 @@ function applyEdit() {
                 </div>
             </div>
 
+            <div
+                v-if="virtualizedCardsEnabled && bottomListPadding > 0"
+                class="composable-tracker__virtual-spacer"
+                :style="{ height: `${bottomListPadding}px` }"
+                aria-hidden="true"
+            />
+
             <div v-if="!filtered.length" class="composable-tracker__empty muted text-sm">
                 {{ connected ? 'No composables recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
             </div>
@@ -642,6 +710,11 @@ function applyEdit() {
     flex-direction: column;
     gap: var(--tracker-space-2);
     min-height: 0;
+}
+
+.composable-tracker__virtual-spacer {
+    width: 100%;
+    flex-shrink: 0;
 }
 
 .composable-tracker__card {

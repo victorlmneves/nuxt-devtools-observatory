@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
+import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
 import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
@@ -24,6 +27,29 @@ interface ComponentNode {
     isPersistent: boolean
     isHydrationMount: boolean
     route: string
+}
+
+function nodeBadges(node: ComponentNode): string[] {
+    const badges: string[] = []
+    const normalizedElement = node.element?.toLowerCase()
+
+    if (node.element && node.element !== node.label && !['div', 'span', 'p'].includes(normalizedElement ?? '')) {
+        badges.push(node.element)
+    }
+
+    if (node.file !== 'unknown') {
+        const fileBadge =
+            node.file
+                .split('/')
+                .pop()
+                ?.replace(/\.vue$/i, '') ?? node.file
+
+        if (fileBadge !== node.label && !badges.includes(fileBadge)) {
+            badges.push(fileBadge)
+        }
+    }
+
+    return badges
 }
 
 const TreeNode = defineComponent({
@@ -58,24 +84,7 @@ const TreeNode = defineComponent({
             const canExpand = node.children.length > 0
             const metric = props.mode === 'count' ? `${node.rerenders + node.mountCount}` : `${node.avgMs.toFixed(1)}ms`
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
-            const badges = []
-            const normalizedElement = node.element?.toLowerCase()
-
-            if (node.element && node.element !== node.label && !['div', 'span', 'p'].includes(normalizedElement ?? '')) {
-                badges.push(node.element)
-            }
-
-            if (node.file !== 'unknown') {
-                const fileBadge =
-                    node.file
-                        .split('/')
-                        .pop()
-                        ?.replace(/\.vue$/i, '') ?? node.file
-
-                if (fileBadge !== node.label && !badges.includes(fileBadge)) {
-                    badges.push(fileBadge)
-                }
-            }
+            const badges = nodeBadges(node)
 
             return h('div', { class: 'tree-node' }, [
                 h(
@@ -206,6 +215,10 @@ const activeRootId = ref<string | null>(null)
 const expandedIds = ref<Set<string>>(new Set())
 const frozenSnapshot = ref<RenderEntry[]>([])
 const expansionReady = ref(false)
+const treeFrameRef = ref<HTMLElement | null>(null)
+
+const { effective: virtualizationFlags } = useVirtualizationFlags()
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 14 })
 
 function displayLabel(entry: RenderEntry) {
     if (entry.name && entry.name !== 'unknown' && !/^Component#\d+$/.test(entry.name)) {
@@ -503,6 +516,78 @@ const visibleTreeRoots = computed(() => {
     }
 
     return [visibleActiveRoot.value]
+})
+
+const virtualizedTreeEnabled = computed(() => virtualizationFlags.value.heatmap)
+
+function flattenVisibleTree(root: ComponentNode | null, expanded: Set<string>) {
+    if (!root) {
+        return [] as ComponentNode[]
+    }
+
+    const rows: ComponentNode[] = []
+
+    function walk(node: ComponentNode) {
+        rows.push(node)
+
+        if (!expanded.has(node.id)) {
+            return
+        }
+
+        node.children.forEach(walk)
+    }
+
+    walk(root)
+
+    return rows
+}
+
+const expandedVisibleNodes = computed(() => flattenVisibleTree(visibleActiveRoot.value, expandedIds.value))
+
+const treeVirtualizerOptions = computed(() => ({
+    count: expandedVisibleNodes.value.length,
+    getScrollElement: () => treeFrameRef.value,
+    estimateSize: () => virtualizationPreset.value.rowHeight,
+    overscan: virtualizationPreset.value.overscan,
+}))
+
+const treeVirtualizer = useVirtualizer(treeVirtualizerOptions)
+
+const treeVirtualItems = computed(() => {
+    if (!virtualizedTreeEnabled.value) {
+        return []
+    }
+
+    return treeVirtualizer.value.getVirtualItems()
+})
+
+const topTreePadding = computed(() => {
+    if (!virtualizedTreeEnabled.value || treeVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    return treeVirtualItems.value[0].start
+})
+
+const bottomTreePadding = computed(() => {
+    if (!virtualizedTreeEnabled.value || treeVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    const total = treeVirtualizer.value.getTotalSize()
+    const last = treeVirtualItems.value[treeVirtualItems.value.length - 1]
+
+    return Math.max(0, total - last.end)
+})
+
+const visibleTreeRows = computed(() => {
+    if (!virtualizedTreeEnabled.value) {
+        return expandedVisibleNodes.value
+    }
+
+    return treeVirtualItems.value
+        .map((item) => expandedVisibleNodes.value[item.index])
+        .filter((node): node is ComponentNode => Boolean(node))
 })
 
 const appEntries = computed(() =>
@@ -829,21 +914,93 @@ function formatTimestamp(t: number): string {
                     />
                 </div>
 
-                <div class="render-heatmap__tree-frame">
+                <div ref="treeFrameRef" class="render-heatmap__tree-frame">
                     <div class="render-heatmap__tree-canvas tree-canvas">
-                        <TreeNode
-                            v-for="root in visibleTreeRoots"
-                            :key="root.id"
-                            :node="root"
-                            :mode="activeMode"
-                            :threshold="activeThreshold"
-                            :selected="activeSelected?.id"
-                            :expanded-ids="expandedIds"
-                            @select="selectNode"
-                            @toggle="toggleNode"
-                        />
+                        <template v-if="virtualizedTreeEnabled">
+                            <div
+                                v-if="topTreePadding > 0"
+                                class="render-heatmap__tree-spacer"
+                                :style="{ height: `${topTreePadding}px` }"
+                                aria-hidden="true"
+                            />
+                            <div
+                                v-for="treeNode in visibleTreeRows"
+                                :key="treeNode.id"
+                                class="tree-row"
+                                :class="{ selected: activeSelected?.id === treeNode.id, hot: isHot(treeNode) }"
+                                :style="{ '--tree-depth': String(treeNode.depth) }"
+                                @click="selectNode(treeNode)"
+                            >
+                                <span class="tree-rail" aria-hidden="true" />
+                                <button
+                                    class="tree-toggle"
+                                    :class="{ empty: !treeNode.children.length }"
+                                    :disabled="!treeNode.children.length"
+                                    @click.stop="treeNode.children.length ? toggleNode(treeNode.id) : undefined"
+                                >
+                                    {{ treeNode.children.length ? (expandedIds.has(treeNode.id) ? '⌄' : '›') : '' }}
+                                </button>
+                                <div class="tree-copy">
+                                    <span class="tree-name mono" :title="treeNode.label">{{ treeNode.label }}</span>
+                                    <div v-if="nodeBadges(treeNode).length" class="tree-badges">
+                                        <span class="tree-badge mono" :title="nodeBadges(treeNode)[0]">{{ nodeBadges(treeNode)[0] }}</span>
+                                    </div>
+                                </div>
+                                <div class="tree-metrics mono">
+                                    <span
+                                        v-if="treeNode.isPersistent"
+                                        class="tree-persistent-pill"
+                                        title="Layout / persistent component — survives navigation"
+                                    >
+                                        persistent
+                                    </span>
+                                    <span
+                                        v-if="treeNode.isHydrationMount"
+                                        class="tree-hydration-pill"
+                                        title="First mount was SSR hydration — not a user-triggered render"
+                                    >
+                                        hydrated
+                                    </span>
+                                    <span class="tree-metric-pill">
+                                        {{
+                                            activeMode === 'count'
+                                                ? treeNode.rerenders + treeNode.mountCount
+                                                : `${treeNode.avgMs.toFixed(1)}ms`
+                                        }}
+                                        {{ activeMode === 'count' ? 'renders' : 'avg' }}
+                                    </span>
+                                    <button
+                                        v-if="treeNode.file && treeNode.file !== 'unknown'"
+                                        class="tree-jump-btn"
+                                        :title="`Open ${treeNode.file} in editor`"
+                                        @click.stop="openInEditor(treeNode.file)"
+                                    >
+                                        ↗
+                                    </button>
+                                </div>
+                            </div>
+                            <div
+                                v-if="bottomTreePadding > 0"
+                                class="render-heatmap__tree-spacer"
+                                :style="{ height: `${bottomTreePadding}px` }"
+                                aria-hidden="true"
+                            />
+                        </template>
+                        <template v-else>
+                            <TreeNode
+                                v-for="root in visibleTreeRoots"
+                                :key="root.id"
+                                :node="root"
+                                :mode="activeMode"
+                                :threshold="activeThreshold"
+                                :selected="activeSelected?.id"
+                                :expanded-ids="expandedIds"
+                                @select="selectNode"
+                                @toggle="toggleNode"
+                            />
+                        </template>
                     </div>
-                    <div v-if="!visibleTreeRoots.length" class="render-heatmap__detail-empty">
+                    <div v-if="!expandedVisibleNodes.length" class="render-heatmap__detail-empty">
                         {{ connected ? 'No render activity recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
                     </div>
                 </div>
@@ -1132,6 +1289,10 @@ function formatTimestamp(t: number): string {
     display: inline-block;
     min-width: 100%;
     width: max-content;
+}
+
+.render-heatmap__tree-spacer {
+    width: 100%;
 }
 
 :deep(.tree-node) {

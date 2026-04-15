@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
+import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
 import Flamegraph from '@observatory-client/components/Flamegraph.vue'
 import WaterfallView from '@observatory-client/components/WaterfallView.vue'
@@ -10,6 +13,7 @@ import { exportJson, importJson } from '@observatory-client/composables/useExpor
 import {
     buildRenderSummaryForTrace,
     buildCrossTraceRenderSummary,
+    type CrossTraceRenderSummaryRow,
     type TraceRenderStatsRow,
 } from '@observatory-client/composables/trace-render-aggregation'
 import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
@@ -33,6 +37,11 @@ const crossTraceOnlyComparable = ref(false)
 const crossTraceSearch = ref('')
 const highlightedUid = ref<string | number | undefined>(undefined)
 const highlightedComponentKey = ref<string | undefined>(undefined)
+const traceListScrollRef = ref<HTMLElement | null>(null)
+const crossTraceScrollRef = ref<HTMLElement | null>(null)
+
+const { effective: virtualizationFlags } = useVirtualizationFlags()
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 12 })
 
 const {
     searchQuery,
@@ -124,6 +133,100 @@ const crossTraceRows = computed(() => {
 })
 
 const crossTraceRegressionsCount = computed(() => crossTraceRenderSummary.value.filter((row) => (row.deltaVsBaseline ?? 0) > 0).length)
+
+const virtualizedTraceRowsEnabled = computed(() => virtualizationFlags.value.traces)
+
+const traceListVirtualizerOptions = computed(() => ({
+    count: filteredTraces.value.length,
+    getScrollElement: () => traceListScrollRef.value,
+    estimateSize: () => virtualizationPreset.value.rowHeight,
+    overscan: virtualizationPreset.value.overscan,
+}))
+
+const traceListVirtualizer = useVirtualizer(traceListVirtualizerOptions)
+
+const traceListVirtualItems = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value) {
+        return []
+    }
+
+    return traceListVirtualizer.value.getVirtualItems()
+})
+
+const traceListTopPadding = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value || traceListVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    return traceListVirtualItems.value[0].start
+})
+
+const traceListBottomPadding = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value || traceListVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    const total = traceListVirtualizer.value.getTotalSize()
+    const last = traceListVirtualItems.value[traceListVirtualItems.value.length - 1]
+
+    return Math.max(0, total - last.end)
+})
+
+const visibleTraceRows = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value) {
+        return filteredTraces.value
+    }
+
+    return traceListVirtualItems.value
+        .map((item) => filteredTraces.value[item.index])
+        .filter((trace): trace is TraceEntry => Boolean(trace))
+})
+
+const crossTraceVirtualizerOptions = computed(() => ({
+    count: crossTraceRows.value.length,
+    getScrollElement: () => crossTraceScrollRef.value,
+    estimateSize: () => virtualizationPreset.value.rowHeight,
+    overscan: virtualizationPreset.value.overscan,
+}))
+
+const crossTraceVirtualizer = useVirtualizer(crossTraceVirtualizerOptions)
+
+const crossTraceVirtualItems = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value) {
+        return []
+    }
+
+    return crossTraceVirtualizer.value.getVirtualItems()
+})
+
+const crossTraceTopPadding = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value || crossTraceVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    return crossTraceVirtualItems.value[0].start
+})
+
+const crossTraceBottomPadding = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value || crossTraceVirtualItems.value.length === 0) {
+        return 0
+    }
+
+    const total = crossTraceVirtualizer.value.getTotalSize()
+    const last = crossTraceVirtualItems.value[crossTraceVirtualItems.value.length - 1]
+
+    return Math.max(0, total - last.end)
+})
+
+const visibleCrossTraceRows = computed(() => {
+    if (!virtualizedTraceRowsEnabled.value) {
+        return crossTraceRows.value
+    }
+
+    return crossTraceVirtualItems.value
+        .map((item) => crossTraceRows.value[item.index])
+        .filter((row): row is CrossTraceRenderSummaryRow => Boolean(row))
+})
 
 function elapsedFromSpans(trace: TraceEntry): number | undefined {
     if (!trace.spans.length) {
@@ -407,7 +510,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                 <div class="trace-viewer__list-header">
                     <span class="trace-viewer__list-title">Traces</span>
                 </div>
-                <div class="trace-viewer__table-wrap tracker-table-wrap">
+                <div ref="traceListScrollRef" class="trace-viewer__table-wrap tracker-table-wrap">
                     <table class="data-table">
                         <thead>
                             <tr>
@@ -418,7 +521,14 @@ function handleCrossTraceRowClick(componentKey: string) {
                         </thead>
                         <tbody>
                             <tr
-                                v-for="trace in filteredTraces"
+                                v-if="virtualizedTraceRowsEnabled && traceListTopPadding > 0"
+                                class="trace-viewer__virtual-spacer-row"
+                                aria-hidden="true"
+                            >
+                                <td colspan="3" :style="{ height: `${traceListTopPadding}px` }"></td>
+                            </tr>
+                            <tr
+                                v-for="trace in visibleTraceRows"
                                 :key="trace.id"
                                 :class="{ 'trace-viewer__trace-row--selected': selectedTrace?.id === trace.id }"
                                 class="trace-viewer__trace-row"
@@ -427,6 +537,13 @@ function handleCrossTraceRowClick(componentKey: string) {
                                 <td class="mono">{{ trace.name }}</td>
                                 <td class="mono">{{ formatDuration(trace.durationMs, trace) }}</td>
                                 <td class="mono">{{ trace.spans.length }}</td>
+                            </tr>
+                            <tr
+                                v-if="virtualizedTraceRowsEnabled && traceListBottomPadding > 0"
+                                class="trace-viewer__virtual-spacer-row"
+                                aria-hidden="true"
+                            >
+                                <td colspan="3" :style="{ height: `${traceListBottomPadding}px` }"></td>
                             </tr>
                             <tr v-if="!filteredTraces.length">
                                 <td colspan="3" class="tracker-empty-cell">
@@ -585,7 +702,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                                         ✕ clear
                                     </span>
                                 </div>
-                                <div v-if="crossTraceSummaryOpen" class="trace-viewer__render-summary-table-wrap">
+                                <div v-if="crossTraceSummaryOpen" ref="crossTraceScrollRef" class="trace-viewer__render-summary-table-wrap">
                                     <div class="trace-viewer__comparison-toolbar">
                                         <button
                                             :class="{ 'trace-viewer__comparison-chip--active': crossTraceOnlyRegressions }"
@@ -647,7 +764,14 @@ function handleCrossTraceRowClick(componentKey: string) {
                                         </thead>
                                         <tbody>
                                             <tr
-                                                v-for="row in crossTraceRows"
+                                                v-if="virtualizedTraceRowsEnabled && crossTraceTopPadding > 0"
+                                                class="trace-viewer__virtual-spacer-row"
+                                                aria-hidden="true"
+                                            >
+                                                <td colspan="7" :style="{ height: `${crossTraceTopPadding}px` }"></td>
+                                            </tr>
+                                            <tr
+                                                v-for="row in visibleCrossTraceRows"
                                                 :key="row.componentKey"
                                                 :class="{
                                                     'trace-viewer__render-summary-row--active':
@@ -668,6 +792,13 @@ function handleCrossTraceRowClick(componentKey: string) {
                                                 </td>
                                                 <td class="mono trace-viewer__col-desktop">{{ formatDuration(row.avgMsPerRender) }}</td>
                                                 <td class="mono">{{ formatDuration(row.totalMs) }}</td>
+                                            </tr>
+                                            <tr
+                                                v-if="virtualizedTraceRowsEnabled && crossTraceBottomPadding > 0"
+                                                class="trace-viewer__virtual-spacer-row"
+                                                aria-hidden="true"
+                                            >
+                                                <td colspan="7" :style="{ height: `${crossTraceBottomPadding}px` }"></td>
                                             </tr>
                                             <tr v-if="!crossTraceRows.length">
                                                 <td colspan="7" class="tracker-empty-cell">No components match the comparison filters.</td>
@@ -836,6 +967,12 @@ function handleCrossTraceRowClick(componentKey: string) {
 .trace-viewer__trace-row--selected {
     background: var(--bg2, var(--bg));
     border-left: 2px solid var(--accent);
+}
+
+.trace-viewer__virtual-spacer-row td {
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
 }
 
 .trace-viewer__detail {
