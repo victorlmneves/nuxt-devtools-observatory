@@ -575,10 +575,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                                     <span
                                         v-if="highlightedComponentKey !== undefined"
                                         class="trace-viewer__render-summary-clear"
-                                        @click.stop="
-                                            highlightedComponentKey = undefined
-                                            highlightedUid = undefined
-                                        "
+                                        @click.stop="highlightedComponentKey = undefined; highlightedUid = undefined"
                                     >
                                         ✕ clear
                                     </span>
