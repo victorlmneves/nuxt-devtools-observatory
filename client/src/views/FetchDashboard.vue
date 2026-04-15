@@ -340,7 +340,7 @@ function formatSize(bytes: number) {
     padding: var(--tracker-space-2) 10px;
     overflow: auto;
     white-space: pre;
-    max-height: 160px;
+    min-height: fit-content;
 }
 
 .fetch-dashboard__waterfall {
