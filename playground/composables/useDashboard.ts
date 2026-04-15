@@ -1,4 +1,4 @@
-import { ref, computed, watchEffect, onUnmounted } from 'vue'
+import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
 import { useCartStore } from '../stores/cart'
 
 interface StatsSnapshot {
@@ -58,15 +58,16 @@ export function useDashboard() {
         }
     }
 
-    // Kick off the first fetch immediately — client-only (polling is a client concept;
-    // using useFetch/useAsyncData would be more idiomatic for SSR, but here we
-    // deliberately use $fetch + manual polling to exercise the Composable Tracker's
-    // intervalCount / intervalsCleaned tracking)
+    // Kick off the first fetch and start polling after mount so it doesn't
+    // race with Vue's SSR hydration check (which would see live stats vs. the
+    // server-rendered "—" placeholders and report a mismatch).
     let intervalId: ReturnType<typeof setInterval> | null = null
 
     if (import.meta.client) {
-        fetchStats()
-        intervalId = setInterval(fetchStats, 4000)
+        onMounted(() => {
+            fetchStats()
+            intervalId = setInterval(fetchStats, 4000)
+        })
     }
 
     onUnmounted(() => {

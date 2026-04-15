@@ -9,7 +9,7 @@ const { counter, increment } = useCounter()
 const showLeaky = ref(false)
 
 // ── Render heatmap ──────────────────────────────────────────────────────────
-const items = ref(Array.from({ length: 20 }, (_, i) => ({ id: i, name: `Item ${i}`, price: Math.random() * 100 })))
+const items = ref(Array.from({ length: 20 }, (_, i) => ({ id: i, name: `Item ${i}`, price: Math.round(((i * 13 + 7) % 100) * 10) / 10 })))
 
 function shuffleItems() {
     items.value = [...items.value].sort(() => Math.random() - 0.5)
@@ -96,6 +96,41 @@ async function triggerError() {
                 <!-- 4. Parent component unmounts while enter is in-flight → interrupted -->
                 <TransitionsInterruptedTransition />
             </section>
+
+            <!-- Verification Test Suite Section (NEW) -->
+            <section class="verification-section">
+                <h2>🧪 Verification Test Suite</h2>
+                <p style="font-size: 13px; color: #555; margin-bottom: 14px">
+                    These pages are designed to test the accuracy of Observatory's data collection. Open Nuxt DevTools and navigate to
+                    Observatory tabs while running these tests.
+                </p>
+                <div class="verification-links">
+                    <NuxtLink to="/test/trace-verification" class="verification-link">
+                        <strong>Trace Viewer Verification</strong>
+                        <span>Test span duration, parent-child relationships, and all 7 span types</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/heatmap-verification" class="verification-link">
+                        <strong>Render Heatmap Verification</strong>
+                        <span>Test persistent components, route attribution, and render duration accuracy</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/composable-verification" class="verification-link">
+                        <strong>Composable Tracker Verification</strong>
+                        <span>Test leak detection, global state identification, and change history</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/provide-inject-verification" class="verification-link">
+                        <strong>Provide/Inject Verification</strong>
+                        <span>Test provider scope, shadow detection, and missing provider warnings</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/transition-verification" class="verification-link">
+                        <strong>Transition Tracker Verification</strong>
+                        <span>Test transition phases, cancellation detection, and duration accuracy</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/fetch-verification" class="verification-link">
+                        <strong>Fetch Dashboard Verification</strong>
+                        <span>Test fetch timing, cache tracking, and waterfall ordering</span>
+                    </NuxtLink>
+                </div>
+            </section>
         </main>
     </div>
 </template>
@@ -150,6 +185,47 @@ section {
     border: 1px solid #e0ded8;
     border-radius: 12px;
     padding: 20px 24px;
+}
+
+.verification-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 2px solid #42b883;
+}
+
+.verification-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.verification-link {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 16px;
+    background: white;
+    border: 1px solid #d3d1c7;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #1a1a18;
+    transition: all 0.2s;
+}
+
+.verification-link:hover {
+    border-color: #42b883;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(66, 184, 131, 0.1);
+}
+
+.verification-link strong {
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.verification-link span {
+    font-size: 12px;
+    color: #888780;
 }
 
 h1 {

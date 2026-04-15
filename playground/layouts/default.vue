@@ -22,6 +22,17 @@ provide(
                 <NuxtLink to="/shop" class="nav-link">Shop</NuxtLink>
                 <NuxtLink to="/dashboard" class="nav-link">Dashboard</NuxtLink>
                 <NuxtLink to="/settings" class="nav-link">Settings</NuxtLink>
+                <div class="nav-dropdown">
+                    <span class="nav-link nav-dropdown-trigger">Test ▾</span>
+                    <div class="nav-dropdown-menu">
+                        <NuxtLink to="/test/fetch-verification" class="nav-dropdown-item">Fetch</NuxtLink>
+                        <NuxtLink to="/test/composable-verification" class="nav-dropdown-item">Composable</NuxtLink>
+                        <NuxtLink to="/test/heatmap-verification" class="nav-dropdown-item">Heatmap</NuxtLink>
+                        <NuxtLink to="/test/provide-inject-verification" class="nav-dropdown-item">Provide/Inject</NuxtLink>
+                        <NuxtLink to="/test/trace-verification" class="nav-dropdown-item">Trace</NuxtLink>
+                        <NuxtLink to="/test/transition-verification" class="nav-dropdown-item">Transition</NuxtLink>
+                    </div>
+                </div>
             </div>
             <div class="nav-spacer" />
             <NuxtLink to="/shop" class="cart-pill" title="Persistent cart summary from layout-level composable">
@@ -90,6 +101,51 @@ provide(
 .nav-link.router-link-active {
     background: #1a1a18;
     color: white;
+}
+
+.nav-dropdown {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.nav-dropdown-trigger {
+    cursor: pointer;
+    user-select: none;
+}
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 180px;
+    background: white;
+    border: 1px solid #e0ded8;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+    padding: 4px;
+    padding-top: 10px;
+    margin-top: 0;
+}
+
+.nav-dropdown:hover .nav-dropdown-menu {
+    display: flex;
+    flex-direction: column;
+}
+
+.nav-dropdown-item {
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #3f3d38;
+    text-decoration: none;
+    border-radius: 4px;
+}
+
+.nav-dropdown-item:hover {
+    background: #f0ede8;
+    color: #1a1a18;
 }
 
 .cart-pill {

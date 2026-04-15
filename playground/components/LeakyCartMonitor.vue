@@ -5,7 +5,7 @@ const { auditEvents, latestItemCount } = useLeakyCartAudit()
 </script>
 
 <template>
-    <div class="monitor">
+    <div class="monitor leaky-cart-monitor">
         <div class="monitor-row">
             <strong>Leaky cart audit is mounted</strong>
             <span class="badge err">watcher not cleaned</span>
