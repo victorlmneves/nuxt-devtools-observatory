@@ -322,6 +322,11 @@ function sortIndicator(key: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalM
     return crossTraceSortDir.value === 'desc' ? ' ↓' : ' ↑'
 }
 
+function clearCrossTraceHighlight() {
+    highlightedComponentKey.value = undefined
+    highlightedUid.value = undefined
+}
+
 function handleCrossTraceRowClick(componentKey: string) {
     const row = crossTraceRows.value.find((item) => item.componentKey === componentKey)
 
@@ -575,10 +580,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                                     <span
                                         v-if="highlightedComponentKey !== undefined"
                                         class="trace-viewer__render-summary-clear"
-                                        @click.stop="
-                                            highlightedComponentKey = undefined
-                                            highlightedUid = undefined
-                                        "
+                                        @click.stop="clearCrossTraceHighlight"
                                     >
                                         ✕ clear
                                     </span>

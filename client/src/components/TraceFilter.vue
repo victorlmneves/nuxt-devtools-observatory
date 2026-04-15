@@ -292,11 +292,9 @@ function getSpanTypeColor(type: string): string {
     background: var(--bg);
     outline: none;
     appearance: none;
-    appearance: none;
 }
 
 .trace-filter__duration-slider::-webkit-slider-thumb {
-    appearance: none;
     appearance: none;
     width: 12px;
     height: 12px;
