@@ -1086,6 +1086,12 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         // Both instances return the SAME ref object → 'count' should be flagged as shared
         entries.forEach((e) => expect(e.sharedKeys).toContain('count'))
 
+        // Shared keys should include a stable identity-group mapping for lookup.
+        const groupA = entries[0].sharedKeyGroups?.count
+        const groupB = entries[1].sharedKeyGroups?.count
+        expect(groupA).toBeDefined()
+        expect(groupA).toBe(groupB)
+
         appA.unmount()
         appB.unmount()
     })
@@ -1128,6 +1134,8 @@ describe('setupComposableRegistry — sharedKeys / global vs local detection (pr
         entries.forEach((e) => {
             expect(e.sharedKeys).toContain('global')
             expect(e.sharedKeys).not.toContain('local')
+            expect(e.sharedKeyGroups?.global).toBeDefined()
+            expect(e.sharedKeyGroups?.local).toBeUndefined()
         })
 
         appA.unmount()
