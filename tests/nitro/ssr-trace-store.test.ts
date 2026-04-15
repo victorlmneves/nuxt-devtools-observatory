@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
     createSsrRecord,
     addSsrFetchSpan,
+    addSsrPhaseSpan,
     drainSsrRecord,
 } from '@observatory/runtime/nitro/ssr-trace-store'
 
@@ -132,6 +133,40 @@ describe('addSsrFetchSpan', () => {
         const record = drainSsrRecord(id, 200)
 
         expect(record?.spans[1]?.durationMs).toBe(0)
+    })
+})
+
+describe('addSsrPhaseSpan', () => {
+    it('appends a server phase span to an existing record', () => {
+        const id = uniqueId()
+        createSsrRecord(id, '/page', 'GET')
+
+        addSsrPhaseSpan(id, {
+            name: 'ssr:render:html',
+            startMs: 12,
+            endMs: 30,
+            metadata: { hook: 'render:html' },
+        })
+
+        const record = drainSsrRecord(id, 100)
+        const phaseSpan = record?.spans.find((span) => span.name === 'ssr:render:html')
+
+        expect(phaseSpan).toBeDefined()
+        expect(phaseSpan?.type).toBe('server')
+        expect(phaseSpan?.status).toBe('ok')
+        expect(phaseSpan?.durationMs).toBe(18)
+        expect(phaseSpan?.metadata?.origin).toBe('ssr')
+        expect(phaseSpan?.metadata?.hook).toBe('render:html')
+    })
+
+    it('is a no-op when requestId does not exist', () => {
+        expect(() => {
+            addSsrPhaseSpan('missing', {
+                name: 'ssr:afterResponse',
+                startMs: 0,
+                endMs: 1,
+            })
+        }).not.toThrow()
     })
 })
 

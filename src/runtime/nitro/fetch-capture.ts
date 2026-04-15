@@ -1,5 +1,5 @@
 import { getRequestURL, setResponseHeader, type H3Event } from 'h3'
-import { createSsrRecord, drainSsrRecord, type SsrTraceRecord } from './ssr-trace-store'
+import { addSsrPhaseSpan, createSsrRecord, drainSsrRecord, type SsrTraceRecord } from './ssr-trace-store'
 
 interface ObservatoryContext {
     __observatoryRequestId?: string
@@ -66,6 +66,7 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
     // Also drain any record that was never picked up by render:html (e.g. API
     // routes or error responses that do not render HTML).
     nitroApp.hooks.hook('afterResponse', (...args: unknown[]) => {
+        const hookStart = performance.now()
         const event = args[0] as ObservatoryEvent
         const start = event.context.__ssrFetchStart
 
@@ -78,6 +79,19 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
         const requestId = event.context.__observatoryRequestId
 
         if (requestId) {
+            if (start !== undefined) {
+                const hookEnd = performance.now()
+                addSsrPhaseSpan(requestId, {
+                    name: 'ssr:afterResponse',
+                    type: 'server',
+                    startMs: Math.max(hookStart - start, 0),
+                    endMs: Math.max(hookEnd - start, 0),
+                    metadata: {
+                        hook: 'afterResponse',
+                    },
+                })
+            }
+
             const durationMs = start !== undefined ? Math.max(performance.now() - start, 0) : 0
             drainSsrRecord(requestId, durationMs)
         }
@@ -87,6 +101,7 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
     // Inject the completed SSR trace as inline JSON so the client plugin can
     // merge it into the client-side traceStore on startup.
     nitroApp.hooks.hook('render:html', (...args: unknown[]) => {
+        const hookStart = performance.now()
         const html = args[0] as NitroRenderHTMLContext
         const ctx = args[1] as { event: ObservatoryEvent }
         const event = ctx?.event
@@ -100,6 +115,20 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
 
         if (!requestId) {
             return
+        }
+
+        if (start !== undefined) {
+            const hookEnd = performance.now()
+            addSsrPhaseSpan(requestId, {
+                name: 'ssr:render:html',
+                type: 'server',
+                startMs: Math.max(hookStart - start, 0),
+                endMs: Math.max(hookEnd - start, 0),
+                metadata: {
+                    hook: 'render:html',
+                    island: html.island === true,
+                },
+            })
         }
 
         const durationMs = start !== undefined ? Math.max(performance.now() - start, 0) : 0

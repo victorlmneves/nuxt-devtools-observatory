@@ -119,6 +119,52 @@ export function addSsrFetchSpan(
 }
 
 /**
+ * Append a generic SSR phase span (e.g. `render:html`, `afterResponse`) to
+ * an existing request record.
+ * @param {string} requestId - The request identifier returned by `createSsrRecord`.
+ * @param {object} opts - Span options.
+ * @param {string} opts.name - Human-readable span name.
+ * @param {string} [opts.type] - Span type. Defaults to `server`.
+ * @param {number} opts.startMs - Span start, in ms relative to request start.
+ * @param {number} opts.endMs - Span end, in ms relative to request start.
+ * @param {boolean} [opts.error] - Set to `true` to mark the span status as `error`.
+ * @param {Record<string, unknown>} [opts.metadata] - Additional metadata fields.
+ */
+export function addSsrPhaseSpan(
+    requestId: string,
+    opts: {
+        name: string
+        type?: string
+        startMs: number
+        endMs: number
+        error?: boolean
+        metadata?: Record<string, unknown>
+    },
+): void {
+    const record = pending.get(requestId)
+
+    if (!record) {
+        return
+    }
+
+    const durationMs = Math.max(opts.endMs - opts.startMs, 0)
+
+    record.spans.push({
+        id: newId('span'),
+        name: opts.name,
+        type: opts.type ?? 'server',
+        startTime: opts.startMs,
+        endTime: opts.endMs,
+        durationMs,
+        status: opts.error ? 'error' : 'ok',
+        metadata: {
+            origin: 'ssr',
+            ...(opts.metadata ?? {}),
+        },
+    })
+}
+
+/**
  * Finalize and remove the record for `requestId`. The pre-populated
  * navigation span is closed with `durationMs`. Returns `undefined` if the
  * requestId is unknown (e.g. non-page requests that never called
