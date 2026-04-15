@@ -151,7 +151,7 @@ const clearResults = (): void => {
             </div>
         </div>
 
-        <div class="status" v-if="fetchStatus !== 'idle'">
+        <div v-if="fetchStatus !== 'idle'" class="status">
             <div :class="['status-box', fetchStatus]" data-testid="fetch-complete">
                 <h3>Status: {{ fetchStatus.toUpperCase() }}</h3>
                 <pre v-if="fetchResult" class="result">{{ fetchResult }}</pre>
