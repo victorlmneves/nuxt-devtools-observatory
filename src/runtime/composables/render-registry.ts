@@ -57,7 +57,7 @@ export interface RenderEntry {
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
     const entries = new Map<number, RenderEntry>()
     let currentRoute = '/'
-    const config = useRuntimeConfig().public.observatory as { heatmapHideInternals?: boolean }
+    const config = useRuntimeConfig().public.observatory as { heatmapHideInternals?: boolean; maxRenderTimeline?: number }
     const MAX_TIMELINE = config.maxRenderTimeline ?? 100
     const HIDE_INTERNALS = config.heatmapHideInternals ?? false
     let dirty = true

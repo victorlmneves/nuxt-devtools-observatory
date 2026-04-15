@@ -57,8 +57,9 @@ describe('fetchInstrumentPlugin', () => {
         it('does not duplicate __devFetchCall wrapping when source already contains the call', () => {
             const code = `__devFetchCall(useFetch, '/api/test', {}, { key: 'api-test', file: 'f.ts', line: 1 })`
             const result = transform(code)
+
             // already wrapped — transform should be a no-op (returns null or unchanged)
-            if (result !== null) {
+            if (result) {
                 const count = (result.code.match(/__devFetchCall/g) ?? []).length
                 expect(count).toBe(1)
             }
@@ -67,7 +68,8 @@ describe('fetchInstrumentPlugin', () => {
         it('does not duplicate useTracedAsyncData wrapping when source already contains the call', () => {
             const code = `useTracedAsyncData(useAsyncData, [() => $fetch('/api/test')], 0, 'k', { key: 'k', file: 'f.ts', line: 1 })`
             const result = transform(code)
-            if (result !== null) {
+
+            if (result) {
                 const count = (result.code.match(/useTracedAsyncData/g) ?? []).length
                 expect(count).toBe(1)
             }

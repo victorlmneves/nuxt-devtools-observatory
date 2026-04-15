@@ -19,7 +19,6 @@ export interface FetchEntry {
 
 interface ObservatoryWindow extends Window {
     __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> }
-    __NUXT__?: { data?: Record<string, unknown> }
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
