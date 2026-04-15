@@ -7,6 +7,11 @@ import SpanInspector from '@observatory-client/components/SpanInspector.vue'
 import TraceFilter from '@observatory-client/components/TraceFilter.vue'
 import { useTraceFilter } from '@observatory-client/composables/useTraceFilter'
 import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
+import {
+    buildRenderSummaryForTrace,
+    buildCrossTraceRenderSummary,
+    type TraceRenderStatsRow,
+} from '@observatory-client/composables/trace-render-aggregation'
 import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
 import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
 
@@ -20,7 +25,9 @@ const selectedSpan = ref<TraceSpan | undefined>(undefined)
 const viewMode = ref<'overview' | 'flamegraph' | 'waterfall'>('overview')
 const showFilters = ref(false)
 const renderSummaryOpen = ref(true)
+const crossTraceSummaryOpen = ref(true)
 const highlightedUid = ref<string | number | undefined>(undefined)
+const highlightedComponentKey = ref<string | undefined>(undefined)
 
 const {
     searchQuery,
@@ -60,82 +67,10 @@ const selectedTrace = computed(() => {
     return filteredTraces.value.find((t) => t.id === selectedTraceId.value)
 })
 
-/** Aggregate render spans in the selected trace by component UID. */
-interface RenderSummaryRow {
-    uid: string | number
-    componentName: string
-    file: string
-    mountCount: number
-    rerenderCount: number
-    totalMs: number
-    avgMs: number
-}
+const renderSummary = computed<TraceRenderStatsRow[]>(() => buildRenderSummaryForTrace(selectedTrace.value))
 
-const renderSummary = computed<RenderSummaryRow[]>(() => {
-    if (!selectedTrace.value) {
-        return []
-    }
-
-    const byUid = new Map<string | number, { spans: TraceSpan[]; name: string; file: string }>()
-
-    for (const span of selectedTrace.value.spans) {
-        if (span.type !== 'render') {
-            continue
-        }
-
-        const m = span.metadata as Record<string, unknown> | undefined
-
-        if (!m) {
-            continue
-        }
-
-        const uid = (m.uid as string | number | undefined) ?? span.id
-        const name = String(m.componentName ?? '')
-        const file = String(m.file ?? '')
-
-        if (!byUid.has(uid)) {
-            byUid.set(uid, { spans: [], name, file })
-        }
-
-        byUid.get(uid)!.spans.push(span)
-    }
-
-    const rows: RenderSummaryRow[] = []
-
-    for (const [uid, { spans, name, file }] of byUid) {
-        let mountCount = 0
-        let rerenderCount = 0
-        let totalMs = 0
-
-        for (const span of spans) {
-            const lifecycle = String((span.metadata as Record<string, unknown> | undefined)?.lifecycle ?? '')
-            const dur = span.durationMs ?? 0
-
-            if (lifecycle === 'render:mount') {
-                mountCount++
-            } else {
-                rerenderCount++
-            }
-
-            totalMs += dur
-        }
-
-        const totalRenders = mountCount + rerenderCount
-        rows.push({
-            uid,
-            componentName: name || String(uid),
-            file,
-            mountCount,
-            rerenderCount,
-            totalMs,
-            avgMs: totalRenders > 0 ? totalMs / totalRenders : 0,
-        })
-    }
-
-    // Sort by total re-renders descending, then by total time.
-    rows.sort((a, b) => b.rerenderCount - a.rerenderCount || b.totalMs - a.totalMs)
-
-    return rows
+const crossTraceRenderSummary = computed(() => {
+    return buildCrossTraceRenderSummary(filteredTraces.value, selectedTrace.value?.id)
 })
 
 function elapsedFromSpans(trace: TraceEntry): number | undefined {
@@ -218,11 +153,14 @@ function selectTrace(trace: TraceEntry) {
     selectedTraceId.value = trace.id
     selectedSpan.value = undefined
     highlightedUid.value = undefined
+    highlightedComponentKey.value = undefined
 }
 
 function handleClearFilters() {
     clearFilters()
     selectedSpan.value = undefined
+    highlightedUid.value = undefined
+    highlightedComponentKey.value = undefined
 }
 
 function handleSpanTypesUpdate(value: Set<string>) {
@@ -273,11 +211,51 @@ function handleBackToLive() {
     selectedTraceId.value = null
     selectedSpan.value = undefined
     highlightedUid.value = undefined
+    highlightedComponentKey.value = undefined
 }
 
 function handleRenderSummaryRowClick(uid: string | number) {
     // Toggle highlight: clicking the already-highlighted row deselects it.
     highlightedUid.value = highlightedUid.value === uid ? undefined : uid
+    highlightedComponentKey.value = undefined
+    selectedSpan.value = undefined
+}
+
+function formatDelta(value?: number): string {
+    if (value === undefined) {
+        return 'n/a'
+    }
+
+    const rounded = Math.round(value * 10) / 10
+
+    if (rounded > 0) {
+        return `+${rounded}`
+    }
+
+    return `${rounded}`
+}
+
+function handleCrossTraceRowClick(componentKey: string) {
+    const row = crossTraceRenderSummary.value.find((item) => item.componentKey === componentKey)
+
+    if (!row || row.selectedUid === undefined) {
+        highlightedUid.value = undefined
+        highlightedComponentKey.value = undefined
+        selectedSpan.value = undefined
+
+        return
+    }
+
+    if (highlightedComponentKey.value === componentKey) {
+        highlightedComponentKey.value = undefined
+        highlightedUid.value = undefined
+        selectedSpan.value = undefined
+
+        return
+    }
+
+    highlightedComponentKey.value = componentKey
+    highlightedUid.value = row.selectedUid
     selectedSpan.value = undefined
 }
 </script>
@@ -488,6 +466,64 @@ function handleRenderSummaryRowClick(uid: string | number) {
                                                     {{ row.rerenderCount }}
                                                 </td>
                                                 <td class="mono">{{ formatDuration(row.avgMs) }}</td>
+                                                <td class="mono">{{ formatDuration(row.totalMs) }}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </template>
+
+                            <!-- Cross-trace comparison panel -->
+                            <template v-if="crossTraceRenderSummary.length > 0">
+                                <div class="trace-viewer__render-summary-header" @click="crossTraceSummaryOpen = !crossTraceSummaryOpen">
+                                    <span class="trace-viewer__render-summary-toggle">{{ crossTraceSummaryOpen ? '▾' : '▸' }}</span>
+                                    <span class="trace-viewer__render-summary-title">Cross-Trace Render Comparison</span>
+                                    <span class="trace-viewer__render-summary-count muted"
+                                        >{{ crossTraceRenderSummary.length }} components · {{ filteredTraces.length }} traces</span
+                                    >
+                                    <span
+                                        v-if="highlightedComponentKey !== undefined"
+                                        class="trace-viewer__render-summary-clear"
+                                        @click.stop="
+                                            highlightedComponentKey = undefined
+                                            highlightedUid = undefined
+                                        "
+                                    >
+                                        ✕ clear
+                                    </span>
+                                </div>
+                                <div v-if="crossTraceSummaryOpen" class="trace-viewer__render-summary-table-wrap">
+                                    <table class="data-table trace-viewer__render-summary-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Component</th>
+                                                <th title="How many traces include this component">Traces</th>
+                                                <th title="Average re-renders per trace">Avg Re-renders</th>
+                                                <th title="Re-renders in selected trace">Selected</th>
+                                                <th title="Selected trace vs other traces baseline">Delta</th>
+                                                <th title="Average render duration across all renders">Avg ms</th>
+                                                <th title="Sum of all render duration across filtered traces">Total ms</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr
+                                                v-for="row in crossTraceRenderSummary"
+                                                :key="row.componentKey"
+                                                :class="{
+                                                    'trace-viewer__render-summary-row--active': highlightedComponentKey === row.componentKey,
+                                                }"
+                                                class="trace-viewer__render-summary-row"
+                                                :title="row.file"
+                                                @click="handleCrossTraceRowClick(row.componentKey)"
+                                            >
+                                                <td class="mono">{{ row.componentName }}</td>
+                                                <td class="mono">{{ row.tracesSeen }}</td>
+                                                <td class="mono">{{ (Math.round(row.avgRerendersPerTrace * 10) / 10).toFixed(1) }}</td>
+                                                <td class="mono">{{ row.selectedRerenders ?? 'n/a' }}</td>
+                                                <td class="mono" :class="{ 'trace-viewer__render-hot': (row.deltaVsBaseline ?? 0) > 0 }">
+                                                    {{ formatDelta(row.deltaVsBaseline) }}
+                                                </td>
+                                                <td class="mono">{{ formatDuration(row.avgMsPerRender) }}</td>
                                                 <td class="mono">{{ formatDuration(row.totalMs) }}</td>
                                             </tr>
                                         </tbody>
