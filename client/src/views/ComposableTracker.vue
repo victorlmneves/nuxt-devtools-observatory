@@ -234,22 +234,67 @@ function toggleRefExpand(entryId: string, refKey: string) {
 }
 
 // ── Reverse lookup ────────────────────────────────────────────────────────
-// Clicking a ref key shows every mounted instance that exposes the same key.
+// Clicking a ref key prefers identity-based lookup for shared/global refs.
+// For non-shared keys, fallback to legacy key-name lookup.
 
-const lookupKey = ref<string | null>(null)
+interface LookupTarget {
+    key: string
+    composableName: string
+    identityGroup?: string
+}
+
+const lookupTarget = ref<LookupTarget | null>(null)
 
 const lookupResults = computed(() => {
-    if (!lookupKey.value) {
+    if (!lookupTarget.value) {
         return []
     }
 
-    const key = lookupKey.value
+    const target = lookupTarget.value
 
-    return entries.value.filter((e) => key in e.refs)
+    if (target.identityGroup) {
+        return entries.value.filter(
+            (entry) =>
+                entry.name === target.composableName &&
+                entry.sharedKeyGroups?.[target.key] === target.identityGroup &&
+                target.key in entry.refs,
+        )
+    }
+
+    return entries.value.filter((entry) => target.key in entry.refs)
 })
 
-function openLookup(key: string) {
-    lookupKey.value = lookupKey.value === key ? null : key
+const lookupTitle = computed(() => {
+    if (!lookupTarget.value) {
+        return ''
+    }
+
+    if (lookupTarget.value.identityGroup) {
+        return `${lookupTarget.value.key} (shared identity)`
+    }
+
+    return lookupTarget.value.key
+})
+
+function openLookup(entry: RuntimeComposableEntry, key: string) {
+    const identityGroup = entry.sharedKeyGroups?.[key]
+    const next: LookupTarget = {
+        key,
+        composableName: entry.name,
+        identityGroup,
+    }
+
+    if (
+        lookupTarget.value?.key === next.key &&
+        lookupTarget.value?.composableName === next.composableName &&
+        lookupTarget.value?.identityGroup === next.identityGroup
+    ) {
+        lookupTarget.value = null
+
+        return
+    }
+
+    lookupTarget.value = next
 }
 
 // ── Inline editing ────────────────────────────────────────────────────────
@@ -408,8 +453,12 @@ function applyEdit() {
                     <div v-for="[k, v] in Object.entries(entry.refs)" :key="k" class="composable-tracker__ref-row">
                         <span
                             class="composable-tracker__ref-key composable-tracker__ref-key--clickable mono text-sm"
-                            :title="`click to see all instances exposing '${k}'`"
-                            @click.stop="openLookup(k)"
+                            :title="
+                                entry.sharedKeyGroups?.[k]
+                                    ? `click to see instances sharing this exact '${k}' state`
+                                    : `click to see all instances exposing '${k}'`
+                            "
+                            @click.stop="openLookup(entry, k)"
                         >
                             {{ k }}
                         </span>
@@ -530,14 +579,14 @@ function applyEdit() {
 
         <!-- ── Reverse lookup panel ──────────────────────────────────────── -->
         <Transition name="slide">
-            <div v-if="lookupKey" class="composable-tracker__lookup-panel">
+            <div v-if="lookupTarget" class="composable-tracker__lookup-panel">
                 <div class="composable-tracker__lookup-header">
-                    <span class="mono text-sm">{{ lookupKey }}</span>
+                    <span class="mono text-sm">{{ lookupTitle }}</span>
                     <span class="muted text-sm">— {{ lookupResults.length }} instance{{ lookupResults.length !== 1 ? 's' : '' }}</span>
-                    <button class="composable-tracker__clear-btn composable-tracker__lookup-close" @click="lookupKey = null">✕</button>
+                    <button class="composable-tracker__clear-btn composable-tracker__lookup-close" @click="lookupTarget = null">✕</button>
                 </div>
                 <div v-if="!lookupResults.length" class="composable-tracker__lookup-empty muted text-sm">
-                    No mounted instances expose this key.
+                    No instances matched this lookup.
                 </div>
                 <div v-for="r in lookupResults" :key="r.id" class="composable-tracker__lookup-row">
                     <span class="mono text-sm">{{ r.name }}</span>

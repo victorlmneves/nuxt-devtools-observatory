@@ -22,6 +22,11 @@ export interface ComposableEntry {
      * instances of this composable — indicates module-level (global) state.
      */
     sharedKeys: string[]
+    /**
+     * Stable per-composable-name identity group id for each shared key.
+     * Keys are ref/reactive key names; values are group ids like `group-1`.
+     */
+    sharedKeyGroups?: Record<string, string>
     watcherCount: number
     intervalCount: number
     lifecycle: {
@@ -102,9 +107,10 @@ export function setupComposableRegistry() {
     // comparing object identity across instances of the same composable name.
     const rawRefs = new Map<string, Record<string, unknown>>()
 
-    // Cache for sharedKeys — keyed by composable name, maps entry id → shared key array.
+    // Cache for shared identity metadata — keyed by composable name.
+    // For each entry id we cache both the list of shared keys and a key->group map.
     // Recomputed only when entries are added or removed, never on every getAll() poll tick.
-    const sharedKeysCache = new Map<string, Map<string, string[]>>()
+    const sharedKeysCache = new Map<string, Map<string, { keys: string[]; groups: Record<string, string> }>>()
 
     // FIX #2: dirty flag + cached snapshot string.
     // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
@@ -140,7 +146,7 @@ export function setupComposableRegistry() {
         invalidateSharedKeysForName(entryName)
     }
 
-    function getSharedKeys(id: string, name: string): string[] {
+    function getSharedKeys(id: string, name: string): { keys: string[]; groups: Record<string, string> } {
         // Return cached result if available
         let nameCache = sharedKeysCache.get(name)
 
@@ -149,8 +155,30 @@ export function setupComposableRegistry() {
         }
 
         // Recompute for all instances of this composable name at once
-        nameCache = new Map<string, string[]>()
+        nameCache = new Map<string, { keys: string[]; groups: Record<string, string> }>()
         sharedKeysCache.set(name, nameCache)
+
+        // Stable ids for shared object identities within this composable name.
+        const identityIds = new WeakMap<object, string>()
+        let nextIdentity = 1
+
+        const getIdentityGroup = (obj: unknown) => {
+            if (!obj || typeof obj !== 'object') {
+                return undefined
+            }
+
+            const target = obj as object
+            const existing = identityIds.get(target)
+
+            if (existing) {
+                return existing
+            }
+
+            const created = `group-${nextIdentity++}`
+            identityIds.set(target, created)
+
+            return created
+        }
 
         // Collect all entries with this name
         const peers = [...entries.entries()].filter(([, e]) => e.name === name)
@@ -158,11 +186,12 @@ export function setupComposableRegistry() {
         for (const [eid] of peers) {
             const ownRaw = rawRefs.get(eid)
             if (!ownRaw) {
-                nameCache.set(eid, [])
+                nameCache.set(eid, { keys: [], groups: {} })
                 continue
             }
 
             const shared = new Set<string>()
+            const groups: Record<string, string> = {}
 
             for (const [otherId] of peers) {
                 if (otherId === eid) {
@@ -178,14 +207,20 @@ export function setupComposableRegistry() {
                 for (const [key, obj] of Object.entries(ownRaw)) {
                     if (key in otherRaw && otherRaw[key] === obj) {
                         shared.add(key)
+
+                        const identity = getIdentityGroup(obj)
+
+                        if (identity) {
+                            groups[key] = identity
+                        }
                     }
                 }
             }
 
-            nameCache.set(eid, [...shared])
+            nameCache.set(eid, { keys: [...shared], groups })
         }
 
-        return nameCache.get(id) ?? []
+        return nameCache.get(id) ?? { keys: [], groups: {} }
     }
 
     // The current route path — updated by the plugin on every navigation so new
@@ -393,6 +428,8 @@ export function setupComposableRegistry() {
                   ])
               )
 
+        const shared = getSharedKeys(entry.id, entry.name)
+
         return {
             id: entry.id,
             name: entry.name,
@@ -403,7 +440,8 @@ export function setupComposableRegistry() {
             leakReason: entry.leakReason,
             refs: freshRefs,
             history: entryHistory.get(entry.id) ?? [],
-            sharedKeys: getSharedKeys(entry.id, entry.name),
+            sharedKeys: shared.keys,
+            sharedKeyGroups: shared.groups,
             watcherCount: entry.watcherCount,
             intervalCount: entry.intervalCount,
             lifecycle: entry.lifecycle,

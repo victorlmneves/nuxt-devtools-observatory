@@ -64,6 +64,7 @@ export interface ComposableEntry {
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
     history: RefChangeEvent[]
     sharedKeys: string[]
+    sharedKeyGroups?: Record<string, string>
     watcherCount: number
     intervalCount: number
     lifecycle: {
