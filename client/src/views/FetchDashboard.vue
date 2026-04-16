@@ -31,7 +31,15 @@ const entries = computed<FetchViewEntry[]>(() => {
     }))
 })
 
-const selected = computed(() => entries.value.find((entry) => entry.id === selectedId.value) ?? null)
+const entriesById = computed(() => new Map(entries.value.map((entry) => [entry.id, entry] as const)))
+
+const selected = computed(() => {
+    if (!selectedId.value) {
+        return null
+    }
+
+    return entriesById.value.get(selectedId.value) ?? null
+})
 
 const counts = computed(() => ({
     ok: entries.value.filter((entry) => entry.status === 'ok' || entry.status === 'cached').length,
@@ -144,11 +152,22 @@ function barColor(status: string) {
     return { ok: 'var(--teal)', error: 'var(--red)', pending: 'var(--amber)', cached: 'var(--border)' }[status] ?? 'var(--border)'
 }
 
+const maxCompletedMs = computed(() => {
+    let maxMs = 1
+
+    for (const entry of entries.value) {
+        if (entry.ms != null && entry.ms > maxMs) {
+            maxMs = entry.ms
+        }
+    }
+
+    return maxMs
+})
+
 function barWidth(entry: FetchViewEntry) {
     // Only consider completed entries for the max, so pending entries don't
     // collapse all bars to a dot while waiting.
-    const completedMs = entries.value.filter((e) => e.ms != null).map((e) => e.ms!)
-    const maxMs = completedMs.length > 0 ? Math.max(...completedMs, 1) : 1
+    const maxMs = maxCompletedMs.value
 
     return entry.ms != null ? Math.max(4, Math.round((entry.ms / maxMs) * 100)) : 4
 }
@@ -156,15 +175,26 @@ function barWidth(entry: FetchViewEntry) {
 // Waterfall uses absolute time offsets from the earliest startTime.
 // maxEnd is computed only from completed entries so that a long-running
 // pending request doesn't squash all completed bars to invisible.
-function waterfallScale() {
-    const completed = entries.value.filter((e) => e.ms != null)
-    const maxEnd = completed.length > 0 ? Math.max(...completed.map((e) => e.startOffset + e.ms!), 1) : 1
+const waterfallScale = computed(() => {
+    let maxEnd = 1
+
+    for (const entry of entries.value) {
+        if (entry.ms == null) {
+            continue
+        }
+
+        const end = entry.startOffset + entry.ms
+
+        if (end > maxEnd) {
+            maxEnd = end
+        }
+    }
 
     return maxEnd
-}
+})
 
 function wfLeft(entry: FetchViewEntry) {
-    const scale = waterfallScale()
+    const scale = waterfallScale.value
     return Math.min(98, Math.round((entry.startOffset / scale) * 100))
 }
 
@@ -175,7 +205,7 @@ function wfWidth(entry: FetchViewEntry) {
         return 2
     }
 
-    const scale = waterfallScale()
+    const scale = waterfallScale.value
     const left = wfLeft(entry)
 
     // Clamp so bar + left never exceeds 100%
