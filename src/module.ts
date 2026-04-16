@@ -30,6 +30,12 @@ export interface ModuleOptions {
     maxPayloadBytes?: number
 
     /**
+     * Number of fetch rows to load per infinite-scroll step in the Fetch Dashboard.
+     * @default 20
+     */
+    fetchPageSize?: number
+
+    /**
      * Maximum number of transition entries to keep in memory
      * @default 500
      */
@@ -136,6 +142,7 @@ const defaults = {
     heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600,
     maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
     maxPayloadBytes: process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000,
+    fetchPageSize: process.env.OBSERVATORY_FETCH_PAGE_SIZE ? Number(process.env.OBSERVATORY_FETCH_PAGE_SIZE) : 20,
     maxTransitions: process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500,
     maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
     maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
@@ -215,6 +222,8 @@ export default defineNuxtModule<ModuleOptions>({
             maxPayloadBytes:
                 options.maxPayloadBytes ??
                 (process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000),
+            fetchPageSize:
+                options.fetchPageSize ?? (process.env.OBSERVATORY_FETCH_PAGE_SIZE ? Number(process.env.OBSERVATORY_FETCH_PAGE_SIZE) : 20),
             maxTransitions:
                 options.maxTransitions ?? (process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500),
             maxComposableHistory:
@@ -311,6 +320,7 @@ export default defineNuxtModule<ModuleOptions>({
                 provideInjectGraph: !!resolved.provideInjectGraph,
                 composableTracker: !!resolved.composableTracker,
                 composableNavigationMode: resolved.composableNavigationMode,
+                fetchPageSize: resolved.fetchPageSize,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
                 traceViewer: !!resolved.traceViewer,
@@ -384,15 +394,6 @@ export default defineNuxtModule<ModuleOptions>({
             rpc.broadcast.onSnapshot.asEvent(latestSnapshot)
         }, nuxt)
 
-        // Inject resolved config as a global variable for the client SPA
-        // @ts-expect-error: 'render:response' is an internal Nuxt hook not typed in public API
-        nuxt.hook('render:response', (response: { body: string }, { url }: { url: string }) => {
-            if (url.startsWith('/trackers') || url === '/' || url.startsWith('/index.html')) {
-                const configScript = `<script>window.__observatoryConfig = ${JSON.stringify(nuxt.options.runtimeConfig.public.observatory)};</script>`
-                response.body = response.body.replace('<head>', `<head>\n${configScript}`)
-            }
-        })
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         nuxt.hook('devtools:customTabs' as any, (tabs: any[]) => {
             if (
@@ -422,6 +423,7 @@ export default defineNuxtModule<ModuleOptions>({
             traceViewer: resolved.traceViewer,
             maxFetchEntries: resolved.maxFetchEntries,
             maxPayloadBytes: resolved.maxPayloadBytes,
+            fetchPageSize: resolved.fetchPageSize,
             maxTransitions: resolved.maxTransitions,
             maxComposableHistory: resolved.maxComposableHistory,
             maxComposableEntries: resolved.maxComposableEntries,

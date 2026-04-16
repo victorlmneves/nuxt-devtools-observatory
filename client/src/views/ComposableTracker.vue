@@ -99,7 +99,7 @@ const expanded = ref<string | null>(null)
 const listScrollRef = ref<HTMLElement | null>(null)
 
 const { effective: virtualizationFlags } = useVirtualizationFlags()
-const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 88, overscan: 8 })
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 88, overscan: 6 })
 
 const entries = computed<RuntimeComposableEntry[]>(() => rawEntries.value)
 

@@ -25,6 +25,7 @@ export default defineNuxtPlugin(() => {
     const config = useRuntimeConfig().public.observatory as {
         heatmapThresholdCount: number
         heatmapThresholdTime: number
+        fetchPageSize?: number
         debugRpc?: boolean
         composableNavigationMode?: 'route' | 'session'
         fetchDashboard?: boolean
@@ -433,6 +434,7 @@ export default defineNuxtPlugin(() => {
             provideInjectGraph: !!registries.provideInject,
             composableTracker: !!registries.composable,
             composableNavigationMode,
+            fetchPageSize: typeof config.fetchPageSize === 'number' ? config.fetchPageSize : 20,
             renderHeatmap: !!registries.render,
             transitionTracker: !!registries.transition,
             traceViewer: !!config.traceViewer,

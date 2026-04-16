@@ -28,6 +28,9 @@ export default defineNuxtConfig({
             ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME)
             : 16,
         heatmapHideInternals: import.meta.env.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
+        fetchPageSize: import.meta.env.VITE_OBSERVATORY_FETCH_PAGE_SIZE
+            ? Number(import.meta.env.VITE_OBSERVATORY_FETCH_PAGE_SIZE)
+            : 20,
     },
 
     devtools: { enabled: true },

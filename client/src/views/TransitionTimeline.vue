@@ -17,7 +17,7 @@ const selectedId = ref<string | null>(null)
 const tableScrollRef = ref<HTMLElement | null>(null)
 
 const { effective: virtualizationFlags } = useVirtualizationFlags()
-const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 42, overscan: 10 })
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 42, overscan: 6 })
 
 const entriesSorted = computed(() => [...entries.value].sort((a, b) => a.startTime - b.startTime))
 const entriesById = computed(() => new Map(entries.value.map((entry) => [entry.id, entry] as const)))

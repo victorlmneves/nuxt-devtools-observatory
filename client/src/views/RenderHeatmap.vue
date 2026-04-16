@@ -226,7 +226,7 @@ const expansionReady = ref(false)
 const treeFrameRef = ref<HTMLElement | null>(null)
 
 const { effective: virtualizationFlags } = useVirtualizationFlags()
-const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 14 })
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 6 })
 
 function displayLabel(entry: RenderEntry) {
     if (entry.name && entry.name !== 'unknown' && !/^Component#\d+$/.test(entry.name)) {
