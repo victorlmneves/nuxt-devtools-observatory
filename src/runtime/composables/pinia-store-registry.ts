@@ -236,7 +236,12 @@ function pushUniqueDependency(deps: PiniaStoreDependency[], dependency: PiniaSto
     deps.push(dependency)
 }
 
-export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?: unknown; maxTimeline?: number; stackProvider?: () => string[] }) {
+export function setupPiniaStoreRegistry(options: {
+    pinia?: unknown
+    nuxtPayload?: unknown
+    maxTimeline?: number
+    stackProvider?: () => string[]
+}) {
     const pinia = options.pinia as PiniaLike | undefined
     const maxTimeline = typeof options.maxTimeline === 'number' ? options.maxTimeline : 100
     const stackProvider = options.stackProvider ?? stackFromError
