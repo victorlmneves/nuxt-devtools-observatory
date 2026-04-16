@@ -306,6 +306,37 @@ describe('__devProvide + __devInject in component tree', () => {
         expect(reg.getAll().provides).toHaveLength(1)
         expect(reg.getAll().provides[0].isReactive).toBe(true)
     })
+
+    it('__devProvide keeps reactive snapshots fresh after ref mutation', async () => {
+        const { ref } = await import('vue')
+        const reg = setupProvideInjectRegistry()
+        getWindow().__observatory__ = { provideInject: reg }
+
+        const profile = ref({ name: 'Initial', settings: { theme: 'auto' } })
+
+        const Parent = defineComponent({
+            setup() {
+                __devProvide('userProfile', profile, { file: 'Parent.vue', line: 2 })
+                return () => h('div')
+            },
+        })
+
+        const { app } = mountApp(Parent)
+
+        const first = reg.getAll().provides.find((p) => p.key === 'userProfile')
+        expect(first?.valueSnapshot).toEqual({ name: 'Initial', settings: { theme: 'auto' } })
+
+        profile.value = { name: 'Updated', settings: { theme: 'light' } }
+
+        const second = reg.getAll().provides.find((p) => p.key === 'userProfile')
+        expect(second?.valueSnapshot).toEqual({ name: 'Updated', settings: { theme: 'light' } })
+
+        const snap = JSON.parse(reg.getSnapshot()) as { provides: Array<{ key: string; valueSnapshot: unknown }> }
+        const fromSnapshot = snap.provides.find((p) => p.key === 'userProfile')
+        expect(fromSnapshot?.valueSnapshot).toEqual({ name: 'Updated', settings: { theme: 'light' } })
+
+        app.unmount()
+    })
 })
 
 // ── Tests for fixes introduced in the bug-fix pass ────────────────────────

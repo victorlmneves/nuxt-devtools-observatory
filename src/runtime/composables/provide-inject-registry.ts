@@ -36,6 +36,11 @@ export interface InjectEntry {
     line: number
 }
 
+type InternalProvideEntry = ProvideEntry & {
+    /** Live source for reactive values, used to refresh snapshots on read. */
+    __valueSource?: unknown
+}
+
 /**
  * Sets up the provide/inject registry, which tracks all provide/inject calls
  * and their associated metadata (e.g. component name, file, line).
@@ -50,6 +55,7 @@ export function setupProvideInjectRegistry(): {
 } {
     let dirty = true
     let cachedSnapshot = '{"provides":[],"injects":[]}'
+    let hasLiveProvides = false
 
     function markDirty() {
         dirty = true
@@ -57,15 +63,17 @@ export function setupProvideInjectRegistry(): {
 
     // Plain Maps keyed by `${key}:${componentUid}` — O(1) dedup, no Vue reactive overhead.
     // Nothing in the runtime watches these collections, so wrapping them in ref() was wasteful.
-    const provides = new Map<string, ProvideEntry>()
+    const provides = new Map<string, InternalProvideEntry>()
     const injects = new Map<string, InjectEntry>()
 
     function registerProvide(entry: ProvideEntry) {
         // O(1) upsert — replaces an existing entry for the same key + component so
         // re-renders don't accumulate duplicate rows in the graph.
-        provides.set(`${entry.key}:${entry.componentUid}`, entry)
+        const internal = entry as InternalProvideEntry
+        provides.set(`${entry.key}:${entry.componentUid}`, internal)
+        hasLiveProvides = hasLiveProvides || internal.__valueSource !== undefined
         markDirty()
-        emit('provide:register', entry)
+        emit('provide:register', sanitizeProvide(internal))
     }
 
     function registerInject(entry: InjectEntry) {
@@ -77,11 +85,12 @@ export function setupProvideInjectRegistry(): {
     function clear() {
         provides.clear()
         injects.clear()
+        hasLiveProvides = false
         markDirty()
         emit('provide:clear', {})
     }
 
-    function sanitizeProvide(entry: ProvideEntry): ProvideEntry {
+    function sanitizeProvide(entry: InternalProvideEntry): ProvideEntry {
         return {
             key: entry.key,
             componentName: entry.componentName,
@@ -90,9 +99,8 @@ export function setupProvideInjectRegistry(): {
             parentUid: entry.parentUid,
             parentFile: entry.parentFile,
             isReactive: entry.isReactive,
-            // valueSnapshot is already a plain serializable value captured at provide()
-            // time by safeSnapshot() in the shim — no need to deep-clone it again here.
-            valueSnapshot: entry.valueSnapshot,
+            // Reactive values are materialized from their live source on every read.
+            valueSnapshot: entry.__valueSource !== undefined ? safeSnapshot(unref(entry.__valueSource)) : entry.valueSnapshot,
             line: entry.line,
             scope: entry.scope,
             isShadowing: entry.isShadowing,
@@ -122,7 +130,7 @@ export function setupProvideInjectRegistry(): {
     }
 
     function getSnapshot(): string {
-        if (!dirty) {
+        if (!dirty && !hasLiveProvides) {
             return cachedSnapshot
         }
 
@@ -184,6 +192,8 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
     // Detect shadowing: walk up the parent chain to see if any ancestor already provides this key
     const isShadowing = findProvider(keyStr, instance) !== null
 
+    const reactiveValue = isRef(value) || isReactive(value as object)
+
     registry.registerProvide({
         key: keyStr,
         componentName: instance?.type?.__name ?? 'unknown',
@@ -191,12 +201,13 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
         componentUid: instance?.uid ?? -1,
         parentUid: instance?.parent?.uid,
         parentFile: instance?.parent?.type?.__file,
-        isReactive: isRef(value) || isReactive(value as object),
+        isReactive: reactiveValue,
         valueSnapshot: safeSnapshot(unref(value)),
         line: meta.line,
         scope,
         isShadowing,
-    })
+        ...(reactiveValue ? { __valueSource: value } : {}),
+    } as ProvideEntry)
 }
 
 export function __devInject<T>(key: string | symbol, defaultValue: T | undefined, meta: { file: string; line: number }): T | undefined {
