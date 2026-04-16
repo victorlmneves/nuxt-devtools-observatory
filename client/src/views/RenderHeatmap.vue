@@ -170,6 +170,9 @@ const TreeNode = defineComponent({
                                           'hydrated'
                                       )
                                     : null,
+                                isHot(node)
+                                    ? h('span', { class: 'tree-hot-pill', title: 'Hot component — exceeds current threshold' }, 'hot')
+                                    : null,
                                 h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
                                 node.file && node.file !== 'unknown'
                                     ? h(
@@ -1084,6 +1087,7 @@ function formatTimestamp(t: number): string {
                                     >
                                         hydrated
                                     </span>
+                                    <span v-if="row.hot" class="tree-hot-pill" title="Hot component — exceeds current threshold">hot</span>
                                     <span class="tree-metric-pill">
                                         {{ row.metricValue }}
                                         {{ row.metricLabel }}
@@ -1446,6 +1450,7 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-row.hot) {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
     border-color: color-mix(in srgb, var(--red) 45%, var(--border));
 }
 
@@ -1557,6 +1562,17 @@ function formatTimestamp(t: number): string {
     background: color-mix(in srgb, var(--teal) 10%, var(--bg2));
     font-size: 10px;
     color: color-mix(in srgb, var(--teal) 80%, var(--text));
+}
+
+:deep(.tree-hot-pill) {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--red) 60%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--red) 12%, var(--bg2));
+    font-size: 10px;
+    color: color-mix(in srgb, var(--red) 85%, var(--text));
 }
 
 :deep(.tree-children) {
