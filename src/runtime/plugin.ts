@@ -9,6 +9,7 @@ import { setupTransitionRegistry } from './composables/transition-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
 import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
+import { injectTestBridge } from './test-bridge'
 import { traceStore } from './tracing/traceStore'
 import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
 
@@ -181,6 +182,7 @@ export default defineNuxtPlugin(() => {
         // Always clear any previous registry to avoid cross-project state
         delete (window as ObservatoryWindow).__observatory__
         ;(window as ObservatoryWindow).__observatory__ = registries
+        injectTestBridge()
 
         const composableRegistry = registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
         const piniaRegistry = registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined

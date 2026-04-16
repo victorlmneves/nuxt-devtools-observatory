@@ -123,6 +123,7 @@ export interface PiniaStoreEntry {
     state: unknown
     dependencies: PiniaStoreDependency[]
     timeline: PiniaMutationEvent[]
+    hydrationTimeline: PiniaHydrationEvent[]
     lastMutationAt?: number
     lastActionAt?: number
     hydration?: PiniaHydrationEvent
