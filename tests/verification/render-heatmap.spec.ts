@@ -136,4 +136,20 @@ test.describe('Render Heatmap Correctness', () => {
 
         expect(hasNodeModulesComponent).toBe(false)
     })
+
+    test('should remain responsive after large update bursts', async () => {
+        const updateCount = 120
+
+        for (let i = 0; i < updateCount; i++) {
+            await page.click('[data-testid="force-update"]')
+        }
+
+        const startedAt = Date.now()
+        const heatmapData = await api.getHeatmapData()
+        const elapsedMs = Date.now() - startedAt
+
+        // Guardrail threshold: generous enough to avoid flakiness, strict enough to catch regressions.
+        expect(elapsedMs).toBeLessThan(2000)
+        expect(Object.keys(heatmapData.components).length).toBeGreaterThan(0)
+    })
 })
