@@ -29,6 +29,10 @@ description: Practical fixes for setup, data flow, and panel behavior.
 - Increase `heatmapThresholdCount` and `heatmapThresholdTime`.
 - Enable `heatmapHideInternals`.
 
+For larger datasets and sustained load scenarios, see:
+
+- [Performance At Scale](/troubleshooting/performance-at-scale)
+
 ## Bridge or snapshot debugging
 
 - Set `debugRpc: true` to inspect bridge behavior while reproducing issue.
