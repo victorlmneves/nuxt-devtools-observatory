@@ -1,12 +1,12 @@
-@import "tailwindcss";
-@import "@nuxt/ui";
+@import url("tailwindcss");
+@import url("@nuxt/ui");
 
+/* stylelint-disable at-rule-no-unknown */
 @source "../../../content/**/*";
 
 @theme static {
     --container-8xl: 90rem;
     --font-sans: 'Public Sans', sans-serif;
-
     --color-green-50: #EFFDF5;
     --color-green-100: #D9FBE8;
     --color-green-200: #B3F5D1;
@@ -20,6 +20,7 @@
     --color-green-950: #052E16;
     --site-border: #203763;
 }
+/* stylelint-enable at-rule-no-unknown */
 
 :root {
     --ui-container: var(--container-8xl);

@@ -291,10 +291,6 @@ const flattenedTree = computed(() => {
     background: var(--tracker-tint-purple-soft, rgb(127 119 221 / 8%));
 }
 
-.flamegraph__row--selected .flamegraph__span-name {
-    color: var(--purple, var(--accent));
-}
-
 .flamegraph__label {
     display: flex;
     align-items: center;
@@ -348,6 +344,10 @@ const flattenedTree = computed(() => {
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text);
+}
+
+.flamegraph__row--selected .flamegraph__span-name {
+    color: var(--purple, var(--accent));
 }
 
 .flamegraph__span-type {

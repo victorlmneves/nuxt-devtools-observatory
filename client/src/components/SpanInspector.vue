@@ -404,7 +404,7 @@ function getSpanColorClass(type: string) {
     overflow: auto;
     max-height: 200px;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* Color utilities */

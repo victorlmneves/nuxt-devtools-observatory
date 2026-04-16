@@ -53,6 +53,11 @@ test.describe('Render Heatmap Correctness', () => {
         const componentData = heatmapData.components['TestComponent']
 
         expect(componentData).toBeDefined()
+
+        if (!componentData) {
+            throw new Error('Expected TestComponent to exist in heatmap data')
+        }
+
         expect(componentData.totalRenders).toBe(3)
         expect(componentData.byRoute['/route-a']?.renders).toBe(2)
         expect(componentData.byRoute['/route-b']?.renders).toBe(1)
@@ -69,6 +74,11 @@ test.describe('Render Heatmap Correctness', () => {
         const componentData = heatmapData.components['FastUpdateComponent']
 
         expect(componentData).toBeDefined()
+
+        if (!componentData) {
+            throw new Error('Expected FastUpdateComponent to exist in heatmap data')
+        }
+
         expect(componentData.timeline.length).toBeLessThanOrEqual(100)
 
         // Verify events are in chronological order
@@ -101,6 +111,10 @@ test.describe('Render Heatmap Correctness', () => {
         const componentData = heatmapData.components['HeavyList']
 
         expect(componentData).toBeDefined()
+
+        if (!componentData) {
+            throw new Error('Expected HeavyList to exist in heatmap data')
+        }
 
         const lastEvent = componentData.timeline[componentData.timeline.length - 1]
         expect(lastEvent).toBeDefined()

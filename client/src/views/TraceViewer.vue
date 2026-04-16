@@ -895,14 +895,14 @@ function handleCrossTraceRowClick(componentKey: string) {
     font-family: var(--mono);
 }
 
-.trace-viewer__action-btn:hover:not(:disabled) {
-    background: var(--bg-secondary);
-    color: var(--text);
-}
-
 .trace-viewer__action-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+.trace-viewer__action-btn:hover:not(:disabled) {
+    background: var(--bg-secondary);
+    color: var(--text);
 }
 
 .trace-viewer__import-mode-btn {
