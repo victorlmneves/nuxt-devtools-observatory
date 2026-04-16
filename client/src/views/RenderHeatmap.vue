@@ -557,9 +557,11 @@ const filteredRoots = computed(() => {
     return rootNodes.value.filter((root) => isVisibleRoot(root, term))
 })
 
+const filteredRootById = computed(() => new Map(filteredRoots.value.map((node) => [node.id, node])))
+
 const activeRoot = computed(() => {
     if (activeRootId.value) {
-        return filteredRoots.value.find((node) => node.id === activeRootId.value) ?? rootMap.value.get(activeRootId.value) ?? null
+        return filteredRootById.value.get(activeRootId.value) ?? rootMap.value.get(activeRootId.value) ?? null
     }
 
     return filteredRoots.value[0] ?? rootNodes.value[0] ?? null
@@ -691,7 +693,31 @@ const knownRoutes = computed(() => {
     return [...routes].sort()
 })
 
-const activeSelected = computed(() => allComponents.value.find((node) => node.id === activeSelectedId.value) ?? null)
+const activeSelected = computed(() => {
+    if (!activeSelectedId.value) {
+        return null
+    }
+
+    return allComponentsById.value.get(activeSelectedId.value) ?? null
+})
+
+const activeSelectedTimelineRecent = computed(() => {
+    const timeline = activeSelected.value?.timeline ?? []
+
+    if (!timeline.length) {
+        return [] as Array<{ key: string; event: RenderEvent }>
+    }
+
+    const recent: Array<{ key: string; event: RenderEvent }> = []
+    const end = Math.max(timeline.length - 30, 0)
+
+    for (let i = timeline.length - 1; i >= end; i--) {
+        const event = timeline[i]
+        recent.push({ key: `${event.kind}-${event.t}-${i}`, event })
+    }
+
+    return recent
+})
 const totalRenders = computed(() => allComponents.value.reduce((sum, node) => sum + node.rerenders + node.mountCount, 0))
 const hotCount = computed(() => allComponents.value.filter((node) => isHot(node)).length)
 const avgTime = computed(() => {
@@ -1181,16 +1207,14 @@ function formatTimestamp(t: number): string {
                     </div>
                     <div v-if="!activeSelected.timeline.length" class="muted text-sm">no timeline events yet</div>
                     <div v-else class="render-heatmap__timeline-list">
-                        <div
-                            v-for="(event, idx) in [...activeSelected.timeline].reverse().slice(0, 30)"
-                            :key="idx"
-                            class="render-heatmap__timeline-row"
-                        >
-                            <span class="render-heatmap__timeline-kind mono" :class="event.kind">{{ event.kind }}</span>
-                            <span class="render-heatmap__timeline-time mono muted">{{ formatTimestamp(event.t) }}</span>
-                            <span class="render-heatmap__timeline-dur mono">{{ formatMs(event.durationMs) }}</span>
-                            <span v-if="event.triggerKey" class="render-heatmap__timeline-trigger mono muted">{{ event.triggerKey }}</span>
-                            <span class="render-heatmap__timeline-route mono muted">{{ event.route }}</span>
+                        <div v-for="row in activeSelectedTimelineRecent" :key="row.key" class="render-heatmap__timeline-row">
+                            <span class="render-heatmap__timeline-kind mono" :class="row.event.kind">{{ row.event.kind }}</span>
+                            <span class="render-heatmap__timeline-time mono muted">{{ formatTimestamp(row.event.t) }}</span>
+                            <span class="render-heatmap__timeline-dur mono">{{ formatMs(row.event.durationMs) }}</span>
+                            <span v-if="row.event.triggerKey" class="render-heatmap__timeline-trigger mono muted">
+                                {{ row.event.triggerKey }}
+                            </span>
+                            <span class="render-heatmap__timeline-route mono muted">{{ row.event.route }}</span>
                         </div>
                         <div v-if="activeSelected.timeline.length > 30" class="render-heatmap__compact-muted muted text-sm">
                             … {{ activeSelected.timeline.length - 30 }} earlier events

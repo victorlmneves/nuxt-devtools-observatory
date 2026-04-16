@@ -69,6 +69,10 @@ const filteredTraces = computed(() => {
     return applyFilters(sortedTraces.value)
 })
 
+const filteredTraceById = computed(() => {
+    return new Map(filteredTraces.value.map((trace) => [trace.id, trace] as const))
+})
+
 const traceCountLabel = computed(() => {
     const suffix = isImportMode.value ? ' (imported)' : ''
 
@@ -84,7 +88,7 @@ const selectedTrace = computed(() => {
         return filteredTraces.value[0]
     }
 
-    return filteredTraces.value.find((t) => t.id === selectedTraceId.value)
+    return filteredTraceById.value.get(selectedTraceId.value)
 })
 
 const renderSummary = computed<TraceRenderStatsRow[]>(() => buildRenderSummaryForTrace(selectedTrace.value))
