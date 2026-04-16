@@ -1,8 +1,8 @@
-@import url("tailwindcss");
-@import url("@nuxt/ui");
+@import "tailwindcss";
+@import "@nuxt/ui";
 
 /* stylelint-disable at-rule-no-unknown */
-@source "../../../content/**/*";
+@source "../content/**/*";
 
 @theme static {
     --container-8xl: 90rem;
