@@ -3,6 +3,7 @@ import { nextTick } from 'vue'
 import { setupComposableRegistry } from './composables/composable-registry'
 import { setupFetchRegistry } from './composables/fetch-registry'
 import { setupProvideInjectRegistry } from './composables/provide-inject-registry'
+import { setupPiniaStoreRegistry } from './composables/pinia-store-registry'
 import { setupRenderRegistry } from './composables/render-registry'
 import { setupTransitionRegistry } from './composables/transition-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
@@ -31,10 +32,12 @@ export default defineNuxtPlugin(() => {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
         composableTracker?: boolean
+        piniaTracker?: boolean
         renderHeatmap?: boolean
         transitionTracker?: boolean
         traceViewer?: boolean
         heatmapHideInternals?: boolean
+        maxPiniaTimeline?: number
     }
 
     const debugRpc = config.debugRpc === true
@@ -67,6 +70,14 @@ export default defineNuxtPlugin(() => {
 
     if (config.composableTracker) {
         registries.composable = setupComposableRegistry()
+    }
+
+    if (config.piniaTracker) {
+        registries.pinia = setupPiniaStoreRegistry({
+            pinia: (nuxtApp as { $pinia?: unknown }).$pinia,
+            nuxtPayload: nuxtApp.payload,
+            maxTimeline: config.maxPiniaTimeline,
+        })
     }
 
     if (config.renderHeatmap) {
@@ -172,10 +183,17 @@ export default defineNuxtPlugin(() => {
         ;(window as ObservatoryWindow).__observatory__ = registries
 
         const composableRegistry = registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
+        const piniaRegistry = registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
 
         if (composableRegistry && composableRegistry.onComposableChange) {
             composableRegistry.onComposableChange(() => {
                 broadcastAll('composable:onChange')
+            })
+        }
+
+        if (piniaRegistry?.onChange) {
+            piniaRegistry.onChange(() => {
+                broadcastAll('pinia:onChange')
             })
         }
 
@@ -226,11 +244,30 @@ export default defineNuxtPlugin(() => {
                 debugLog('received command: edit-composable', { id: payload.id, key: payload.key })
 
                 composableRegistry?.editValue(payload.id, payload.key, payload.value)
+
+                return
+            }
+
+            if (payload.cmd === 'clear-pinia') {
+                debugLog('received command: clear-pinia')
+                piniaRegistry?.clear()
+                broadcastAll('command:clear-pinia')
+
+                return
+            }
+
+            if (payload.cmd === 'edit-pinia') {
+                debugLog('received command: edit-pinia', { storeId: payload.storeId, path: payload.path })
+                piniaRegistry?.editState(payload.storeId, payload.path, payload.value)
+                broadcastAll('command:edit-pinia')
             }
         })
 
         nuxtApp.hook('app:beforeUnmount', () => {
             import.meta.hot?.off('observatory:command')
+
+            const pinia = registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
+            pinia?.teardown?.()
 
             if (heartbeatId !== null) {
                 window.clearInterval(heartbeatId)
@@ -360,6 +397,7 @@ export default defineNuxtPlugin(() => {
             reason,
             fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
             composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
+            piniaStores: Array.isArray(snapshot.piniaStores) ? snapshot.piniaStores.length : 0,
             renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
             transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
             traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
@@ -392,6 +430,7 @@ export default defineNuxtPlugin(() => {
             { key: 'fetch', fallback: [] },
             { key: 'provideInject', fallback: { provides: [], injects: [] } },
             { key: 'composable', fallback: [] },
+            { key: 'pinia', fallback: [] },
             { key: 'render', fallback: {} },
             { key: 'transition', fallback: {} },
         ] as const
@@ -401,8 +440,18 @@ export default defineNuxtPlugin(() => {
         for (const { key, fallback } of trackerDefs) {
             const reg = registries[key] as unknown
             const hasGetSnapshot = reg && typeof (reg as { getSnapshot?: () => unknown }).getSnapshot === 'function'
-            snapshot[key === 'composable' ? 'composables' : key === 'render' ? 'renders' : key === 'transition' ? 'transitions' : key] =
-                hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
+            const snapshotKey =
+                key === 'composable'
+                    ? 'composables'
+                    : key === 'pinia'
+                      ? 'piniaStores'
+                      : key === 'render'
+                        ? 'renders'
+                        : key === 'transition'
+                          ? 'transitions'
+                          : key
+
+            snapshot[snapshotKey] = hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
         }
 
         snapshot.traces = config.traceViewer
@@ -433,6 +482,7 @@ export default defineNuxtPlugin(() => {
             fetchDashboard: !!registries.fetch,
             provideInjectGraph: !!registries.provideInject,
             composableTracker: !!registries.composable,
+            piniaTracker: !!registries.pinia,
             composableNavigationMode,
             fetchPageSize: typeof config.fetchPageSize === 'number' ? config.fetchPageSize : 20,
             renderHeatmap: !!registries.render,

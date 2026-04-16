@@ -54,6 +54,12 @@ export interface ModuleOptions {
     maxComposableEntries?: number
 
     /**
+     * Maximum number of Pinia timeline events to keep per store
+     * @default 100
+     */
+    maxPiniaTimeline?: number
+
+    /**
      * Maximum number of render timeline events per entry
      * @default 100
      */
@@ -84,6 +90,12 @@ export interface ModuleOptions {
      * @default true
      */
     composableTracker?: boolean
+
+    /**
+     * Enable the Pinia state tracker tab
+     * @default true
+     */
+    piniaTracker?: boolean
 
     /**
      * Enable the render heatmap tab
@@ -135,6 +147,7 @@ const defaults = {
     fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
     provideInjectGraph: process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
     composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
+    piniaTracker: process.env.OBSERVATORY_PINIA_TRACKER === 'true',
     renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
     transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
     traceViewer: process.env.OBSERVATORY_TRACE_VIEWER === 'true',
@@ -146,6 +159,7 @@ const defaults = {
     maxTransitions: process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500,
     maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
     maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
+    maxPiniaTimeline: process.env.OBSERVATORY_MAX_PINIA_TIMELINE ? Number(process.env.OBSERVATORY_MAX_PINIA_TIMELINE) : 100,
     maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
     composableNavigationMode:
         process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : ('route' as 'route' | 'session'),
@@ -197,6 +211,8 @@ export default defineNuxtModule<ModuleOptions>({
             composableTracker:
                 options.composableTracker ??
                 (process.env.OBSERVATORY_COMPOSABLE_TRACKER ? process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true' : true),
+            piniaTracker:
+                options.piniaTracker ?? (process.env.OBSERVATORY_PINIA_TRACKER ? process.env.OBSERVATORY_PINIA_TRACKER === 'true' : true),
             renderHeatmap:
                 options.renderHeatmap ??
                 (process.env.OBSERVATORY_RENDER_HEATMAP ? process.env.OBSERVATORY_RENDER_HEATMAP === 'true' : true),
@@ -232,6 +248,9 @@ export default defineNuxtModule<ModuleOptions>({
             maxComposableEntries:
                 options.maxComposableEntries ??
                 (process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300),
+            maxPiniaTimeline:
+                options.maxPiniaTimeline ??
+                (process.env.OBSERVATORY_MAX_PINIA_TIMELINE ? Number(process.env.OBSERVATORY_MAX_PINIA_TIMELINE) : 100),
             maxRenderTimeline:
                 options.maxRenderTimeline ??
                 (process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100),
@@ -286,6 +305,7 @@ export default defineNuxtModule<ModuleOptions>({
             resolved.fetchDashboard ||
             resolved.provideInjectGraph ||
             resolved.composableTracker ||
+            resolved.piniaTracker ||
             resolved.renderHeatmap ||
             resolved.transitionTracker
         ) {
@@ -312,6 +332,7 @@ export default defineNuxtModule<ModuleOptions>({
             fetch: [],
             provideInject: { provides: [], injects: [] },
             composables: [],
+            piniaStores: [],
             renders: [],
             transitions: [],
             traces: [],
@@ -319,6 +340,7 @@ export default defineNuxtModule<ModuleOptions>({
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
                 composableTracker: !!resolved.composableTracker,
+                piniaTracker: !!resolved.piniaTracker,
                 composableNavigationMode: resolved.composableNavigationMode,
                 fetchPageSize: resolved.fetchPageSize,
                 renderHeatmap: !!resolved.renderHeatmap,
@@ -357,6 +379,7 @@ export default defineNuxtModule<ModuleOptions>({
                     debugLog('received host snapshot', {
                         fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
                         composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
+                        piniaStores: Array.isArray(snapshot.piniaStores) ? snapshot.piniaStores.length : 0,
                         renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
                         transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
                     })
@@ -385,6 +408,12 @@ export default defineNuxtModule<ModuleOptions>({
                     async editComposableValue(id, key, value) {
                         emitCommand({ cmd: 'edit-composable', id, key, value })
                     },
+                    async clearPiniaStores() {
+                        emitCommand({ cmd: 'clear-pinia' })
+                    },
+                    async editPiniaState(storeId, path, value) {
+                        emitCommand({ cmd: 'edit-pinia', storeId, path, value })
+                    },
                 },
                 nuxt
             )
@@ -400,6 +429,7 @@ export default defineNuxtModule<ModuleOptions>({
                 resolved.fetchDashboard ||
                 resolved.provideInjectGraph ||
                 resolved.composableTracker ||
+                resolved.piniaTracker ||
                 resolved.renderHeatmap ||
                 resolved.transitionTracker
             ) {
@@ -418,6 +448,7 @@ export default defineNuxtModule<ModuleOptions>({
             fetchDashboard: resolved.fetchDashboard,
             provideInjectGraph: resolved.provideInjectGraph,
             composableTracker: resolved.composableTracker,
+            piniaTracker: resolved.piniaTracker,
             renderHeatmap: resolved.renderHeatmap,
             transitionTracker: resolved.transitionTracker,
             traceViewer: resolved.traceViewer,
@@ -427,6 +458,7 @@ export default defineNuxtModule<ModuleOptions>({
             maxTransitions: resolved.maxTransitions,
             maxComposableHistory: resolved.maxComposableHistory,
             maxComposableEntries: resolved.maxComposableEntries,
+            maxPiniaTimeline: resolved.maxPiniaTimeline,
             maxRenderTimeline: resolved.maxRenderTimeline,
             composableNavigationMode: resolved.composableNavigationMode,
             heatmapHideInternals: resolved.heatmapHideInternals,

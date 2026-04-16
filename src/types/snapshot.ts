@@ -80,6 +80,54 @@ export interface ComposableEntry {
     isLayoutComposable?: boolean
 }
 
+export interface PiniaStateDiff {
+    path: string
+    before: unknown
+    after: unknown
+}
+
+export interface PiniaStoreDependency {
+    id: string
+    kind: 'component' | 'composable' | 'unknown'
+    name: string
+    file?: string
+}
+
+export interface PiniaHydrationEvent {
+    at: number
+    source: 'nuxt-payload' | 'persistedstate' | 'runtime' | 'unknown'
+    details?: string
+}
+
+export interface PiniaMutationEvent {
+    id: string
+    storeId: string
+    storeName: string
+    kind: 'action' | 'mutation'
+    name: string
+    startTime: number
+    endTime?: number
+    durationMs?: number
+    status: 'active' | 'ok' | 'error'
+    beforeState: unknown
+    afterState: unknown
+    diff: PiniaStateDiff[]
+    callerStack?: string[]
+    payload?: unknown
+    error?: string
+}
+
+export interface PiniaStoreEntry {
+    id: string
+    name: string
+    state: unknown
+    dependencies: PiniaStoreDependency[]
+    timeline: PiniaMutationEvent[]
+    lastMutationAt?: number
+    lastActionAt?: number
+    hydration?: PiniaHydrationEvent
+}
+
 export interface RenderEvent {
     kind: 'mount' | 'update'
     t: number

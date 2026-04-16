@@ -18,6 +18,7 @@ export default defineNuxtConfig({
         fetchDashboard: import.meta.env.VITE_OBSERVATORY_FETCH_DASHBOARD === 'true',
         provideInjectGraph: import.meta.env.VITE_OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
         composableTracker: import.meta.env.VITE_OBSERVATORY_COMPOSABLE_TRACKER === 'true',
+        piniaTracker: import.meta.env.VITE_OBSERVATORY_PINIA_TRACKER === 'true',
         renderHeatmap: import.meta.env.VITE_OBSERVATORY_RENDER_HEATMAP === 'true',
         transitionTracker: import.meta.env.VITE_OBSERVATORY_TRANSITION_TRACKER === 'true',
         traceViewer: import.meta.env.VITE_OBSERVATORY_TRACE_VIEWER === 'true',
