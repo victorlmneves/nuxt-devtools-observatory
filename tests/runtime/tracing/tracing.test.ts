@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { startSpan } from '@observatory/runtime/tracing/tracing'
 import { TraceStore } from '@observatory/runtime/tracing/traceStore'
 

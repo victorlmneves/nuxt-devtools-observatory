@@ -11,6 +11,12 @@ beforeEach(() => {
 /**
  * Creates and immediately ends a component span in the global traceStore.
  * Used to populate aggregateFromComponentSpans() with test data.
+ * @param {number} uid
+ * @param {'mounted' | 'updated'} lifecycle
+ * @param {{ startTime?: number; durationMs?: number; route?: string }} options
+ * @param {number} [options.startTime]
+ * @param {number} [options.durationMs]
+ * @param {string} [options.route]
  */
 function addComponentSpan(
     uid: number,

@@ -120,7 +120,7 @@ test.describe('Trace Viewer Correctness', () => {
 
             if (currentTrace && nextTrace) {
                 expect(currentTrace.endTime).toBeLessThanOrEqual(nextTrace.startTime)
-                expect(currentTrace.metadata.route).not.toBe(nextTrace.metadata.route)
+                expect(currentTrace.metadata['route']).not.toBe(nextTrace.metadata['route'])
             }
         }
     })

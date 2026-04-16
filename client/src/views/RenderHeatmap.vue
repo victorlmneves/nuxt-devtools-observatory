@@ -1184,11 +1184,6 @@ function formatTimestamp(t: number): string {
     min-height: 0;
 }
 
-.render-heatmap__roots-panel,
-.render-heatmap__detail-panel {
-    flex-shrink: 0;
-}
-
 .render-heatmap__roots-panel {
     width: 240px;
     margin-right: 12px;
@@ -1205,6 +1200,7 @@ function formatTimestamp(t: number): string {
 
 .render-heatmap__roots-panel,
 .render-heatmap__detail-panel {
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     overflow: auto;

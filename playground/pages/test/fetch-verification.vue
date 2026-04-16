@@ -203,11 +203,6 @@ const clearResults = (): void => {
     flex-wrap: wrap;
 }
 
-.fetch-buttons button {
-    padding: 4px 12px;
-    font-size: 12px;
-}
-
 button {
     padding: 8px 16px;
     background-color: #42b883;
@@ -220,6 +215,11 @@ button {
 
 button:hover {
     background-color: #3aa876;
+}
+
+.fetch-buttons button {
+    padding: 4px 12px;
+    font-size: 12px;
 }
 
 .status {

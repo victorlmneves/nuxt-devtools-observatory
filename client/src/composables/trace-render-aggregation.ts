@@ -68,7 +68,11 @@ function getComponentIdentity(metadata: SpanMetadata, fallbackId: string): { key
     }
 }
 
-/** Build per-trace render stats grouped by component UID. */
+/**
+ * Build per-trace render stats grouped by component UID.
+ * @param {TraceEntry | undefined} trace - Trace to summarize.
+ * @returns {TraceRenderStatsRow[]} Render metrics grouped by component uid.
+ */
 export function buildRenderSummaryForTrace(trace?: TraceEntry): TraceRenderStatsRow[] {
     if (!trace) {
         return []
@@ -135,7 +139,12 @@ export function buildRenderSummaryForTrace(trace?: TraceEntry): TraceRenderStats
     return rows
 }
 
-/** Build cross-trace render aggregation and comparison against a selected trace. */
+/**
+ * Build cross-trace render aggregation and comparison against a selected trace.
+ * @param {TraceEntry[]} traces - Traces included in the aggregation window.
+ * @param {string | undefined} selectedTraceId - Optional selected trace for baseline comparison.
+ * @returns {CrossTraceRenderSummaryRow[]} Aggregated comparison rows by component identity.
+ */
 export function buildCrossTraceRenderSummary(traces: TraceEntry[], selectedTraceId?: string): CrossTraceRenderSummaryRow[] {
     if (traces.length === 0) {
         return []

@@ -7,7 +7,7 @@ interface AsyncDataMeta {
     originalFn?: string
 }
 
-type AnyFn = (...args: any[]) => any
+type AnyFn = (...args: unknown[]) => unknown
 
 function getNormalizedKey(key: unknown) {
     return typeof key === 'string' && key.length > 0 ? key : 'useAsyncData'
