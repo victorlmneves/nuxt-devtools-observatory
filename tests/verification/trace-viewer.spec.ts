@@ -139,4 +139,21 @@ test.describe('Trace Viewer Correctness', () => {
             expect(foundTypes.has(expectedType)).toBe(true)
         }
     })
+
+    test('should keep trace retrieval responsive with larger trace volumes', async () => {
+        const routeCount = 20
+
+        for (let i = 0; i < routeCount; i++) {
+            await page.click(`[data-testid="nav-to-route-${i % 5}"]`)
+            await page.waitForTimeout(20)
+        }
+
+        const startedAt = Date.now()
+        const traces = await api.getTraces()
+        const elapsedMs = Date.now() - startedAt
+
+        // Guardrail threshold: aims to detect major regressions while staying stable in CI.
+        expect(elapsedMs).toBeLessThan(2000)
+        expect(traces.length).toBeGreaterThanOrEqual(routeCount)
+    })
 })
