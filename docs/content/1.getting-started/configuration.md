@@ -21,6 +21,7 @@ export default defineNuxtConfig({
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
         debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
         maxFetchEntries: 200, // Max fetch entries to keep in memory
+        fetchPageSize: 20, // Rows loaded per infinite-scroll step in the useFetch Dashboard
         maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
         maxTransitions: 500, // Max transition entries to keep in memory
         maxComposableHistory: 50, // Max composable history events per entry
@@ -36,6 +37,7 @@ export default defineNuxtConfig({
 - `session` mode keeps history across navigations for investigation sessions.
 - `debugRpc` helps diagnose host/iframe bridge issues.
 - Caps reduce memory growth during long dev sessions.
+- `fetchPageSize` controls how many useFetch rows are appended per scroll step.
 
 ## Environment variables
 

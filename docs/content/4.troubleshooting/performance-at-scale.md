@@ -49,6 +49,7 @@ The repository focuses on stable regression detection over absolute micro-benchm
 When data volume grows aggressively, tune these settings in `nuxt.config.ts`:
 
 - `maxFetchEntries`
+- `fetchPageSize`
 - `maxTransitions`
 - `maxComposableEntries`
 - `maxComposableHistory`

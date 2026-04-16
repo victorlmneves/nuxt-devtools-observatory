@@ -52,6 +52,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `heatmapHideInternals` (boolean) — Hide node_modules and internal components in the render heatmap for a cleaner view
 - `debugRpc` (boolean) — Enable RPC handshake debug logs in the Observatory iframe/host bridge (set via `OBSERVATORY_DEBUG_RPC`)
 - `maxFetchEntries` (number) — Max fetch entries to keep in memory
+- `fetchPageSize` (number) — Rows loaded per infinite-scroll step in the useFetch Dashboard (set via `OBSERVATORY_FETCH_PAGE_SIZE`)
 - `maxPayloadBytes` (number) — Max payload size (bytes) per fetch entry
 - `maxTransitions` (number) — Max transition entries to keep in memory
 - `maxComposableHistory` (number) — Max composable history events per entry
@@ -80,6 +81,7 @@ export default defineNuxtConfig({
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
         debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
         maxFetchEntries: 200, // Max fetch entries to keep in memory
+        fetchPageSize: 20, // Rows loaded per infinite-scroll step in the useFetch Dashboard
         maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
         maxTransitions: 500, // Max transition entries to keep in memory
         maxComposableHistory: 50, // Max composable history events per entry
@@ -114,6 +116,9 @@ A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim that reco
 
 A Nitro plugin captures server-side fetch timing independently and tunnels it to the
 client over the HMR WebSocket.
+
+The table supports infinite-scroll paging with row virtualization. `fetchPageSize`
+controls how many rows are added per scroll step.
 
 ### provide/inject Graph
 

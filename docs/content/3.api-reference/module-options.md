@@ -29,6 +29,7 @@ description: Configuration for Observatory instrumentation and limits.
 ## Caps
 
 - `maxFetchEntries`
+- `fetchPageSize`
 - `maxPayloadBytes`
 - `maxTransitions`
 - `maxComposableHistory`
