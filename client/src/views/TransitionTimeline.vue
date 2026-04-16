@@ -13,14 +13,25 @@ const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(260, 'obs
 type FilterMode = 'all' | 'cancelled' | 'active' | 'completed'
 const filter = ref<FilterMode>('all')
 const search = ref('')
-const selected = ref<TransitionEntry | null>(null)
+const selectedId = ref<string | null>(null)
 const tableScrollRef = ref<HTMLElement | null>(null)
 
 const { effective: virtualizationFlags } = useVirtualizationFlags()
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 42, overscan: 10 })
 
+const entriesSorted = computed(() => [...entries.value].sort((a, b) => a.startTime - b.startTime))
+const entriesById = computed(() => new Map(entries.value.map((entry) => [entry.id, entry] as const)))
+
+const selected = computed(() => {
+    if (!selectedId.value) {
+        return null
+    }
+
+    return entriesById.value.get(selectedId.value) ?? null
+})
+
 const filtered = computed(() => {
-    let list = [...entries.value]
+    let list = entriesSorted.value
 
     if (search.value) {
         const q = search.value.toLowerCase()
@@ -35,7 +46,7 @@ const filtered = computed(() => {
         list = list.filter((e) => e.phase === 'entered' || e.phase === 'left')
     }
 
-    return list.sort((a, b) => a.startTime - b.startTime)
+    return list
 })
 
 const stats = computed(() => ({
@@ -251,7 +262,7 @@ function directionColor(e: TransitionEntry): string {
                             v-for="row in visibleRows"
                             :key="row.entry.id"
                             :class="{ selected: selected?.id === row.entry.id }"
-                            @click="selected = selected?.id === row.entry.id ? null : row.entry"
+                            @click="selectedId = selected?.id === row.entry.id ? null : row.entry.id"
                         >
                             <td>
                                 <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
@@ -312,7 +323,7 @@ function directionColor(e: TransitionEntry): string {
                 <aside v-if="selected" class="transition-timeline__detail" :style="{ width: detailWidth + 'px' }">
                     <div class="transition-timeline__detail-header">
                         <span class="transition-timeline__detail-title">{{ selected.transitionName }}</span>
-                        <button class="transition-timeline__close-btn" @click="selected = null">✕</button>
+                        <button class="transition-timeline__close-btn" @click="selectedId = null">✕</button>
                     </div>
 
                     <div class="transition-timeline__detail-section">
