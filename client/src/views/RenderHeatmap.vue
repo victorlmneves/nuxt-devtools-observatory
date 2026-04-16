@@ -2,7 +2,6 @@
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
-import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
 import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
@@ -86,6 +85,10 @@ const TreeNode = defineComponent({
             }
         }
 
+        function depthClass(node: ComponentNode) {
+            return `depth-${Math.min(node.depth, 4)}`
+        }
+
         return () => {
             const node = props.node!
             const expanded = props.expandedIds?.has(node.id) ?? false
@@ -94,11 +97,11 @@ const TreeNode = defineComponent({
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
             const badges = nodeBadges(node)
 
-            return h('div', { class: 'tree-node' }, [
+            return h('div', { class: ['tree-node', depthClass(node)] }, [
                 h(
                     'div',
                     {
-                        class: ['tree-row', rowClass(node)],
+                        class: ['tree-row', depthClass(node), rowClass(node)],
                         style: { '--tree-depth': String(node.depth) },
                         onClick: (event: MouseEvent) => {
                             event.stopPropagation()
@@ -225,7 +228,6 @@ const frozenSnapshot = ref<RenderEntry[]>([])
 const expansionReady = ref(false)
 const treeFrameRef = ref<HTMLElement | null>(null)
 
-const { effective: virtualizationFlags } = useVirtualizationFlags()
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 6 })
 
 function displayLabel(entry: RenderEntry) {
@@ -581,7 +583,9 @@ const visibleTreeRoots = computed(() => {
     return [visibleActiveRoot.value]
 })
 
-const virtualizedTreeEnabled = computed(() => virtualizationFlags.value.heatmap)
+// Keep true nested parent->child containers for this tree view.
+// The virtualized list flattens hierarchy and breaks the wrapping visual.
+const virtualizedTreeEnabled = computed(() => false)
 
 function flattenVisibleTree(root: ComponentNode | null, expanded: Set<string>) {
     if (!root) {
@@ -1030,7 +1034,10 @@ function formatTimestamp(t: number): string {
                                 v-for="row in visibleTreeRowItems"
                                 :key="row.node.id"
                                 class="tree-row"
-                                :class="{ selected: activeSelected?.id === row.node.id, hot: row.hot }"
+                                :class="[
+                                    `depth-${Math.min(row.node.depth, 4)}`,
+                                    { selected: activeSelected?.id === row.node.id, hot: row.hot },
+                                ]"
                                 :style="{ '--tree-depth': String(row.node.depth) }"
                                 @click="selectNode(row.node)"
                             >
@@ -1379,9 +1386,10 @@ function formatTimestamp(t: number): string {
 }
 
 .render-heatmap__tree-canvas {
-    display: inline-block;
-    min-width: 100%;
-    width: max-content;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .render-heatmap__tree-spacer {
@@ -1389,35 +1397,57 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-node) {
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border-radius: var(--radius);
+    background: var(--bg2);
+    padding: 4px;
+}
+
+:deep(.tree-node.depth-0) {
+    background: color-mix(in srgb, var(--teal) 9%, var(--bg2));
+}
+
+:deep(.tree-node.depth-1) {
+    background: color-mix(in srgb, var(--blue) 9%, var(--bg2));
+}
+
+:deep(.tree-node.depth-2) {
+    background: color-mix(in srgb, var(--amber) 9%, var(--bg2));
+}
+
+:deep(.tree-node.depth-3),
+:deep(.tree-node.depth-4) {
+    background: color-mix(in srgb, var(--purple) 9%, var(--bg2));
 }
 
 :deep(.tree-row) {
     display: grid;
-    grid-template-columns: 8px 18px minmax(0, 1fr) auto;
+    grid-template-columns: 18px minmax(140px, 1fr) auto;
     align-items: center;
     gap: 6px;
     min-width: 0;
     width: 100%;
-    padding: 4px 8px;
-    padding-left: calc(8px + (var(--tree-depth, 0) * 16px));
+    padding: 4px 6px;
+    padding-left: 4px;
     border: 1px solid transparent;
+    background: transparent;
     border-radius: var(--radius);
     cursor: pointer;
     white-space: nowrap;
 }
 
 :deep(.tree-row:hover) {
-    background: var(--bg2);
+    background: color-mix(in srgb, var(--bg3) 45%, transparent);
 }
 
 :deep(.tree-row.selected) {
-    background: color-mix(in srgb, var(--teal) 12%, var(--bg2));
+    background: color-mix(in srgb, var(--teal) 12%, transparent);
     border-color: var(--teal);
 }
 
 :deep(.tree-row.hot) {
-    box-shadow: inset 2px 0 0 var(--red);
+    border-color: color-mix(in srgb, var(--red) 45%, var(--border));
 }
 
 :deep(.tree-toggle) {
@@ -1442,7 +1472,7 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-rail) {
-    display: block;
+    display: none;
     width: 2px;
     height: 14px;
     border-radius: 999px;
@@ -1452,23 +1482,29 @@ function formatTimestamp(t: number): string {
 :deep(.tree-copy) {
     display: flex;
     align-items: center;
+    flex: 1;
     min-width: 0;
-    gap: 6px;
+    gap: 4px;
     overflow: hidden;
 }
 
 :deep(.tree-name) {
     font-size: 12px;
     color: var(--text);
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
 }
 
 :deep(.tree-badges) {
-    display: flex;
+    display: none;
     gap: 6px;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 120px;
     overflow: hidden;
 }
 
@@ -1481,23 +1517,23 @@ function formatTimestamp(t: number): string {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 160px;
+    max-width: 120px;
 }
 
 :deep(.tree-metrics) {
     display: flex;
     align-items: center;
-    min-width: 92px;
+    min-width: 80px;
     justify-content: flex-end;
     flex-shrink: 0;
-    gap: 6px;
+    gap: 4px;
 }
 
 :deep(.tree-metric-pill) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 78px;
+    min-width: 64px;
     padding: 2px 8px;
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -1529,9 +1565,9 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-children) {
-    margin-left: 7px;
-    padding-left: 11px;
-    border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    margin-left: 4px;
+    padding-left: 6px;
+    border-left: none;
 }
 
 .render-heatmap__detail-empty {
@@ -1755,8 +1791,8 @@ function formatTimestamp(t: number): string {
         display: none;
     }
 
-    .render-heatmap__detail-panel {
+    /* .render-heatmap__detail-panel {
         max-height: 220px;
-    }
+    } */
 }
 </style>
