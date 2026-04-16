@@ -59,6 +59,18 @@ function nodeBadges(node: ComponentNode): string[] {
     return badges
 }
 
+const TREE_DEPTH_PALETTE = [
+    { bg: 'rgb(104 189 122 / 16%)', border: 'rgb(142 226 160 / 35%)' },
+    { bg: 'rgb(95 159 225 / 16%)', border: 'rgb(130 193 255 / 35%)' },
+    { bg: 'rgb(229 176 92 / 16%)', border: 'rgb(247 203 132 / 35%)' },
+    { bg: 'rgb(176 129 220 / 16%)', border: 'rgb(206 163 246 / 35%)' },
+    { bg: 'rgb(225 122 142 / 16%)', border: 'rgb(245 161 178 / 35%)' },
+] as const
+
+function toneForDepth(depth: number) {
+    return TREE_DEPTH_PALETTE[depth % TREE_DEPTH_PALETTE.length]
+}
+
 const TreeNode = defineComponent({
     name: 'TreeNode',
     props: {
@@ -82,11 +94,8 @@ const TreeNode = defineComponent({
             return {
                 selected: props.selected === node.id,
                 hot: isHot(node),
+                'no-toggle': node.children.length === 0,
             }
-        }
-
-        function depthClass(node: ComponentNode) {
-            return `depth-${Math.min(node.depth, 4)}`
         }
 
         return () => {
@@ -96,99 +105,108 @@ const TreeNode = defineComponent({
             const metric = props.mode === 'count' ? `${node.rerenders + node.mountCount}` : `${node.avgMs.toFixed(1)}ms`
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
             const badges = nodeBadges(node)
+            const tone = toneForDepth(node.depth)
 
-            return h('div', { class: ['tree-node', depthClass(node)] }, [
-                h(
-                    'div',
-                    {
-                        class: ['tree-row', depthClass(node), rowClass(node)],
-                        style: { '--tree-depth': String(node.depth) },
-                        onClick: (event: MouseEvent) => {
-                            event.stopPropagation()
-                            emit('select', node)
-                        },
+            return h(
+                'div',
+                {
+                    class: 'tree-node',
+                    style: {
+                        '--tree-depth': String(node.depth),
+                        '--tree-node-bg': tone.bg,
+                        '--tree-node-border': tone.border,
                     },
-                    [
-                        h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
-                        h(
-                            'button',
-                            {
-                                class: ['tree-toggle', { empty: !canExpand }],
-                                disabled: !canExpand,
-                                onClick: (event: MouseEvent) => {
-                                    event.stopPropagation()
-
-                                    if (canExpand) {
-                                        emit('toggle', node.id)
-                                    }
-                                },
+                },
+                [
+                    h(
+                        'div',
+                        {
+                            class: ['tree-row', rowClass(node)],
+                            onClick: (event: MouseEvent) => {
+                                event.stopPropagation()
+                                emit('select', node)
                             },
-                            canExpand ? (expanded ? '⌄' : '›') : ''
-                        ),
-                        h('div', { class: 'tree-copy' }, [
-                            h('span', { class: 'tree-name mono', title: node.label }, node.label),
-                            badges.length
-                                ? h(
-                                      'div',
-                                      { class: 'tree-badges' },
-                                      badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
-                                  )
-                                : null,
-                        ]),
-                        h('div', { class: 'tree-metrics mono' }, [
-                            node.isPersistent
-                                ? h(
-                                      'span',
-                                      { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
-                                      'persistent'
-                                  )
-                                : null,
-                            node.isHydrationMount
-                                ? h(
-                                      'span',
-                                      {
-                                          class: 'tree-hydration-pill',
-                                          title: 'First mount was SSR hydration — not a user-triggered render',
-                                      },
-                                      'hydrated'
-                                  )
-                                : null,
-                            h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
-                            node.file && node.file !== 'unknown'
+                        },
+                        [
+                            h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
+                            canExpand
                                 ? h(
                                       'button',
                                       {
-                                          class: 'tree-jump-btn',
-                                          title: `Open ${node.file} in editor`,
-                                          onClick: (e: MouseEvent) => {
-                                              e.stopPropagation()
-                                              openInEditor(node.file)
+                                          class: 'tree-toggle',
+                                          onClick: (event: MouseEvent) => {
+                                              event.stopPropagation()
+                                              emit('toggle', node.id)
                                           },
                                       },
-                                      '↗'
+                                      expanded ? '⌄' : '›'
                                   )
                                 : null,
-                        ]),
-                    ]
-                ),
-                expanded && canExpand
-                    ? h(
-                          'div',
-                          { class: 'tree-children' },
-                          node.children.map((child) =>
-                              h(TreeNode, {
-                                  node: child,
-                                  mode: props.mode,
-                                  threshold: props.threshold,
-                                  selected: props.selected,
-                                  expandedIds: props.expandedIds,
-                                  onSelect: (value: ComponentNode) => emit('select', value),
-                                  onToggle: (value: string) => emit('toggle', value),
-                              })
+                            h('div', { class: 'tree-copy' }, [
+                                h('span', { class: 'tree-name mono', title: node.label }, node.label),
+                                badges.length
+                                    ? h(
+                                          'div',
+                                          { class: 'tree-badges' },
+                                          badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
+                                      )
+                                    : null,
+                            ]),
+                            h('div', { class: 'tree-metrics mono' }, [
+                                node.isPersistent
+                                    ? h(
+                                          'span',
+                                          { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
+                                          'persistent'
+                                      )
+                                    : null,
+                                node.isHydrationMount
+                                    ? h(
+                                          'span',
+                                          {
+                                              class: 'tree-hydration-pill',
+                                              title: 'First mount was SSR hydration — not a user-triggered render',
+                                          },
+                                          'hydrated'
+                                      )
+                                    : null,
+                                h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
+                                node.file && node.file !== 'unknown'
+                                    ? h(
+                                          'button',
+                                          {
+                                              class: 'tree-jump-btn',
+                                              title: `Open ${node.file} in editor`,
+                                              onClick: (e: MouseEvent) => {
+                                                  e.stopPropagation()
+                                                  openInEditor(node.file)
+                                              },
+                                          },
+                                          '↗'
+                                      )
+                                    : null,
+                            ]),
+                        ]
+                    ),
+                    expanded && canExpand
+                        ? h(
+                              'div',
+                              { class: 'tree-children' },
+                              node.children.map((child) =>
+                                  h(TreeNode, {
+                                      node: child,
+                                      mode: props.mode,
+                                      threshold: props.threshold,
+                                      selected: props.selected,
+                                      expandedIds: props.expandedIds,
+                                      onSelect: (value: ComponentNode) => emit('select', value),
+                                      onToggle: (value: string) => emit('toggle', value),
+                                  })
+                              )
                           )
-                      )
-                    : null,
-            ])
+                        : null,
+                ]
+            )
         }
     },
 })
@@ -1036,19 +1054,14 @@ function formatTimestamp(t: number): string {
                                 class="tree-row"
                                 :class="[
                                     `depth-${Math.min(row.node.depth, 4)}`,
-                                    { selected: activeSelected?.id === row.node.id, hot: row.hot },
+                                    { selected: activeSelected?.id === row.node.id, hot: row.hot, 'no-toggle': !row.node.children.length },
                                 ]"
                                 :style="{ '--tree-depth': String(row.node.depth) }"
                                 @click="selectNode(row.node)"
                             >
                                 <span class="tree-rail" aria-hidden="true" />
-                                <button
-                                    class="tree-toggle"
-                                    :class="{ empty: !row.node.children.length }"
-                                    :disabled="!row.node.children.length"
-                                    @click.stop="row.node.children.length ? toggleNode(row.node.id) : undefined"
-                                >
-                                    {{ row.node.children.length ? (expandedIds.has(row.node.id) ? '⌄' : '›') : '' }}
+                                <button v-if="row.node.children.length" class="tree-toggle" @click.stop="toggleNode(row.node.id)">
+                                    {{ expandedIds.has(row.node.id) ? '⌄' : '›' }}
                                 </button>
                                 <div class="tree-copy">
                                     <span class="tree-name mono" :title="row.node.label">{{ row.node.label }}</span>
@@ -1398,27 +1411,10 @@ function formatTimestamp(t: number): string {
 
 :deep(.tree-node) {
     margin-bottom: 6px;
-    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    border: 1px solid var(--tree-node-border, #c8e6c9);
     border-radius: var(--radius);
-    background: var(--bg2);
+    background: var(--tree-node-bg, #e8f5e9);
     padding: 4px;
-}
-
-:deep(.tree-node.depth-0) {
-    background: color-mix(in srgb, var(--teal) 9%, var(--bg2));
-}
-
-:deep(.tree-node.depth-1) {
-    background: color-mix(in srgb, var(--blue) 9%, var(--bg2));
-}
-
-:deep(.tree-node.depth-2) {
-    background: color-mix(in srgb, var(--amber) 9%, var(--bg2));
-}
-
-:deep(.tree-node.depth-3),
-:deep(.tree-node.depth-4) {
-    background: color-mix(in srgb, var(--purple) 9%, var(--bg2));
 }
 
 :deep(.tree-row) {
@@ -1428,13 +1424,16 @@ function formatTimestamp(t: number): string {
     gap: 6px;
     min-width: 0;
     width: 100%;
-    padding: 4px 6px;
-    padding-left: 4px;
+    padding: 4px 0 4px 4px;
     border: 1px solid transparent;
     background: transparent;
     border-radius: var(--radius);
     cursor: pointer;
     white-space: nowrap;
+}
+
+:deep(.tree-row.no-toggle) {
+    grid-template-columns: minmax(140px, 1fr) auto;
 }
 
 :deep(.tree-row:hover) {
@@ -1465,10 +1464,6 @@ function formatTimestamp(t: number): string {
 
 :deep(.tree-toggle:disabled) {
     cursor: default;
-}
-
-:deep(.tree-toggle.empty) {
-    opacity: 0;
 }
 
 :deep(.tree-rail) {
