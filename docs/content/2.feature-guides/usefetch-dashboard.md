@@ -13,6 +13,12 @@ description: Inspect request timing, origin, status, and payload size.
 - Payload size
 - Waterfall timeline position
 
+## Paging and virtualization
+
+- Rows are appended with infinite scroll.
+- `fetchPageSize` controls rows loaded per scroll step (default `20`).
+- Visible rows are virtualized to keep DOM size stable while scrolling.
+
 ## What to watch for
 
 - Duplicate fetches across navigation

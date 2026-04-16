@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
-import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
 import type { FetchEntry } from '@observatory/types/snapshot'
 
 type FetchViewEntry = FetchEntry & { startOffset: number }
 
-const { fetch, connected } = useObservatoryData()
+const { fetch, connected, features } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(280, 'observatory:fetch:detailWidth')
 
 const filter = ref<string>('all')
@@ -17,9 +16,9 @@ const search = ref('')
 const selectedId = ref<string | null>(null)
 const waterfallOpen = ref(true)
 const tableScrollRef = ref<HTMLElement | null>(null)
+const currentPage = ref(1)
 
-const { effective: virtualizationFlags } = useVirtualizationFlags()
-const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 38, overscan: 12 })
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 38, overscan: 6 })
 
 const entries = computed<FetchViewEntry[]>(() => {
     const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
@@ -63,10 +62,23 @@ const filtered = computed(() => {
     })
 })
 
-const virtualizedRowsEnabled = computed(() => virtualizationFlags.value.fetch)
+const fetchPageSize = computed(() => {
+    const raw = features.value?.fetchPageSize
+
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+        return 20
+    }
+
+    return Math.max(1, Math.floor(raw))
+})
+
+const pagedFiltered = computed(() => filtered.value.slice(0, currentPage.value * fetchPageSize.value))
+const hasMoreRows = computed(() => pagedFiltered.value.length < filtered.value.length)
+
+const virtualizedRowsEnabled = computed(() => true)
 
 const rowVirtualizerOptions = computed(() => ({
-    count: filtered.value.length,
+    count: pagedFiltered.value.length,
     getScrollElement: () => tableScrollRef.value,
     estimateSize: () => virtualizationPreset.value.rowHeight,
     overscan: virtualizationPreset.value.overscan,
@@ -103,11 +115,40 @@ const bottomVirtualPadding = computed(() => {
 
 const visibleRows = computed(() => {
     if (!virtualizedRowsEnabled.value) {
-        return filtered.value
+        return pagedFiltered.value
     }
 
-    return virtualItems.value.map((item) => filtered.value[item.index]).filter((entry): entry is FetchViewEntry => Boolean(entry))
+    return virtualItems.value.map((item) => pagedFiltered.value[item.index]).filter((entry): entry is FetchViewEntry => Boolean(entry))
 })
+
+watch([filter, search], () => {
+    currentPage.value = 1
+    if (tableScrollRef.value) {
+        tableScrollRef.value.scrollTop = 0
+    }
+})
+
+watch(filtered, (nextRows) => {
+    const maxPage = Math.max(1, Math.ceil(nextRows.length / fetchPageSize.value))
+
+    if (currentPage.value > maxPage) {
+        currentPage.value = maxPage
+    }
+})
+
+function onTableScroll() {
+    const element = tableScrollRef.value
+
+    if (!element || !hasMoreRows.value) {
+        return
+    }
+
+    const nearBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - 32
+
+    if (nearBottom) {
+        currentPage.value += 1
+    }
+}
 
 const metaRows = computed(() => {
     if (!selected.value) {
@@ -256,7 +297,7 @@ function formatSize(bytes: number) {
         </div>
 
         <div class="fetch-dashboard__split tracker-split">
-            <div ref="tableScrollRef" class="fetch-dashboard__table tracker-table-wrap">
+            <div ref="tableScrollRef" class="fetch-dashboard__table tracker-table-wrap" @scroll="onTableScroll">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -323,11 +364,17 @@ function formatSize(bytes: number) {
                                 {{ connected ? 'No fetches recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
                             </td>
                         </tr>
+                        <tr v-else class="fetch-dashboard__pagination-row" aria-live="polite">
+                            <td colspan="7" class="fetch-dashboard__pagination-cell">
+                                <span class="mono muted text-sm">showing {{ pagedFiltered.length }} of {{ filtered.length }}</span>
+                                <span v-if="hasMoreRows" class="mono muted text-sm">scroll to load more</span>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
 
-            <div v-if="selected" class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
+            <div class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
 
             <div v-if="selected" class="fetch-dashboard__detail tracker-detail-panel" :style="{ width: detailWidth + 'px' }">
                 <div class="fetch-dashboard__detail-header">
@@ -350,7 +397,7 @@ function formatSize(bytes: number) {
                 <div class="tracker-section-label fetch-dashboard__section-label fetch-dashboard__section-label--source">source</div>
                 <div class="mono text-sm muted">{{ selected.file }}:{{ selected.line }}</div>
             </div>
-            <div v-else class="tracker-detail-empty">select a call to inspect</div>
+            <div v-else class="tracker-detail-empty" :style="{ width: detailWidth + 'px' }">select a call to inspect</div>
         </div>
 
         <div class="fetch-dashboard__waterfall">
@@ -398,6 +445,19 @@ function formatSize(bytes: number) {
     padding: 0;
     border-bottom: 0;
     background: transparent;
+}
+
+.fetch-dashboard__pagination-row td {
+    background: transparent;
+}
+
+.fetch-dashboard__pagination-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--tracker-space-2);
+    padding-top: var(--tracker-space-2);
+    border-bottom: 0;
 }
 
 .fetch-dashboard__url {
@@ -452,6 +512,8 @@ function formatSize(bytes: number) {
     border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
     padding: 10px var(--tracker-space-3);
+    max-height: 35%;
+    overflow-x: auto;
 }
 
 .fetch-dashboard__waterfall-header {

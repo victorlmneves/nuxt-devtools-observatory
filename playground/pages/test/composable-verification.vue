@@ -147,7 +147,7 @@ const resetAllComponents = (): void => {
 </script>
 
 <template>
-    <div>
+    <div class="layout">
         <h2>Composable Tracker Verification Test Page</h2>
 
         <div class="controls">
@@ -221,6 +221,11 @@ const resetAllComponents = (): void => {
 </template>
 
 <style scoped>
+.layout {
+    padding: 20px;
+    font-family: sans-serif;
+}
+
 .controls {
     display: flex;
     gap: 10px;

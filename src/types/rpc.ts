@@ -24,6 +24,7 @@ export interface ObservatorySnapshot {
         provideInjectGraph?: boolean
         composableTracker?: boolean
         composableNavigationMode?: 'route' | 'session'
+        fetchPageSize?: number
         renderHeatmap?: boolean
         transitionTracker?: boolean
         traceViewer?: boolean

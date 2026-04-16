@@ -47,7 +47,7 @@ const traceListScrollRef = ref<HTMLElement | null>(null)
 const crossTraceScrollRef = ref<HTMLElement | null>(null)
 
 const { effective: virtualizationFlags } = useVirtualizationFlags()
-const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 12 })
+const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 6 })
 
 const {
     searchQuery,
