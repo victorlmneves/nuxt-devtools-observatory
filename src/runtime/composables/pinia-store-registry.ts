@@ -20,7 +20,7 @@ type PiniaStoreLike = {
     ) => () => void
     $subscribe: (
         cb: (mutation: PiniaSubscribeMutation, state: Record<string, unknown>) => void,
-        opts?: { detached?: boolean }
+        opts?: { detached?: boolean; flush?: 'pre' | 'post' | 'sync' }
     ) => () => void
     $patch?: ((mutator: (state: Record<string, unknown>) => void) => void) | ((patch: Record<string, unknown>) => void)
     $persist?: unknown
@@ -134,11 +134,11 @@ function stackFromError() {
         .map((line) => line.trim())
 }
 
-function inferDependency(): PiniaStoreDependency {
+function inferDependencyFromInstance(): PiniaStoreDependency | null {
     const instance = getCurrentInstance()
 
     if (!instance) {
-        return { id: 'unknown', kind: 'unknown', name: 'unknown' }
+        return null
     }
 
     const file = (instance.type as { __file?: string } | undefined)?.__file
@@ -155,6 +155,75 @@ function inferDependency(): PiniaStoreDependency {
     }
 }
 
+function parseStackLine(line: string): { name?: string; file?: string } {
+    const callsiteMatch = line.match(/^at\s+(.+?)\s+\((.+?):\d+:\d+\)$/)
+
+    if (callsiteMatch) {
+        return {
+            name: callsiteMatch[1]?.trim(),
+            file: callsiteMatch[2]?.trim(),
+        }
+    }
+
+    const fileOnlyMatch = line.match(/^at\s+(.+?):\d+:\d+$/)
+
+    if (fileOnlyMatch) {
+        return {
+            file: fileOnlyMatch[1]?.trim(),
+        }
+    }
+
+    return {}
+}
+
+function inferDependenciesFromStack(stack: string[]): PiniaStoreDependency[] {
+    const result: PiniaStoreDependency[] = []
+
+    for (const line of stack) {
+        const parsed = parseStackLine(line)
+        const file = parsed.file
+        const rawName = parsed.name
+        const name = rawName?.includes('.') ? rawName.split('.').pop() : rawName
+
+        if (name && /^use[A-Z]/.test(name)) {
+            result.push({
+                id: `composable:${file ?? name}`,
+                kind: 'composable',
+                name,
+                file,
+            })
+        }
+
+        if (file?.includes('/composables/')) {
+            const fileName = file.split('/').pop() ?? ''
+            const composableName = fileName.replace(/\.(mjs|cjs|js|ts|tsx|vue)$/i, '')
+
+            if (/^use[A-Z]/.test(composableName)) {
+                result.push({
+                    id: `composable-file:${file}`,
+                    kind: 'composable',
+                    name: composableName,
+                    file,
+                })
+            }
+        }
+
+        if (file?.endsWith('.vue')) {
+            const fileName = file.split('/').pop() ?? file
+            const componentName = fileName.replace(/\.vue$/i, '')
+
+            result.push({
+                id: `component-file:${file}`,
+                kind: 'component',
+                name: componentName,
+                file,
+            })
+        }
+    }
+
+    return result
+}
+
 function pushUniqueDependency(deps: PiniaStoreDependency[], dependency: PiniaStoreDependency) {
     if (!dependency.id) {
         return
@@ -167,9 +236,10 @@ function pushUniqueDependency(deps: PiniaStoreDependency[], dependency: PiniaSto
     deps.push(dependency)
 }
 
-export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?: unknown; maxTimeline?: number }) {
+export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?: unknown; maxTimeline?: number; stackProvider?: () => string[] }) {
     const pinia = options.pinia as PiniaLike | undefined
     const maxTimeline = typeof options.maxTimeline === 'number' ? options.maxTimeline : 100
+    const stackProvider = options.stackProvider ?? stackFromError
 
     const entries = new Map<string, PiniaStoreEntry>()
     const stores = new Map<string, PiniaStoreLike>()
@@ -188,16 +258,79 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
         }
     }
 
-    function inferHydration(store: PiniaStoreLike): PiniaHydrationEvent {
+    function inferPersistedStorageDetails(store: PiniaStoreLike): string {
+        const persistConfig = store.$persist ?? store.$options?.persist ?? store.persist
+
+        if (!persistConfig) {
+            return 'Persist plugin detected'
+        }
+
+        const list = Array.isArray(persistConfig) ? persistConfig : [persistConfig]
+        const storageLabels = new Set<string>()
+
+        for (const item of list) {
+            if (!item || typeof item !== 'object') {
+                continue
+            }
+
+            const storage = (item as { storage?: unknown }).storage
+
+            if (!storage || typeof storage !== 'object') {
+                continue
+            }
+
+            const candidate = storage as { getItem?: unknown }
+
+            if (typeof localStorage !== 'undefined' && candidate.getItem === localStorage.getItem) {
+                storageLabels.add('localStorage')
+            } else if (typeof sessionStorage !== 'undefined' && candidate.getItem === sessionStorage.getItem) {
+                storageLabels.add('sessionStorage')
+            } else {
+                storageLabels.add('custom storage')
+            }
+        }
+
+        if (storageLabels.size === 0) {
+            return 'Persist plugin detected'
+        }
+
+        return `Persist plugin detected (${[...storageLabels].join(', ')})`
+    }
+
+    function inferHydrationTimeline(store: PiniaStoreLike): PiniaHydrationEvent[] {
         const payload = options.nuxtPayload as { pinia?: Record<string, unknown> } | undefined
         const fromPayload = !!payload?.pinia?.[store.$id]
         const hasPersist = !!store.$persist || !!store.$options?.persist || !!store.persist
+        const events: PiniaHydrationEvent[] = []
+        let at = nowMs()
 
-        return {
-            at: nowMs(),
-            source: fromPayload ? 'nuxt-payload' : hasPersist ? 'persistedstate' : 'runtime',
-            details: fromPayload ? 'Nuxt payload state detected' : hasPersist ? 'Persist plugin detected' : undefined,
+        if (fromPayload) {
+            events.push({
+                at,
+                source: 'nuxt-payload',
+                details: 'Nuxt payload state detected',
+            })
+            at += 0.01
         }
+
+        if (hasPersist) {
+            events.push({
+                at,
+                source: 'persistedstate',
+                details: inferPersistedStorageDetails(store),
+            })
+            at += 0.01
+        }
+
+        if (events.length === 0) {
+            events.push({
+                at,
+                source: 'runtime',
+                details: undefined,
+            })
+        }
+
+        return events
     }
 
     function trimTimeline(entry: PiniaStoreEntry) {
@@ -221,8 +354,11 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
             state: safeSnapshot(store.$state),
             dependencies: [],
             timeline: [],
-            hydration: inferHydration(store),
+            hydrationTimeline: inferHydrationTimeline(store),
+            hydration: undefined,
         }
+
+        entry.hydration = entry.hydrationTimeline[0]
 
         entries.set(store.$id, entry)
 
@@ -230,14 +366,22 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
             const actionId = `${store.$id}:action:${name}:${nowMs()}:${Math.random().toString(36).slice(2, 8)}`
             const start = nowMs()
             const startSnapshot = safeSnapshot(store.$state)
-            const dependency = inferDependency()
+            const stack = stackProvider()
+            const dependenciesFromStack = inferDependenciesFromStack(stack)
+            const dependencyFromInstance = inferDependencyFromInstance()
             const current = entries.get(store.$id)
 
             if (!current) {
                 return
             }
 
-            pushUniqueDependency(current.dependencies, dependency)
+            if (dependencyFromInstance) {
+                pushUniqueDependency(current.dependencies, dependencyFromInstance)
+            }
+
+            for (const dependency of dependenciesFromStack) {
+                pushUniqueDependency(current.dependencies, dependency)
+            }
 
             const event: PiniaMutationEvent = {
                 id: actionId,
@@ -251,7 +395,7 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
                 afterState: startSnapshot,
                 diff: [],
                 payload: safeSnapshot(args),
-                callerStack: stackFromError(),
+                callerStack: stack,
             }
 
             current.timeline.push(event)
@@ -328,7 +472,7 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
                     afterState,
                     diff: collectDiff(beforeState, afterState),
                     payload: safeSnapshot(mutation.payload),
-                    callerStack: stackFromError(),
+                    callerStack: stackProvider(),
                 }
 
                 current.timeline.push(event)
@@ -337,7 +481,7 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
                 current.lastMutationAt = at
                 notifyChange()
             },
-            { detached: true }
+            { detached: true, flush: 'sync' }
         )
 
         stopHandles.set(store.$id, [offAction, offSub])
@@ -380,6 +524,7 @@ export function setupPiniaStoreRegistry(options: { pinia?: unknown; nuxtPayload?
             ...entry,
             state: safeSnapshot(entry.state),
             dependencies: [...entry.dependencies],
+            hydrationTimeline: entry.hydrationTimeline.map((event) => ({ ...event })),
             timeline: entry.timeline.map((event) => ({
                 ...event,
                 beforeState: safeSnapshot(event.beforeState),

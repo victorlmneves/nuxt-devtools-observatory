@@ -124,6 +124,55 @@ export interface TransitionEntry {
 
 export type TransitionPhase = 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled'
 
+export interface PiniaStateDiff {
+    path: string
+    before: unknown
+    after: unknown
+}
+
+export interface PiniaDependency {
+    id: string
+    kind: 'component' | 'composable' | 'unknown'
+    name: string
+    file?: string
+}
+
+export interface PiniaHydrationEvent {
+    at: number
+    source: 'nuxt-payload' | 'persistedstate' | 'runtime' | 'unknown'
+    details?: string
+}
+
+export interface PiniaTimelineEvent {
+    id: string
+    storeId: string
+    storeName: string
+    kind: 'action' | 'mutation'
+    name: string
+    startTime: number
+    endTime?: number
+    durationMs?: number
+    status: 'active' | 'ok' | 'error'
+    beforeState: unknown
+    afterState: unknown
+    diff: PiniaStateDiff[]
+    callerStack?: string[]
+    payload?: unknown
+    error?: string
+}
+
+export interface PiniaStoreEntry {
+    id: string
+    name: string
+    state: unknown
+    dependencies: PiniaDependency[]
+    timeline: PiniaTimelineEvent[]
+    hydrationTimeline: PiniaHydrationEvent[]
+    lastMutationAt?: number
+    lastActionAt?: number
+    hydration?: PiniaHydrationEvent
+}
+
 export interface InternalCounts {
     componentMounts: Record<string, number>
     renderOperations: Record<string, number>
@@ -142,6 +191,7 @@ export interface ObservatoryTestAPI {
     getFetchEntries(): Promise<FetchEntry[]>
     getProvideInjectGraph(): Promise<GraphData>
     getTransitionEntries(): Promise<TransitionEntry[]>
+    getPiniaStores(): Promise<PiniaStoreEntry[]>
     getInternalCounts(): Promise<InternalCounts>
     clearAllData(): Promise<void>
     startRecording(): Promise<void>
