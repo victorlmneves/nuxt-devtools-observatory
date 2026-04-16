@@ -374,7 +374,7 @@ function formatSize(bytes: number) {
                 </table>
             </div>
 
-            <div v-if="selected" class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
+            <div class="tracker-resize-handle" @mousedown="onHandleMouseDown" />
 
             <div v-if="selected" class="fetch-dashboard__detail tracker-detail-panel" :style="{ width: detailWidth + 'px' }">
                 <div class="fetch-dashboard__detail-header">
@@ -397,7 +397,7 @@ function formatSize(bytes: number) {
                 <div class="tracker-section-label fetch-dashboard__section-label fetch-dashboard__section-label--source">source</div>
                 <div class="mono text-sm muted">{{ selected.file }}:{{ selected.line }}</div>
             </div>
-            <div v-else class="tracker-detail-empty">select a call to inspect</div>
+            <div v-else class="tracker-detail-empty" :style="{ width: detailWidth + 'px' }">select a call to inspect</div>
         </div>
 
         <div class="fetch-dashboard__waterfall">
