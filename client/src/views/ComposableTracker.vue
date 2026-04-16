@@ -197,6 +197,51 @@ const visibleEntries = computed(() => {
         .filter((entry): entry is RuntimeComposableEntry => Boolean(entry))
 })
 
+const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
+    return visibleEntries.value.map((entry) => {
+        const refEntries = Object.entries(entry.refs) as Array<[string, RuntimeComposableEntry['refs'][string]]>
+        const detailRefs: RefRowView[] = refEntries.map(([key, ref]) => {
+            const isLong = isLongValue(ref.value)
+            const expanded = isLong && isRefExpanded(entry.id, key)
+            const shared = Boolean(entry.sharedKeys?.includes(key))
+
+            return {
+                key,
+                ref,
+                isLong,
+                expanded,
+                displayValue: isLong && !expanded ? formatVal(ref.value) : formatValFull(ref.value),
+                typeClass: typeBadgeClass(ref.type),
+                shared,
+            }
+        })
+
+        const history = entry.history ?? []
+        const historyRows: HistoryRowView[] = []
+        const end = Math.max(history.length - 20, 0)
+
+        for (let i = history.length - 1; i >= end; i--) {
+            const evt = history[i]
+            historyRows.push({
+                id: `${entry.id}-${evt.key}-${evt.t}-${i}`,
+                timeLabel: `+${(evt.t / 1000).toFixed(2)}s`,
+                key: evt.key,
+                value: formatVal(evt.value),
+            })
+        }
+
+        return {
+            entry,
+            refCount: refEntries.length,
+            previewRefs: detailRefs.slice(0, 3),
+            detailRefs,
+            historyRows,
+            historyHiddenCount: Math.max(0, history.length - 20),
+            lifecycle: lifecycleRows(entry),
+        }
+    })
+})
+
 function lifecycleRows(entry: RuntimeComposableEntry) {
     return [
         {
@@ -282,6 +327,33 @@ interface LookupTarget {
     key: string
     composableName: string
     identityGroup?: string
+}
+
+interface RefRowView {
+    key: string
+    ref: RuntimeComposableEntry['refs'][string]
+    isLong: boolean
+    expanded: boolean
+    displayValue: string
+    typeClass: string
+    shared: boolean
+}
+
+interface HistoryRowView {
+    id: string
+    timeLabel: string
+    key: string
+    value: string
+}
+
+interface VisibleEntryCard {
+    entry: RuntimeComposableEntry
+    refCount: number
+    previewRefs: RefRowView[]
+    detailRefs: RefRowView[]
+    historyRows: HistoryRowView[]
+    historyHiddenCount: number
+    lifecycle: ReturnType<typeof lifecycleRows>
 }
 
 const lookupTarget = ref<LookupTarget | null>(null)
@@ -434,129 +506,125 @@ function applyEdit() {
                 aria-hidden="true"
             />
             <div
-                v-for="entry in visibleEntries"
-                :key="entry.id"
+                v-for="card in visibleEntryCards"
+                :key="card.entry.id"
                 class="composable-tracker__card"
                 :class="{
-                    'composable-tracker__card--leak': entry.leak,
-                    'composable-tracker__card--expanded': expanded === entry.id,
+                    'composable-tracker__card--leak': card.entry.leak,
+                    'composable-tracker__card--expanded': expanded === card.entry.id,
                 }"
-                @click="expanded = expanded === entry.id ? null : entry.id"
+                @click="expanded = expanded === card.entry.id ? null : card.entry.id"
             >
                 <div class="composable-tracker__card-header">
                     <div class="composable-tracker__identity">
-                        <span class="composable-tracker__name mono">{{ entry.name }}</span>
-                        <span class="composable-tracker__file muted mono">{{ basename(entry.componentFile) }}</span>
+                        <span class="composable-tracker__name mono">{{ card.entry.name }}</span>
+                        <span class="composable-tracker__file muted mono">{{ basename(card.entry.componentFile) }}</span>
                     </div>
                     <div class="composable-tracker__meta">
-                        <span v-if="entry.watcherCount > 0 && !entry.leak" class="badge badge-warn">{{ entry.watcherCount }}w</span>
-                        <span v-if="entry.intervalCount > 0 && !entry.leak" class="badge badge-warn">{{ entry.intervalCount }}t</span>
-                        <span v-if="entry.leak" class="badge badge-err">leak</span>
-                        <span v-else-if="entry.status === 'mounted'" class="badge badge-ok">mounted</span>
+                        <span v-if="card.entry.watcherCount > 0 && !card.entry.leak" class="badge badge-warn">
+                            {{ card.entry.watcherCount }}w
+                        </span>
+                        <span v-if="card.entry.intervalCount > 0 && !card.entry.leak" class="badge badge-warn">
+                            {{ card.entry.intervalCount }}t
+                        </span>
+                        <span v-if="card.entry.leak" class="badge badge-err">leak</span>
+                        <span v-else-if="card.entry.status === 'mounted'" class="badge badge-ok">mounted</span>
                         <span v-else class="badge badge-gray">unmounted</span>
                     </div>
                 </div>
 
                 <!-- Inline ref preview — shows up to 3 refs without expanding -->
-                <div v-if="Object.keys(entry.refs).length" class="composable-tracker__refs-preview">
+                <div v-if="card.refCount" class="composable-tracker__refs-preview">
                     <span
-                        v-for="[k, v] in Object.entries(entry.refs).slice(0, 3)"
-                        :key="k"
+                        v-for="row in card.previewRefs"
+                        :key="row.key"
                         class="composable-tracker__ref-chip"
                         :class="{
-                            'composable-tracker__ref-chip--reactive': v.type === 'reactive',
-                            'composable-tracker__ref-chip--computed': v.type === 'computed',
-                            'composable-tracker__ref-chip--shared': entry.sharedKeys?.includes(k),
+                            'composable-tracker__ref-chip--reactive': row.ref.type === 'reactive',
+                            'composable-tracker__ref-chip--computed': row.ref.type === 'computed',
+                            'composable-tracker__ref-chip--shared': row.shared,
                         }"
-                        :title="entry.sharedKeys?.includes(k) ? 'shared global state' : ''"
+                        :title="row.shared ? 'shared global state' : ''"
                     >
-                        <span class="composable-tracker__ref-chip-key">{{ k }}</span>
-                        <span class="composable-tracker__ref-chip-val">{{ formatVal(v.value) }}</span>
-                        <span v-if="entry.sharedKeys?.includes(k)" class="composable-tracker__ref-chip-shared-dot" title="global"></span>
+                        <span class="composable-tracker__ref-chip-key">{{ row.key }}</span>
+                        <span class="composable-tracker__ref-chip-val">{{ formatVal(row.ref.value) }}</span>
+                        <span v-if="row.shared" class="composable-tracker__ref-chip-shared-dot" title="global"></span>
                     </span>
-                    <span v-if="Object.keys(entry.refs).length > 3" class="muted text-sm">
-                        +{{ Object.keys(entry.refs).length - 3 }} more
-                    </span>
+                    <span v-if="card.refCount > 3" class="muted text-sm">+{{ card.refCount - 3 }} more</span>
                 </div>
 
-                <div v-if="expanded === entry.id" class="composable-tracker__detail" @click.stop>
-                    <div v-if="entry.leak" class="composable-tracker__leak-banner">{{ entry.leakReason }}</div>
+                <div v-if="expanded === card.entry.id" class="composable-tracker__detail" @click.stop>
+                    <div v-if="card.entry.leak" class="composable-tracker__leak-banner">{{ card.entry.leakReason }}</div>
 
                     <!-- Global state warning -->
-                    <div v-if="entry.sharedKeys?.length" class="composable-tracker__global-banner">
+                    <div v-if="card.entry.sharedKeys?.length" class="composable-tracker__global-banner">
                         <span class="composable-tracker__global-dot"></span>
                         <span>
                             <strong>global state</strong>
-                            — {{ entry.sharedKeys.join(', ') }}
-                            {{ entry.sharedKeys.length === 1 ? 'is' : 'are' }}
-                            shared across all instances of {{ entry.name }}
+                            — {{ card.entry.sharedKeys.join(', ') }}
+                            {{ card.entry.sharedKeys.length === 1 ? 'is' : 'are' }}
+                            shared across all instances of {{ card.entry.name }}
                         </span>
                     </div>
 
                     <div class="composable-tracker__section-label tracker-section-label">reactive state</div>
-                    <div v-if="!Object.keys(entry.refs).length" class="composable-tracker__compact-muted muted text-sm">
-                        no tracked state returned
-                    </div>
-                    <div v-for="[k, v] in Object.entries(entry.refs)" :key="k" class="composable-tracker__ref-row">
+                    <div v-if="!card.refCount" class="composable-tracker__compact-muted muted text-sm">no tracked state returned</div>
+                    <div v-for="row in card.detailRefs" :key="row.key" class="composable-tracker__ref-row">
                         <span
                             class="composable-tracker__ref-key composable-tracker__ref-key--clickable mono text-sm"
                             :title="
-                                entry.sharedKeyGroups?.[k]
-                                    ? `click to see instances sharing this exact '${k}' state`
-                                    : `click to see all instances exposing '${k}'`
+                                card.entry.sharedKeyGroups?.[row.key]
+                                    ? `click to see instances sharing this exact '${row.key}' state`
+                                    : `click to see all instances exposing '${row.key}'`
                             "
-                            @click.stop="openLookup(entry, k)"
+                            @click.stop="openLookup(card.entry, row.key)"
                         >
-                            {{ k }}
+                            {{ row.key }}
                         </span>
                         <span
                             class="composable-tracker__ref-val mono text-sm"
                             :class="{
-                                'composable-tracker__ref-val--full': isLongValue(v.value) && isRefExpanded(entry.id, k),
-                                'composable-tracker__ref-val--collapsed': isLongValue(v.value) && !isRefExpanded(entry.id, k),
+                                'composable-tracker__ref-val--full': row.isLong && row.expanded,
+                                'composable-tracker__ref-val--collapsed': row.isLong && !row.expanded,
                             }"
                         >
-                            {{ isLongValue(v.value) && !isRefExpanded(entry.id, k) ? formatVal(v.value) : formatValFull(v.value) }}
+                            {{ row.displayValue }}
                         </span>
                         <div class="composable-tracker__ref-row-actions">
                             <button
-                                v-if="isLongValue(v.value)"
+                                v-if="row.isLong"
                                 class="composable-tracker__expand-btn"
-                                :title="isRefExpanded(entry.id, k) ? 'Collapse' : 'Expand'"
-                                @click.stop="toggleRefExpand(entry.id, k)"
+                                :title="row.expanded ? 'Collapse' : 'Expand'"
+                                @click.stop="toggleRefExpand(card.entry.id, row.key)"
                             >
-                                {{ isRefExpanded(entry.id, k) ? '▲' : '▼' }}
+                                {{ row.expanded ? '▲' : '▼' }}
                             </button>
-                            <span class="badge text-xs" :class="typeBadgeClass(v.type)">{{ v.type }}</span>
-                            <span v-if="entry.sharedKeys?.includes(k)" class="badge badge-amber text-xs">global</span>
+                            <span class="badge text-xs" :class="row.typeClass">{{ row.ref.type }}</span>
+                            <span v-if="row.shared" class="badge badge-amber text-xs">global</span>
                             <button
-                                v-if="v.type === 'ref'"
+                                v-if="row.ref.type === 'ref'"
                                 class="composable-tracker__edit-btn"
                                 title="Edit value"
-                                @click.stop="openEdit(entry.id, k, v.value)"
+                                @click.stop="openEdit(card.entry.id, row.key, row.ref.value)"
                             >
                                 edit
                             </button>
                         </div>
                     </div>
 
-                    <template v-if="entry.history && entry.history.length">
+                    <template v-if="card.historyRows.length">
                         <div class="composable-tracker__section-label composable-tracker__section-label--spaced tracker-section-label">
                             change history
-                            <span class="composable-tracker__section-label-meta muted">({{ entry.history.length }} events)</span>
+                            <span class="composable-tracker__section-label-meta muted">({{ card.entry.history.length }} events)</span>
                         </div>
                         <div class="composable-tracker__history-list">
-                            <div
-                                v-for="(evt, idx) in [...entry.history].reverse().slice(0, 20)"
-                                :key="idx"
-                                class="composable-tracker__history-row"
-                            >
-                                <span class="composable-tracker__history-time mono muted">+{{ (evt.t / 1000).toFixed(2) }}s</span>
-                                <span class="composable-tracker__history-key mono">{{ evt.key }}</span>
-                                <span class="composable-tracker__history-val mono">{{ formatVal(evt.value) }}</span>
+                            <div v-for="historyRow in card.historyRows" :key="historyRow.id" class="composable-tracker__history-row">
+                                <span class="composable-tracker__history-time mono muted">{{ historyRow.timeLabel }}</span>
+                                <span class="composable-tracker__history-key mono">{{ historyRow.key }}</span>
+                                <span class="composable-tracker__history-val mono">{{ historyRow.value }}</span>
                             </div>
-                            <div v-if="entry.history.length > 20" class="composable-tracker__compact-muted muted text-sm">
-                                … {{ entry.history.length - 20 }} earlier events
+                            <div v-if="card.historyHiddenCount > 0" class="composable-tracker__compact-muted muted text-sm">
+                                … {{ card.historyHiddenCount }} earlier events
                             </div>
                         </div>
                     </template>
@@ -564,7 +632,7 @@ function applyEdit() {
                     <div class="composable-tracker__section-label composable-tracker__section-label--spaced tracker-section-label">
                         lifecycle
                     </div>
-                    <div v-for="row in lifecycleRows(entry)" :key="row.label" class="composable-tracker__lifecycle-row">
+                    <div v-for="row in card.lifecycle" :key="row.label" class="composable-tracker__lifecycle-row">
                         <span
                             class="composable-tracker__lifecycle-dot"
                             :class="row.ok ? 'composable-tracker__lifecycle-dot--ok' : 'composable-tracker__lifecycle-dot--error'"
@@ -583,12 +651,12 @@ function applyEdit() {
                     </div>
                     <div class="composable-tracker__lifecycle-row">
                         <span class="composable-tracker__context-label muted text-sm">component</span>
-                        <span class="composable-tracker__context-value mono text-sm">{{ basename(entry.componentFile) }}</span>
+                        <span class="composable-tracker__context-value mono text-sm">{{ basename(card.entry.componentFile) }}</span>
                     </div>
                     <div class="composable-tracker__lifecycle-row">
                         <span class="composable-tracker__context-label muted text-sm">uid</span>
                         <span class="composable-tracker__context-value composable-tracker__context-value--muted mono text-sm muted">
-                            {{ entry.componentUid }}
+                            {{ card.entry.componentUid }}
                         </span>
                     </div>
                     <div class="composable-tracker__lifecycle-row">
@@ -596,8 +664,8 @@ function applyEdit() {
                         <span
                             class="composable-tracker__context-value composable-tracker__context-value--row composable-tracker__context-value--muted mono text-sm muted"
                         >
-                            {{ entry.file }}:{{ entry.line }}
-                            <button class="composable-tracker__jump-btn" title="Open in editor" @click.stop="openInEditor(entry.file)">
+                            {{ card.entry.file }}:{{ card.entry.line }}
+                            <button class="composable-tracker__jump-btn" title="Open in editor" @click.stop="openInEditor(card.entry.file)">
                                 open ↗
                             </button>
                         </span>
@@ -605,16 +673,16 @@ function applyEdit() {
                     <div class="composable-tracker__lifecycle-row">
                         <span class="composable-tracker__context-label muted text-sm">route</span>
                         <span class="composable-tracker__context-value composable-tracker__context-value--muted mono text-sm muted">
-                            {{ entry.route }}
+                            {{ card.entry.route }}
                         </span>
                     </div>
                     <div class="composable-tracker__lifecycle-row">
                         <span class="composable-tracker__context-label muted text-sm">watchers</span>
-                        <span class="composable-tracker__context-value mono text-sm">{{ entry.watcherCount }}</span>
+                        <span class="composable-tracker__context-value mono text-sm">{{ card.entry.watcherCount }}</span>
                     </div>
                     <div class="composable-tracker__lifecycle-row">
                         <span class="composable-tracker__context-label muted text-sm">intervals</span>
-                        <span class="composable-tracker__context-value mono text-sm">{{ entry.intervalCount }}</span>
+                        <span class="composable-tracker__context-value mono text-sm">{{ card.entry.intervalCount }}</span>
                     </div>
                 </div>
             </div>
