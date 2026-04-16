@@ -97,27 +97,46 @@ function matchesSearch(node: TreeNodeData, query: string): boolean {
 }
 
 /**
- * Count leaf nodes in a subtree iteratively to avoid stack overflow on
- * pathologically deep provide/inject trees (e.g. every component re-providing
- * the same key creates a chain as long as the component tree itself).
- * @param {TreeNodeData} root - The root node of the subtree to count leaves for.
- * @returns {number} The number of leaf nodes in the subtree.
+ * Build a leaf-count lookup for each node in visible trees.
+ * Uses iterative post-order traversal to keep deep trees stack-safe.
+ * @param {TreeNodeData[]} roots - Visible tree roots.
+ * @returns {Map<string, number>} Map of node id to subtree leaf count.
  */
-function countLeaves(root: TreeNodeData): number {
-    let count = 0
-    const stack: TreeNodeData[] = [root]
+function buildLeafCountMap(roots: TreeNodeData[]): Map<string, number> {
+    const counts = new Map<string, number>()
 
-    while (stack.length) {
-        const node = stack.pop()!
+    for (const root of roots) {
+        const stack: Array<{ node: TreeNodeData; visited: boolean }> = [{ node: root, visited: false }]
 
-        if (node.children.length === 0) {
-            count++
-        } else {
-            stack.push(...node.children)
+        while (stack.length) {
+            const current = stack.pop()!
+
+            if (!current.visited) {
+                stack.push({ node: current.node, visited: true })
+
+                for (let i = current.node.children.length - 1; i >= 0; i--) {
+                    stack.push({ node: current.node.children[i], visited: false })
+                }
+
+                continue
+            }
+
+            if (current.node.children.length === 0) {
+                counts.set(current.node.id, 1)
+                continue
+            }
+
+            let total = 0
+
+            for (const child of current.node.children) {
+                total += counts.get(child.id) ?? 1
+            }
+
+            counts.set(current.node.id, total)
         }
     }
 
-    return count
+    return counts
 }
 
 function stringifyValue(value: unknown) {
@@ -359,6 +378,8 @@ const visibleNodes = computed<TreeNodeData[]>(() => {
     return nodes.value.map(pruneIterative).filter(Boolean) as TreeNodeData[]
 })
 
+const visibleLeafCountById = computed(() => buildLeafCountMap(visibleNodes.value))
+
 watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
     if (!currentSelected) {
         return
@@ -381,6 +402,8 @@ watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
 const layout = computed<LayoutNode[]>(() => {
     const flat: LayoutNode[] = []
     const pad = H_GAP
+    const leafCountById = visibleLeafCountById.value
+    const getLeafCount = (node: TreeNodeData) => leafCountById.get(node.id) ?? 1
 
     // Iterative replacement for the recursive place() — avoids stack overflow
     // on deep component trees. Uses an explicit stack of pending work items.
@@ -398,7 +421,7 @@ const layout = computed<LayoutNode[]>(() => {
 
         while (stack.length) {
             const { node, depth, slotLeft, parentId } = stack.pop()!
-            const leaves = countLeaves(node)
+            const leaves = getLeafCount(node)
             const slotWidth = leaves * (NODE_W + H_GAP) - H_GAP
 
             flat.push({
@@ -413,7 +436,7 @@ const layout = computed<LayoutNode[]>(() => {
             const childWork: WorkItem[] = []
 
             for (const child of node.children) {
-                const childLeaves = countLeaves(child)
+                const childLeaves = getLeafCount(child)
                 childWork.push({ node: child, depth: depth + 1, slotLeft: childLeft, parentId: node.id })
                 childLeft += childLeaves * (NODE_W + H_GAP)
             }
@@ -423,7 +446,7 @@ const layout = computed<LayoutNode[]>(() => {
             }
         }
 
-        const rootLeaves = countLeaves(root)
+        const rootLeaves = getLeafCount(root)
         left += rootLeaves * (NODE_W + H_GAP) + H_GAP * 2
     }
 

@@ -29,6 +29,14 @@ interface ComponentNode {
     route: string
 }
 
+interface VisibleTreeRow {
+    node: ComponentNode
+    primaryBadge: string | null
+    metricValue: string
+    metricLabel: string
+    hot: boolean
+}
+
 function nodeBadges(node: ComponentNode): string[] {
     const badges: string[] = []
     const normalizedElement = node.element?.toLowerCase()
@@ -316,33 +324,55 @@ function flatten(nodes: ComponentNode[]) {
     return flat
 }
 
-function countSubtree(node: ComponentNode): number {
-    return 1 + node.children.reduce((sum, child) => sum + countSubtree(child), 0)
-}
+function buildSubtreeSizeMap(roots: ComponentNode[]) {
+    const sizes = new Map<string, number>()
 
-function collectIds(node: ComponentNode, target = new Set<string>()) {
-    target.add(node.id)
-    node.children.forEach((child) => collectIds(child, target))
+    for (const root of roots) {
+        const stack: Array<{ node: ComponentNode; visited: boolean }> = [{ node: root, visited: false }]
 
-    return target
-}
+        while (stack.length) {
+            const current = stack.pop()!
 
-function pathToNode(node: ComponentNode, targetId: string, trail: string[] = []): string[] | null {
-    const nextTrail = [...trail, node.id]
+            if (!current.visited) {
+                stack.push({ node: current.node, visited: true })
 
-    if (node.id === targetId) {
-        return nextTrail
-    }
+                for (let i = current.node.children.length - 1; i >= 0; i--) {
+                    stack.push({ node: current.node.children[i], visited: false })
+                }
 
-    for (const child of node.children) {
-        const childTrail = pathToNode(child, targetId, nextTrail)
+                continue
+            }
 
-        if (childTrail) {
-            return childTrail
+            let size = 1
+
+            for (const child of current.node.children) {
+                size += sizes.get(child.id) ?? 1
+            }
+
+            sizes.set(current.node.id, size)
         }
     }
 
-    return null
+    return sizes
+}
+
+function buildRootLookup(roots: ComponentNode[]) {
+    const lookup = new Map<string, string>()
+
+    for (const root of roots) {
+        const stack: ComponentNode[] = [root]
+
+        while (stack.length) {
+            const node = stack.pop()!
+            lookup.set(node.id, root.id)
+
+            for (let i = node.children.length - 1; i >= 0; i--) {
+                stack.push(node.children[i])
+            }
+        }
+    }
+
+    return lookup
 }
 
 function findFirstHotNode(node: ComponentNode): ComponentNode | null {
@@ -489,6 +519,37 @@ const displayEntries = computed(() => (frozen.value ? frozenSnapshot.value : ren
 const rootNodes = computed(() => buildNodes(displayEntries.value))
 const rootMap = computed(() => new Map(rootNodes.value.map((node) => [node.id, node])))
 const allComponents = computed(() => flatten(rootNodes.value))
+const allComponentsById = computed(() => new Map(allComponents.value.map((node) => [node.id, node])))
+const allComponentIds = computed(() => new Set(allComponents.value.map((node) => node.id)))
+const subtreeSizeById = computed(() => buildSubtreeSizeMap(rootNodes.value))
+const rootIdByNodeId = computed(() => buildRootLookup(rootNodes.value))
+
+function pathToNodeWithinRoot(targetId: string, rootId?: string | null): string[] {
+    const path: string[] = []
+    let current = allComponentsById.value.get(targetId)
+
+    while (current) {
+        path.push(current.id)
+
+        if (rootId && current.id === rootId) {
+            break
+        }
+
+        if (!current.parentId) {
+            break
+        }
+
+        current = allComponentsById.value.get(current.parentId)
+    }
+
+    path.reverse()
+
+    if (rootId && path[0] !== rootId) {
+        return []
+    }
+
+    return path
+}
 
 const filteredRoots = computed(() => {
     const term = search.value.trim()
@@ -590,11 +651,27 @@ const visibleTreeRows = computed(() => {
         .filter((node): node is ComponentNode => Boolean(node))
 })
 
+const visibleTreeRowItems = computed<VisibleTreeRow[]>(() => {
+    const metricLabel = activeMode.value === 'count' ? 'renders' : 'avg'
+
+    return visibleTreeRows.value.map((node) => {
+        const badges = nodeBadges(node)
+
+        return {
+            node,
+            primaryBadge: badges[0] ?? null,
+            metricValue: activeMode.value === 'count' ? `${node.rerenders + node.mountCount}` : `${node.avgMs.toFixed(1)}ms`,
+            metricLabel,
+            hot: isHot(node),
+        }
+    })
+})
+
 const appEntries = computed(() =>
     filteredRoots.value.map((root, index) => ({
         id: root.id,
         label: `App ${index + 1}`,
-        meta: `${countSubtree(root)} nodes`,
+        meta: `${subtreeSizeById.value.get(root.id) ?? 1} nodes`,
         root,
     }))
 )
@@ -645,12 +722,11 @@ watch(
             activeRootId.value = roots[0].id
         }
 
-        if (activeSelectedId.value && !allComponents.value.some((node) => node.id === activeSelectedId.value)) {
+        if (activeSelectedId.value && !allComponentIds.value.has(activeSelectedId.value)) {
             activeSelectedId.value = null
         }
 
-        const validIds = new Set(allComponents.value.map((node) => node.id))
-        const preserved = new Set([...expandedIds.value].filter((id) => validIds.has(id)))
+        const preserved = new Set([...expandedIds.value].filter((id) => allComponentIds.value.has(id)))
 
         if (!expansionReady.value) {
             expandedIds.value = defaultExpandedIds(activeRoot.value)
@@ -660,7 +736,7 @@ watch(
         }
 
         if (!search.value.trim() && activeSelectedId.value && activeRoot.value) {
-            const selectedPath = pathToNode(activeRoot.value, activeSelectedId.value) ?? []
+            const selectedPath = pathToNodeWithinRoot(activeSelectedId.value, activeRoot.value.id)
             selectedPath.forEach((id) => preserved.add(id))
         }
 
@@ -683,8 +759,8 @@ watch(search, (term) => {
     }
 
     if (activeSelectedId.value) {
-        const selectedPath = pathToNode(activeRoot.value, activeSelectedId.value)
-        expandedIds.value = selectedPath ? new Set(selectedPath) : defaultExpandedIds(activeRoot.value)
+        const selectedPath = pathToNodeWithinRoot(activeSelectedId.value, activeRoot.value.id)
+        expandedIds.value = selectedPath.length ? new Set(selectedPath) : defaultExpandedIds(activeRoot.value)
 
         return
     }
@@ -719,17 +795,18 @@ watch([activeHotOnly, activeThreshold, activeMode, filteredRoots], () => {
         activeSelectedId.value = firstHot.id
     }
 
-    expandedIds.value = new Set(pathToNode(topLevelRoot, firstHot.id) ?? [topLevelRoot.id])
+    expandedIds.value = new Set(pathToNodeWithinRoot(firstHot.id, topLevelRoot.id))
 })
 
 function selectNode(node: ComponentNode) {
     activeSelectedId.value = node.id
 
-    const topLevelRoot = rootNodes.value.find((root) => collectIds(root).has(node.id))
+    const rootId = rootIdByNodeId.value.get(node.id)
+    const topLevelRoot = rootId ? rootMap.value.get(rootId) : null
 
     if (topLevelRoot) {
         activeRootId.value = topLevelRoot.id
-        expandedIds.value = new Set(pathToNode(topLevelRoot, node.id) ?? [topLevelRoot.id])
+        expandedIds.value = new Set(pathToNodeWithinRoot(node.id, topLevelRoot.id))
     }
 }
 
@@ -924,56 +1001,52 @@ function formatTimestamp(t: number): string {
                                 aria-hidden="true"
                             />
                             <div
-                                v-for="treeNode in visibleTreeRows"
-                                :key="treeNode.id"
+                                v-for="row in visibleTreeRowItems"
+                                :key="row.node.id"
                                 class="tree-row"
-                                :class="{ selected: activeSelected?.id === treeNode.id, hot: isHot(treeNode) }"
-                                :style="{ '--tree-depth': String(treeNode.depth) }"
-                                @click="selectNode(treeNode)"
+                                :class="{ selected: activeSelected?.id === row.node.id, hot: row.hot }"
+                                :style="{ '--tree-depth': String(row.node.depth) }"
+                                @click="selectNode(row.node)"
                             >
                                 <span class="tree-rail" aria-hidden="true" />
                                 <button
                                     class="tree-toggle"
-                                    :class="{ empty: !treeNode.children.length }"
-                                    :disabled="!treeNode.children.length"
-                                    @click.stop="treeNode.children.length ? toggleNode(treeNode.id) : undefined"
+                                    :class="{ empty: !row.node.children.length }"
+                                    :disabled="!row.node.children.length"
+                                    @click.stop="row.node.children.length ? toggleNode(row.node.id) : undefined"
                                 >
-                                    {{ treeNode.children.length ? (expandedIds.has(treeNode.id) ? '⌄' : '›') : '' }}
+                                    {{ row.node.children.length ? (expandedIds.has(row.node.id) ? '⌄' : '›') : '' }}
                                 </button>
                                 <div class="tree-copy">
-                                    <span class="tree-name mono" :title="treeNode.label">{{ treeNode.label }}</span>
-                                    <div v-if="nodeBadges(treeNode).length" class="tree-badges">
-                                        <span class="tree-badge mono" :title="nodeBadges(treeNode)[0]">{{ nodeBadges(treeNode)[0] }}</span>
+                                    <span class="tree-name mono" :title="row.node.label">{{ row.node.label }}</span>
+                                    <div v-if="row.primaryBadge" class="tree-badges">
+                                        <span class="tree-badge mono" :title="row.primaryBadge">{{ row.primaryBadge }}</span>
                                     </div>
                                 </div>
                                 <div class="tree-metrics mono">
                                     <span
-                                        v-if="treeNode.isPersistent"
+                                        v-if="row.node.isPersistent"
                                         class="tree-persistent-pill"
                                         title="Layout / persistent component — survives navigation"
                                     >
                                         persistent
                                     </span>
                                     <span
-                                        v-if="treeNode.isHydrationMount"
+                                        v-if="row.node.isHydrationMount"
                                         class="tree-hydration-pill"
                                         title="First mount was SSR hydration — not a user-triggered render"
                                     >
                                         hydrated
                                     </span>
                                     <span class="tree-metric-pill">
-                                        {{
-                                            activeMode === 'count'
-                                                ? treeNode.rerenders + treeNode.mountCount
-                                                : `${treeNode.avgMs.toFixed(1)}ms`
-                                        }}
-                                        {{ activeMode === 'count' ? 'renders' : 'avg' }}
+                                        {{ row.metricValue }}
+                                        {{ row.metricLabel }}
                                     </span>
                                     <button
-                                        v-if="treeNode.file && treeNode.file !== 'unknown'"
+                                        v-if="row.node.file && row.node.file !== 'unknown'"
                                         class="tree-jump-btn"
-                                        :title="`Open ${treeNode.file} in editor`"
-                                        @click.stop="openInEditor(treeNode.file)"
+                                        :title="`Open ${row.node.file} in editor`"
+                                        @click.stop="openInEditor(row.node.file)"
                                     >
                                         ↗
                                     </button>

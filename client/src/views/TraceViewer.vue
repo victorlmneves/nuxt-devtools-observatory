@@ -19,6 +19,12 @@ import {
 import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
 import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
 
+type TraceSpanRow = {
+    span: TraceSpan
+    displayName: string
+    uid: string | number | undefined
+}
+
 const { traces, connected } = useObservatoryData()
 
 const importedTraces = ref<TraceEntry[]>([])
@@ -304,6 +310,26 @@ function getSpanDisplayName(span: TraceSpan): string {
     return span.name
 }
 
+function getSpanUid(span: TraceSpan): string | number | undefined {
+    const metadata = span.metadata as Record<string, unknown> | undefined
+
+    return metadata?.uid as string | number | undefined
+}
+
+const selectedTraceSpanRows = computed<TraceSpanRow[]>(() => {
+    const trace = selectedTrace.value
+
+    if (!trace) {
+        return []
+    }
+
+    return trace.spans.map((span) => ({
+        span,
+        displayName: getSpanDisplayName(span),
+        uid: getSpanUid(span),
+    }))
+})
+
 function selectTrace(trace: TraceEntry) {
     selectedTraceId.value = trace.id
     selectedSpan.value = undefined
@@ -425,13 +451,17 @@ function sortIndicator(key: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalM
     return crossTraceSortDir.value === 'desc' ? ' ↓' : ' ↑'
 }
 
+const crossTraceRowByKey = computed(() => {
+    return new Map(crossTraceRows.value.map((row) => [row.componentKey, row] as const))
+})
+
 function clearCrossTraceHighlight() {
     highlightedComponentKey.value = undefined
     highlightedUid.value = undefined
 }
 
 function handleCrossTraceRowClick(componentKey: string) {
-    const row = crossTraceRows.value.find((item) => item.componentKey === componentKey)
+    const row = crossTraceRowByKey.value.get(componentKey)
 
     if (!row || row.selectedUid === undefined) {
         highlightedUid.value = undefined
@@ -616,21 +646,20 @@ function handleCrossTraceRowClick(componentKey: string) {
 
                             <div class="trace-viewer__span-list">
                                 <div
-                                    v-for="span in selectedTrace.spans"
-                                    :key="span.id"
+                                    v-for="spanRow in selectedTraceSpanRows"
+                                    :key="spanRow.span.id"
                                     :class="{
-                                        'trace-viewer__span-item--selected': selectedSpan?.id === span.id,
+                                        'trace-viewer__span-item--selected': selectedSpan?.id === spanRow.span.id,
                                         'trace-viewer__span-item--highlighted':
-                                            highlightedUid !== undefined &&
-                                            (span.metadata as Record<string, unknown> | undefined)?.uid === highlightedUid,
+                                            highlightedUid !== undefined && spanRow.uid === highlightedUid,
                                     }"
                                     class="trace-viewer__span-item"
-                                    @click="selectedSpan = span"
+                                    @click="selectedSpan = spanRow.span"
                                 >
-                                    <div class="trace-viewer__span-name">{{ getSpanDisplayName(span) }}</div>
+                                    <div class="trace-viewer__span-name">{{ spanRow.displayName }}</div>
                                     <div class="trace-viewer__span-meta">
-                                        <span class="trace-viewer__span-type">{{ span.type }}</span>
-                                        <span class="trace-viewer__span-duration">{{ formatDuration(span.durationMs) }}</span>
+                                        <span class="trace-viewer__span-type">{{ spanRow.span.type }}</span>
+                                        <span class="trace-viewer__span-duration">{{ formatDuration(spanRow.span.durationMs) }}</span>
                                     </div>
                                 </div>
                             </div>
