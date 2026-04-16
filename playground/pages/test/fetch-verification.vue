@@ -128,7 +128,7 @@ const clearResults = (): void => {
 </script>
 
 <template>
-    <div>
+    <div class="layout">
         <h2>Fetch Dashboard Verification Test Page</h2>
 
         <div class="controls">
@@ -176,6 +176,11 @@ const clearResults = (): void => {
 </template>
 
 <style scoped>
+.layout {
+    padding: 20px;
+    font-family: sans-serif;
+}
+
 .controls {
     display: flex;
     gap: 10px;

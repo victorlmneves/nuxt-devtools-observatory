@@ -47,7 +47,7 @@ if (import.meta.dev && import.meta.client) {
 </script>
 
 <template>
-    <div>
+    <div class="layout">
         <h2>Provide/Inject Verification Test Page</h2>
 
         <div class="controls">
@@ -119,6 +119,11 @@ if (import.meta.dev && import.meta.client) {
 </template>
 
 <style scoped>
+.layout {
+    padding: 20px;
+    font-family: sans-serif;
+}
+
 .controls {
     margin-bottom: 20px;
 }
