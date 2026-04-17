@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// No store is accessed or created here, so Pinia Tracker will show 'no store available' by default.
 import { computed, ref } from 'vue'
 import { useObservatoryData, clearPiniaStores, editPiniaState } from '@observatory-client/stores/observatory'
 import type { PiniaMutationEvent, PiniaStoreEntry } from '@observatory/types/snapshot'
