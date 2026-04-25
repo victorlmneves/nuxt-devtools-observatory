@@ -22,3 +22,14 @@ RPC types are defined in `src/types/rpc.ts` and snapshot-related fields in `src/
 
 Treat snapshot fields as an internal-but-documented contract for this module version line.
 When changing fields, update docs and tests in the same PR.
+
+## Pinia contracts
+
+- Snapshot field: `piniaStores` (array of `PiniaStoreEntry`).
+- Each store includes `state`, `timeline`, `dependencies`, and `hydrationTimeline`.
+- `timeline` contains both action and mutation events with `beforeState`, `afterState`, and `diff`.
+
+## Pinia commands
+
+- `clearPiniaStores`: clears tracker timelines and dependency edges for all stores.
+- `editPiniaState(storeId, path, value)`: patches nested state paths in a store.

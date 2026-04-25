@@ -5,14 +5,26 @@
 > [!WARNING]
 > **Performance note:** Instrumentation wraps every useFetch, composable, and lifecycle hook. In large apps this can slow down the DevTools UI or increase memory usage. Disable unused features via the observatory config.
 
-Nuxt DevTools module providing six missing observability features:
+Nuxt DevTools Observatory is a module that brings advanced observability and runtime analysis to Nuxt apps, focusing on features not available in the official Nuxt DevTools.
 
 - **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
+- **Pinia Tracker** — inspect Pinia store state, action/mutation timelines, dependency edges, and hydration attribution
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 - **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, and navigation events in a unified Flamegraph and Waterfall view
+
+### How is this different from Nuxt DevTools?
+
+Observatory focuses on advanced runtime instrumentation and analysis, complementing the official Nuxt DevTools:
+
+- **More granular runtime tracking** — Tracks composable usage, provide/inject relationships, Pinia store events, and render/hydration details not surfaced by Nuxt DevTools.
+- **Advanced debugging panels** — Includes a Trace Viewer, Render Heatmap, and Transition Tracker for in-depth performance and lifecycle analysis.
+- **Leak and anomaly detection** — Highlights watcher/composable leaks, missing providers, shadowed injections, and persistent component issues.
+- **Automated test/demo flows** — Built-in support for Playwright-based screenshot and verification flows.
+
+Observatory is designed to complement Nuxt DevTools, not replace it. Use both for the most complete development and debugging experience.
 
 ## Documentation website
 
@@ -236,6 +248,25 @@ The panel provides:
 
 - The route filter shows components active on a route but cannot hide persistent
   components (they appear on every route by definition)
+
+### Pinia Tracker
+
+[![Pinia Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/pinia-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/pinia-tracker.png)
+
+The Pinia Tracker helps you understand how each store changes over time and where those changes come from.
+
+- Store state snapshots for each detected Pinia store
+- Action and mutation timeline events with before/after state and field-level diffs
+- Dependency edges showing which components and composables touch each store
+- Hydration attribution timeline (`nuxt-payload`, `persistedstate`, or `runtime`)
+
+The panel provides:
+
+- **Store list** — all detected Pinia stores with event counts
+- **Timeline** — chronological action/mutation events
+- **Inspector** — current store state, selected event diff, and before/after snapshots
+- **Dependency graph** — which components and composables interacted with each store
+- **Hydration timeline** — attribution for initial state source(s)
 
 ### Trace Viewer
 

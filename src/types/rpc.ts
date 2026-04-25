@@ -16,6 +16,7 @@ export interface ObservatorySnapshot {
     fetch?: unknown[]
     provideInject?: { provides: unknown[]; injects: unknown[] }
     composables?: unknown[]
+    piniaStores?: unknown[]
     renders?: unknown[]
     transitions?: unknown[]
     traces?: unknown[]
@@ -23,6 +24,7 @@ export interface ObservatorySnapshot {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
         composableTracker?: boolean
+        piniaTracker?: boolean
         composableNavigationMode?: 'route' | 'session'
         fetchPageSize?: number
         renderHeatmap?: boolean
@@ -46,6 +48,10 @@ export interface ObservatoryServerFunctions {
     setComposableMode(mode: 'route' | 'session'): Promise<void>
     /** Tells the host app to edit a reactive value inside a composable. */
     editComposableValue(id: string, key: string, value: unknown): Promise<void>
+    /** Clears Pinia registry entries from the host app. */
+    clearPiniaStores(): Promise<void>
+    /** Tells the host app to edit Pinia state by path. */
+    editPiniaState(storeId: string, path: string, value: unknown): Promise<void>
 }
 
 /**
@@ -69,3 +75,5 @@ export type ObservatoryCommand =
     | { cmd: 'clear-composables' }
     | { cmd: 'set-mode'; mode: 'route' | 'session' }
     | { cmd: 'edit-composable'; id: string; key: string; value: unknown }
+    | { cmd: 'clear-pinia' }
+    | { cmd: 'edit-pinia'; storeId: string; path: string; value: unknown }

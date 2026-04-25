@@ -19,6 +19,11 @@ const trackers = [
         screenshot: 'docs/screenshots/composable-tracker.png',
     },
     {
+        name: 'pinia-tracker',
+        path: '/#/pinia-tracker',
+        screenshot: 'docs/screenshots/pinia-tracker.png',
+    },
+    {
         name: 'render-heatmap',
         path: '/#/render-heatmap',
         screenshot: 'docs/screenshots/render-heatmap.png',
