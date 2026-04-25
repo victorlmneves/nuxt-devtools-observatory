@@ -259,7 +259,6 @@ The Pinia Tracker helps you understand how each store changes over time and wher
 - Action and mutation timeline events with before/after state and field-level diffs
 - Dependency edges showing which components and composables touch each store
 - Hydration attribution timeline (`nuxt-payload`, `persistedstate`, or `runtime`)
-- Edit state paths inline for rapid testing
 
 The panel provides:
 
@@ -268,7 +267,6 @@ The panel provides:
 - **Inspector** — current store state, selected event diff, and before/after snapshots
 - **Dependency graph** — which components and composables interacted with each store
 - **Hydration timeline** — attribution for initial state source(s)
-- **Edit state** — patch nested state paths with JSON values for rapid testing
 
 ### Trace Viewer
 

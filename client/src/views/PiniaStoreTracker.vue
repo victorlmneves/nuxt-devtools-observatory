@@ -1,15 +1,16 @@
 <script setup lang="ts">
 // No store is accessed or created here, so Pinia Tracker will show 'no store available' by default.
 import { computed, ref } from 'vue'
-import { useObservatoryData, clearPiniaStores, editPiniaState } from '@observatory-client/stores/observatory'
+import { useObservatoryData, clearPiniaStores /* editPiniaState */ } from '@observatory-client/stores/observatory'
 import type { PiniaMutationEvent, PiniaStoreEntry } from '@observatory/types/snapshot'
 
 const { piniaStores, connected } = useObservatoryData()
 
 const selectedStoreId = ref<string | null>(null)
 const selectedEventId = ref<string | null>(null)
-const editPath = ref('')
-const editValue = ref('')
+// Disabled until we can get it working properly. See comments in the template and applyEdit function for details.
+// const editPath = ref('')
+// const editValue = ref('')
 const editError = ref('')
 
 const stores = computed(() => [...piniaStores.value].sort((a, b) => a.id.localeCompare(b.id)))
@@ -56,6 +57,7 @@ function renderDuration(event: PiniaMutationEvent) {
     return `${event.durationMs.toFixed(2)}ms`
 }
 
+/* Edit functionality is temporarily disabled due to issues with state updates not being reflected in the UI. This is likely related to how the editPiniaState function applies changes and how the store's reactivity system detects those changes. Further investigation is needed to determine the root cause and implement a proper fix.
 function applyEdit() {
     const store = selectedStore.value
 
@@ -83,7 +85,7 @@ function applyEdit() {
 
     editError.value = ''
     editPiniaState(store.id, editPath.value.trim(), nextValue)
-}
+} */
 </script>
 
 <template>
@@ -139,6 +141,7 @@ function applyEdit() {
                     <pre>{{ pretty(selectedStore.state) }}</pre>
                 </div>
 
+                <!-- Edit functionality is temporarily disabled due to issues with state updates not being reflected in the UI. This is likely related to how the editPiniaState function applies changes and how the store's reactivity system detects those changes. Further investigation is needed to determine the root cause and implement a proper fix.
                 <div v-if="selectedStore" class="block edit-box">
                     <h4>Edit state path</h4>
                     <input v-model="editPath" placeholder="preferences.theme" />
@@ -148,6 +151,7 @@ function applyEdit() {
                         <small v-if="editError" class="error">{{ editError }}</small>
                     </div>
                 </div>
+                -->
 
                 <div v-if="selectedEvent" class="block">
                     <h4>Selected event</h4>
