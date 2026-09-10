@@ -151,7 +151,7 @@ export function setupTransitionRegistry() {
             const id = typeof metadata.id === 'string' ? metadata.id : span.id
             const transitionName = typeof metadata.transitionName === 'string' ? metadata.transitionName : 'default'
             const parentComponent = typeof metadata.parentComponent === 'string' ? metadata.parentComponent : 'unknown'
-            const direction = metadata.direction === 'leave' ? 'leave' : 'enter'
+            const direction: TransitionEntry['direction'] = metadata.direction === 'leave' ? 'leave' : 'enter'
             const knownPhase = metadata.phase
             const phase: TransitionEntry['phase'] =
                 knownPhase === 'entering' ||

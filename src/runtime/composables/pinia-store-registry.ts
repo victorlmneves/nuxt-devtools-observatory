@@ -156,7 +156,7 @@ function inferDependencyFromInstance(): PiniaStoreDependency | null {
 }
 
 function parseStackLine(line: string): { name?: string; file?: string } {
-    const callsiteMatch = line.match(/^at\s+(.+?)\s+\((.+?):\d+:\d+\)$/)
+    const callsiteMatch = line.match(/^at ([^()]+) \((.+):\d+:\d+\)$/)
 
     if (callsiteMatch) {
         return {
@@ -165,7 +165,7 @@ function parseStackLine(line: string): { name?: string; file?: string } {
         }
     }
 
-    const fileOnlyMatch = line.match(/^at\s+(.+?):\d+:\d+$/)
+    const fileOnlyMatch = line.match(/^at (.+):\d+:\d+$/)
 
     if (fileOnlyMatch) {
         return {
