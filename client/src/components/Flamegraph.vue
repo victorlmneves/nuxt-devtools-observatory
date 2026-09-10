@@ -156,6 +156,7 @@ function getSpanColorClass(type: string) {
         composable: 'bg-purple-500',
         component: 'bg-green-500',
         navigation: 'bg-yellow-500',
+        error: 'bg-red-500',
         render: 'bg-orange-500',
         transition: 'bg-pink-500',
     }

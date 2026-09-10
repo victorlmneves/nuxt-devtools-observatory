@@ -1,4 +1,4 @@
-export type SpanType = 'render' | 'component' | 'transition' | 'fetch' | 'composable' | 'navigation' | 'custom' | (string & {})
+export type SpanType = 'render' | 'component' | 'transition' | 'fetch' | 'composable' | 'navigation' | 'error' | 'custom' | (string & {})
 
 export type SpanStatus = 'active' | 'ok' | 'error' | 'cancelled'
 

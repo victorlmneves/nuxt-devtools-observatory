@@ -13,6 +13,8 @@ description: Track per-route spans and compare render regressions across traces.
 - Transition phase spans
 - Composable setup spans (client and SSR)
 - Server phase spans for SSR handling
+- Vue / app / navigation errors attached to the active route trace
+- Navigation abort spans when a route is superseded before `page:finish`
 
 ## What to watch for
 

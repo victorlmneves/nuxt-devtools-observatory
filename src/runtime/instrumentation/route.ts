@@ -1,5 +1,6 @@
 import type { NuxtApp } from '#app'
 import { getCurrentTraceId, setCurrentTraceId } from '../tracing/context'
+import { startSpan } from '../tracing/tracing'
 import { traceStore } from '../tracing/traceStore'
 
 export interface RouteInstrumentationOptions {
@@ -19,6 +20,16 @@ export function setupRouteInstrumentation(nuxtApp: NuxtApp, options: RouteInstru
     nuxtApp.hook('page:start', () => {
         // Avoid leaving a trace open when a navigation is interrupted.
         if (activeTraceId) {
+            startSpan({
+                name: 'navigation:abort',
+                type: 'navigation',
+                traceId: activeTraceId,
+                metadata: {
+                    reason: 'superseded',
+                    route: getRoutePath(),
+                },
+            }).end({ status: 'cancelled' })
+
             traceStore.endTrace(activeTraceId, { status: 'cancelled' })
             activeTraceId = undefined
         }
@@ -44,8 +55,12 @@ export function setupRouteInstrumentation(nuxtApp: NuxtApp, options: RouteInstru
         }
 
         const route = getRoutePath()
+        const trace = traceStore.getTrace(activeTraceId)
+        const status =
+            trace?.status === 'error' || trace?.spans.some((span) => span.status === 'error' || span.type === 'error') ? 'error' : 'ok'
+
         traceStore.endTrace(activeTraceId, {
-            status: 'ok',
+            status,
             metadata: {
                 route,
             },

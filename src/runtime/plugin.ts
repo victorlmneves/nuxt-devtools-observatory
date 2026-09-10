@@ -9,6 +9,7 @@ import { setupTransitionRegistry } from './composables/transition-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
 import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
+import { setupErrorInstrumentation } from './instrumentation/error'
 import { injectTestBridge } from './test-bridge'
 import { traceStore } from './tracing/traceStore'
 import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
@@ -322,6 +323,7 @@ export default defineNuxtPlugin(() => {
             setupRouteInstrumentation(nuxtApp, {
                 getCurrentPath: () => router.currentRoute.value.path ?? '/',
             })
+            setupErrorInstrumentation(nuxtApp)
         }
 
         // router.beforeEach fires BEFORE Vue renders anything for the new route —
