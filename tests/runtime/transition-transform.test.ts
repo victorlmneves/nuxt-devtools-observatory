@@ -84,6 +84,7 @@ describe('transitionTrackerPlugin', () => {
             expect(result).toBeTruthy()
             expect(result).toContain("export * from 'vue'")
             expect(result).toContain('_ObservedTransition as Transition')
+            expect(result).toContain('_ObservedTransitionGroup as TransitionGroup')
         })
 
         it('also responds to obs:vue-proxy without the null-byte prefix (vite-node compat)', () => {
@@ -127,6 +128,7 @@ describe('transitionTrackerPlugin', () => {
 
             // Falls back to real Transition when registry is absent
             expect(proxy).toContain('_ObsRealTransition')
+            expect(proxy).toContain('_ObsRealTransitionGroup')
             // The guard: if (!r) return _obsH(_ObsRealTransition, ...)
             expect(proxy).toContain('if (!r)')
         })
