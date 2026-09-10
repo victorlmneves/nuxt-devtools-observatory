@@ -31,7 +31,7 @@ Open Nuxt DevTools and confirm the Observatory tabs appear.
 
 ## 4) Validate first signal
 
-Trigger one `useFetch` call in your app. You should see a new entry in the useFetch Dashboard timeline.
+Trigger one `useFetch` or `$fetch` call in your app. You should see a new entry in the useFetch Dashboard timeline.
 
 ## SSR or SPA?
 

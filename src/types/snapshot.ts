@@ -18,6 +18,8 @@ export interface FetchEntry {
     error?: unknown
     file?: string
     line?: number
+    method?: string
+    source?: string
 }
 
 export interface ProvideEntry {

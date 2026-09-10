@@ -54,7 +54,13 @@ const filtered = computed(() => {
 
         const q = search.value.toLowerCase()
 
-        if (q && !entry.key.toLowerCase().includes(q) && !entry.url.toLowerCase().includes(q)) {
+        if (
+            q &&
+            !entry.key.toLowerCase().includes(q) &&
+            !entry.url.toLowerCase().includes(q) &&
+            !(entry.method ?? '').toLowerCase().includes(q) &&
+            !(entry.source ?? '').toLowerCase().includes(q)
+        ) {
             return false
         }
 
@@ -159,6 +165,8 @@ const metaRows = computed(() => {
 
     return [
         ['url', entry.url],
+        ['method', entry.method ?? '—'],
+        ['api', entry.source ?? 'useFetch'],
         ['status', entry.status],
         ['origin', entry.origin],
         ['duration', entry.ms != null ? `${entry.ms}ms` : '—'],
@@ -303,6 +311,7 @@ function formatSize(bytes: number) {
                         <tr>
                             <th>key</th>
                             <th>url</th>
+                            <th>method</th>
                             <th>status</th>
                             <th>origin</th>
                             <th>size</th>
@@ -316,7 +325,7 @@ function formatSize(bytes: number) {
                             class="fetch-dashboard__virtual-spacer-row"
                             aria-hidden="true"
                         >
-                            <td colspan="7" :style="{ height: `${topVirtualPadding}px` }"></td>
+                            <td colspan="8" :style="{ height: `${topVirtualPadding}px` }"></td>
                         </tr>
                         <tr
                             v-for="entry in visibleRows"
@@ -332,6 +341,7 @@ function formatSize(bytes: number) {
                                     {{ entry.url }}
                                 </span>
                             </td>
+                            <td class="mono text-sm">{{ entry.method ?? '—' }}</td>
                             <td>
                                 <span class="badge" :class="statusClass(entry.status)">{{ entry.status }}</span>
                             </td>
@@ -357,15 +367,15 @@ function formatSize(bytes: number) {
                             class="fetch-dashboard__virtual-spacer-row"
                             aria-hidden="true"
                         >
-                            <td colspan="7" :style="{ height: `${bottomVirtualPadding}px` }"></td>
+                            <td colspan="8" :style="{ height: `${bottomVirtualPadding}px` }"></td>
                         </tr>
                         <tr v-if="!filtered.length">
-                            <td colspan="7" class="tracker-empty-cell">
+                            <td colspan="8" class="tracker-empty-cell">
                                 {{ connected ? 'No fetches recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
                             </td>
                         </tr>
                         <tr v-else class="fetch-dashboard__pagination-row" aria-live="polite">
-                            <td colspan="7" class="fetch-dashboard__pagination-cell">
+                            <td colspan="8" class="fetch-dashboard__pagination-cell">
                                 <span class="mono muted text-sm">showing {{ pagedFiltered.length }} of {{ filtered.length }}</span>
                                 <span v-if="hasMoreRows" class="mono muted text-sm">scroll to load more</span>
                             </td>
