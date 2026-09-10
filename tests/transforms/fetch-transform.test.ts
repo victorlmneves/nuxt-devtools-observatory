@@ -224,5 +224,30 @@ describe('fetchInstrumentPlugin', () => {
             expect(result).not.toBeNull()
             expect(result!.code).toContain('__devFetchCall(useFetch,')
         })
+
+        it('transforms useFetch inside <script setup lang="tsx"> with JSX', () => {
+            const sfc = [
+                '<template></template>',
+                '<script setup lang="tsx">',
+                `const { data } = useFetch('/api/users')`,
+                'const node = <div>{data}</div>',
+                '</script>',
+            ].join('\n')
+            const result = transform(sfc, '/project/src/pages/Users.vue')
+
+            expect(result).not.toBeNull()
+            expect(result!.code).toContain('__devFetchCall(useFetch,')
+            expect(result!.code).toContain('<div>{data}</div>')
+        })
+    })
+
+    describe('TSX modules', () => {
+        it('transforms useFetch in a .tsx file that also contains JSX', () => {
+            const code = `const { data } = useFetch('/api/users')\nexport const View = () => <div>{data}</div>\n`
+            const result = transform(code, '/project/src/widgets/Users.tsx')
+
+            expect(result).not.toBeNull()
+            expect(result!.code).toContain('__devFetchCall(useFetch,')
+        })
     })
 })

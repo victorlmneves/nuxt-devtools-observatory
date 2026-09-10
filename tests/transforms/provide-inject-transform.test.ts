@@ -141,5 +141,18 @@ describe('provideInjectPlugin', () => {
 
             expect(result).toBeFalsy()
         })
+
+        it('transforms provide/inject inside <script setup lang="tsx"> with JSX', () => {
+            const sfc = [
+                '<template></template>',
+                '<script setup lang="tsx">',
+                `provide('theme', 'dark')`,
+                'const node = <div />',
+                '</script>',
+            ].join('\n')
+            const result = transform(sfc, '/project/src/components/Theme.vue')
+
+            expect(result!.code).toContain("__devProvide('theme',")
+        })
     })
 })

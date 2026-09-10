@@ -1,9 +1,9 @@
 import type { Plugin } from 'vite'
-import { parse } from '@babel/parser'
 import _traverse from '@babel/traverse'
 import _generate from '@babel/generator'
 import * as t from '@babel/types'
-import { extractScriptBlock } from './transform-utils'
+import { parseObservatoryScript } from './parse-script'
+import { resolveTransformTarget } from './transform-utils'
 
 const traverse = (_traverse as typeof _traverse & { default?: typeof _traverse }).default ?? _traverse
 const generate = (_generate as typeof _generate & { default?: typeof _generate }).default ?? _generate
@@ -59,12 +59,6 @@ export function composableTrackerPlugin(): Plugin {
         enforce: 'pre',
 
         transform(code, id) {
-            const isVue = id.endsWith('.vue')
-
-            if (!isVue && !id.endsWith('.ts') && !id.endsWith('.js')) {
-                return
-            }
-
             // Skip the observatory's own runtime files to prevent infinite recursion
             if (
                 id.includes('node_modules') ||
@@ -75,30 +69,20 @@ export function composableTrackerPlugin(): Plugin {
                 return
             }
 
-            // For Vue SFCs, extract only the <script> block to avoid parsing <template>
-            let scriptCode = code
-            let scriptStart = 0
+            const target = resolveTransformTarget(code, id)
 
-            if (isVue) {
-                const block = extractScriptBlock(code)
-
-                if (!block) {
-                    return null
-                }
-
-                scriptCode = block.content
-                scriptStart = block.start
+            if (!target) {
+                return
             }
+
+            const { scriptCode, scriptStart, isVue, filename, lang } = target
 
             if (!COMPOSABLE_RE.test(scriptCode)) {
                 return
             }
 
             try {
-                const ast = parse(scriptCode, {
-                    sourceType: 'module',
-                    plugins: ['typescript'],
-                })
+                const ast = parseObservatoryScript(scriptCode, lang, filename)
 
                 let modified = false
 
