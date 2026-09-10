@@ -1,7 +1,7 @@
 {
     "name": "nuxt-devtools-observatory",
     "version": "0.2.0",
-    "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
+    "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Pinia Tracker, Render Heatmap, Transition Tracker, Trace Viewer",
     "license": "MIT",
     "repository": {
         "type": "git",

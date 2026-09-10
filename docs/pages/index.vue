@@ -47,6 +47,12 @@ const featureCards = [
         to: '/feature-guides/composable-tracker',
     },
     {
+        title: 'Pinia Tracker',
+        description: 'Inspect store state, action and mutation timelines, dependency edges, and hydration attribution.',
+        icon: 'i-lucide-database',
+        to: '/feature-guides/pinia-tracker',
+    },
+    {
         title: 'Render Heatmap',
         description: 'Identify hot components and noisy updates before they become performance regressions in real screens.',
         icon: 'i-lucide-flame',
@@ -108,7 +114,7 @@ const quickLinks = [
             <template #body>
                 <div class="landing-hero-copy">
                     <p>
-                        Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, provide/inject chains, renders,
+                        Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, Pinia stores, provide/inject chains, renders,
                         transitions, and route traces so you can debug app behavior from the same place you inspect the rest of Nuxt.
                     </p>
                 </div>
@@ -267,7 +273,7 @@ const quickLinks = [
         </UPageHero>
 
         <UPageSection
-            title="Built around the six tabs you actually use while debugging"
+            title="Built around the seven tabs you actually use while debugging"
             description="Each guide maps directly to the playground scenarios and the runtime registries behind the module."
         >
             <UPageGrid>

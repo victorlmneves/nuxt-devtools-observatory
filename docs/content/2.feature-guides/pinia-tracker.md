@@ -14,7 +14,9 @@ The Pinia Tracker helps you understand how each store changes over time and wher
 
 ## Enable it
 
-Set `piniaTracker: true` in module options (or `VITE_OBSERVATORY_PINIA_TRACKER=true` in playground env).
+Set `piniaTracker: true` in module options (the default when the flag is omitted).
+In the playground, enable it with `VITE_OBSERVATORY_PINIA_TRACKER=true`, or set
+`OBSERVATORY_PINIA_TRACKER=true` in `.env`.
 
 ## Read the data
 

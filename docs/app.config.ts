@@ -75,7 +75,7 @@ export default defineAppConfig({
                 {
                     icon: 'i-lucide-star',
                     label: 'Star on GitHub',
-                    to: 'https://github.com/victorneves/nuxt-devtools-observatory"',
+                    to: 'https://github.com/victorlmneves/nuxt-devtools-observatory',
                     target: '_blank',
                 },
                 {

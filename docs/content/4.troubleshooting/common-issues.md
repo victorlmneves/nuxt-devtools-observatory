@@ -24,6 +24,11 @@ description: Practical fixes for setup, data flow, and panel behavior.
 - Ensure timers are cleared in `onUnmounted`.
 - Dispose watcher handles created manually.
 
+## Pinia stores are empty
+
+- Confirm `@pinia/nuxt` is installed and `piniaTracker` is enabled.
+- Trigger a store action after the app mounts so the Pinia plugin can attach.
+
 ## Render Heatmap is too noisy
 
 - Increase `heatmapThresholdCount` and `heatmapThresholdTime`.
