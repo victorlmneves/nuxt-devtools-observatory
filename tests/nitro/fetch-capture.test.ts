@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { getSsrRequestContext } from '../../src/runtime/nitro/ssr-request-context'
 
 let requestHook: (event: Record<string, unknown>) => void
 let afterResponseHook: (event: Record<string, unknown>) => void
@@ -48,8 +49,7 @@ describe('fetch-capture nitro plugin', () => {
         expect(typeof event.context.__observatoryRequestId).toBe('string')
         expect((event.context.__observatoryRequestId as string).length).toBeGreaterThan(0)
 
-        const globalCtx = (globalThis as { __observatorySsrContext__?: { __observatoryRequestId?: string } }).__observatorySsrContext__
-        expect(globalCtx?.__observatoryRequestId).toBe(event.context.__observatoryRequestId)
+        expect(getSsrRequestContext()?.__observatoryRequestId).toBe(event.context.__observatoryRequestId)
     })
 
     it('sets the x-observatory-ssr-ms response header after a response', () => {
@@ -64,7 +64,7 @@ describe('fetch-capture nitro plugin', () => {
         expect(lastCall[1]).toBe('x-observatory-ssr-ms')
         expect(Number(lastCall[2])).toBeGreaterThanOrEqual(0)
 
-        expect((globalThis as { __observatorySsrContext__?: unknown }).__observatorySsrContext__).toBeUndefined()
+        expect(getSsrRequestContext()).toBeUndefined()
     })
 
     it('the elapsed ms in the header is a non-negative integer', () => {

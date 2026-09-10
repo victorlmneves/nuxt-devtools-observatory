@@ -1,4 +1,5 @@
 import { isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
+import { getSsrRequestContext } from '../nitro/ssr-request-context'
 import { addSsrPhaseSpan } from '../nitro/ssr-trace-store'
 
 export interface RefChangeEvent {
@@ -65,10 +66,6 @@ interface SsrObservatoryEvent {
     }
 }
 
-interface GlobalSsrContextCarrier {
-    __observatorySsrContext__?: SsrObservatoryEvent['context']
-}
-
 function nowMs() {
     return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now()
 }
@@ -80,7 +77,7 @@ export function __recordSsrComposableSpan(
     endTime: number,
     opts: { error?: unknown; event?: SsrObservatoryEvent } = {}
 ) {
-    const eventContext = opts.event?.context ?? (globalThis as GlobalSsrContextCarrier).__observatorySsrContext__
+    const eventContext = opts.event?.context ?? getSsrRequestContext()
     const requestId = eventContext?.__observatoryRequestId
     const requestStart = eventContext?.__ssrFetchStart
 
