@@ -1,4 +1,5 @@
 import { getCurrentInstance } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 import type { PiniaHydrationEvent, PiniaMutationEvent, PiniaStateDiff, PiniaStoreDependency, PiniaStoreEntry } from '../../types/snapshot'
 
 type PiniaSubscribeMutation = {
@@ -257,6 +258,7 @@ export function setupPiniaStoreRegistry(options: {
 
     function notifyChange() {
         dirty = true
+        bumpSnapshotRevision()
 
         for (const listener of listeners) {
             listener()

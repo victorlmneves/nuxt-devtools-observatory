@@ -1,4 +1,5 @@
 import { isRef, isReactive, unref, getCurrentInstance, provide, inject } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 
 export interface ProvideEntry {
     key: string
@@ -59,6 +60,7 @@ export function setupProvideInjectRegistry(): {
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     // Plain Maps keyed by `${key}:${componentUid}` — O(1) dedup, no Vue reactive overhead.

@@ -11,6 +11,7 @@ import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
 import { injectTestBridge } from './test-bridge'
 import { traceStore } from './tracing/traceStore'
+import { getSnapshotRevision } from './snapshot-revision'
 import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
 
 interface ObservatoryWindow extends Window {
@@ -39,6 +40,7 @@ export default defineNuxtPlugin(() => {
         traceViewer?: boolean
         heatmapHideInternals?: boolean
         maxPiniaTimeline?: number
+        maxTraces?: number
     }
 
     const debugRpc = config.debugRpc === true
@@ -51,7 +53,11 @@ export default defineNuxtPlugin(() => {
 
     let composableNavigationMode: 'route' | 'session' = config.composableNavigationMode === 'session' ? 'session' : 'route'
     let heartbeatId: number | null = null
-    let lastSnapshotSignature = ''
+    let lastSnapshotRevision = -1
+
+    if (typeof config.maxTraces === 'number') {
+        traceStore.setMaxTraces(config.maxTraces)
+    }
 
     // Enable Vue performance API for render heatmap if enabled
     if (config.renderHeatmap) {
@@ -295,17 +301,16 @@ export default defineNuxtPlugin(() => {
         }, 250)
 
         // Heartbeat fallback: some trackers (fetch/provide/render/transition)
-        // don't currently emit a direct callback into this plugin. Poll the
-        // aggregated snapshot and only broadcast when the payload changed.
+        // don't currently emit a direct callback into this plugin. Compare a
+        // generation counter instead of JSON.stringify of the full snapshot.
         if (import.meta.client && heartbeatId === null) {
             heartbeatId = window.setInterval(() => {
-                const snapshot = buildSnapshot()
-                const signature = JSON.stringify(snapshot)
+                const revision = getSnapshotRevision()
 
-                if (signature !== lastSnapshotSignature) {
-                    lastSnapshotSignature = signature
+                if (revision !== lastSnapshotRevision) {
+                    lastSnapshotRevision = revision
                     debugLog('heartbeat detected snapshot change')
-                    import.meta.hot?.send('observatory:snapshot', snapshot)
+                    import.meta.hot?.send('observatory:snapshot', buildSnapshot())
                 }
             }, 400)
         }
@@ -405,7 +410,7 @@ export default defineNuxtPlugin(() => {
             traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
         })
 
-        lastSnapshotSignature = JSON.stringify(snapshot)
+        lastSnapshotRevision = getSnapshotRevision()
         import.meta.hot.send('observatory:snapshot', snapshot)
     }
 
