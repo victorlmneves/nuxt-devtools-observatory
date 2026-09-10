@@ -1,5 +1,8 @@
-@import url("tailwindcss");
-@import url("@nuxt/ui");
+/* Tailwind v4 + Nuxt UI must use package imports, not url().
+   `@import url("tailwindcss")` is a network URL, so the docs site builds
+   unstyled. Do not let Stylelint --fix rewrite these to url() notation. */
+@import "tailwindcss";
+@import "@nuxt/ui";
 
 /* stylelint-disable at-rule-no-unknown */
 @source "../content/**/*";
