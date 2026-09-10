@@ -256,4 +256,41 @@ describe('setupPiniaStoreRegistry', () => {
         expect(persistedHydration).toBeDefined()
         expect(persistedHydration?.details).toContain('localStorage')
     })
+
+    it('no-ops until attachPinia is called when $pinia is missing at setup', () => {
+        const pinia = new FakePinia()
+        const store = new FakeStore('cart', { items: [] })
+        pinia.addStore(store)
+
+        const registry = setupPiniaStoreRegistry({})
+
+        expect(registry.getAll()).toHaveLength(0)
+
+        registry.attachPinia(pinia)
+
+        expect(registry.getAll()).toHaveLength(1)
+        expect(registry.getAll()[0].id).toBe('cart')
+    })
+
+    it('installs the Pinia plugin only once across attachPinia retries', () => {
+        const pinia = new FakePinia()
+        const useSpy = vi.spyOn(pinia, 'use')
+
+        const registry = setupPiniaStoreRegistry({ pinia })
+        registry.attachPinia(pinia)
+        registry.attachPinia(pinia)
+
+        expect(useSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('tracks stores added after a late attachPinia', () => {
+        const pinia = new FakePinia()
+        const registry = setupPiniaStoreRegistry({})
+
+        registry.attachPinia(pinia)
+        pinia.addStore(new FakeStore('user', { name: 'Ada' }))
+
+        expect(registry.getAll()).toHaveLength(1)
+        expect(registry.getAll()[0].id).toBe('user')
+    })
 })
