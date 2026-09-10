@@ -493,6 +493,15 @@ docs/
 └── server/api/                         ← Docs-specific API handlers
 ```
 
+## Releasing
+
+Releases are automated with [semantic-release](https://semantic-release.gitbook.io/) from `main`. See [CONTRIBUTING.md](CONTRIBUTING.md) for commit message rules.
+
+- Merge conventional commits to `main`. Do **not** bump the version in `package.json` or create tags by hand.
+- `feat:` publishes a minor, `fix:` a patch, and a breaking change a major. `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, and `style:` do not publish.
+- The `Release` GitHub Action tests, builds, then publishes `nuxt-devtools-observatory` to npm via Trusted Publishing (OIDC). Keep the npm trusted publisher mapped to workflow **`release.yml`**.
+- The first run after this setup only publishes if there are releasable commits since tag `v0.1.34`.
+
 ## License
 
 [MIT](https://opensource.org/licenses/MIT)

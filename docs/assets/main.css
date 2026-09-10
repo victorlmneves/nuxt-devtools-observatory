@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "@nuxt/ui";
+@import url("tailwindcss");
+@import url("@nuxt/ui");
 
 /* stylelint-disable at-rule-no-unknown */
 @source "../content/**/*";
