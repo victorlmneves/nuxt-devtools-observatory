@@ -89,7 +89,7 @@ export default defineNuxtConfig({
         traceViewer: true, // Enable trace viewer
         composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
-        heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
+        heatmapThresholdTime: 16, // Highlight components with render time above this (ms)
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
         debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
         maxFetchEntries: 200, // Max fetch entries to keep in memory

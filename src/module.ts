@@ -128,8 +128,8 @@ export interface ModuleOptions {
     heatmapThresholdCount?: number
 
     /**
-     * Minimum render count / ms threshold to highlight in the heatmap
-     * @default 1600
+     * Minimum average render time (ms) to highlight in the heatmap
+     * @default 16
      */
     heatmapThresholdTime?: number
 
@@ -152,7 +152,7 @@ const defaults = {
     transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
     traceViewer: process.env.OBSERVATORY_TRACE_VIEWER === 'true',
     heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3,
-    heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600,
+    heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 16,
     maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
     maxPayloadBytes: process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000,
     fetchPageSize: process.env.OBSERVATORY_FETCH_PAGE_SIZE ? Number(process.env.OBSERVATORY_FETCH_PAGE_SIZE) : 20,
@@ -231,7 +231,7 @@ export default defineNuxtModule<ModuleOptions>({
                 (process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3),
             heatmapThresholdTime:
                 options.heatmapThresholdTime ??
-                (process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600),
+                (process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 16),
             maxFetchEntries:
                 options.maxFetchEntries ??
                 (process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200),
@@ -343,6 +343,8 @@ export default defineNuxtModule<ModuleOptions>({
                 piniaTracker: !!resolved.piniaTracker,
                 composableNavigationMode: resolved.composableNavigationMode,
                 fetchPageSize: resolved.fetchPageSize,
+                heatmapThresholdCount: resolved.heatmapThresholdCount,
+                heatmapThresholdTime: resolved.heatmapThresholdTime,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
                 traceViewer: !!resolved.traceViewer,
