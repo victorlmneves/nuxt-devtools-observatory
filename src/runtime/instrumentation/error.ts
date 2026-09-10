@@ -71,11 +71,7 @@ function componentName(instance: unknown): string | undefined {
     return typed.type?.__name || typed.type?.name || typed.$options?.name
 }
 
-export function recordErrorSpan(
-    source: 'vue' | 'app' | 'navigation',
-    error: unknown,
-    extra: Record<string, unknown> = {}
-) {
+export function recordErrorSpan(source: 'vue' | 'app' | 'navigation', error: unknown, extra: Record<string, unknown> = {}) {
     const message = asMessage(error)
     const metadata = {
         source,
