@@ -6,6 +6,7 @@ import { setupProvideInjectRegistry } from './composables/provide-inject-registr
 import { setupPiniaStoreRegistry } from './composables/pinia-store-registry'
 import { setupRenderRegistry } from './composables/render-registry'
 import { setupTransitionRegistry } from './composables/transition-registry'
+import { setupPayloadRegistry } from './composables/payload-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
 import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
@@ -36,6 +37,7 @@ export default defineNuxtPlugin(() => {
         provideInjectGraph?: boolean
         composableTracker?: boolean
         piniaTracker?: boolean
+        payloadInspector?: boolean
         renderHeatmap?: boolean
         transitionTracker?: boolean
         traceViewer?: boolean
@@ -97,6 +99,13 @@ export default defineNuxtPlugin(() => {
         // creation and again after mount so stores are not silently skipped.
         nuxtApp.hook('app:created', attachWhenPiniaReady)
         nuxtApp.hook('app:mounted', attachWhenPiniaReady)
+    }
+
+    if (config.payloadInspector) {
+        registries.payload = setupPayloadRegistry({
+            getPayload: () => nuxtApp.payload,
+            isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
+        })
     }
 
     if (config.renderHeatmap) {
@@ -298,6 +307,9 @@ export default defineNuxtPlugin(() => {
 
     // Broadcast all registry data when devtools tab connects
     nuxtApp.hook('app:mounted', () => {
+        const payload = registries.payload as { capture?: () => void } | undefined
+        payload?.capture?.()
+
         broadcastAll('app:mounted')
 
         nextTick(() => {
@@ -329,6 +341,9 @@ export default defineNuxtPlugin(() => {
     })
 
     nuxtApp.hook('page:finish', () => {
+        const payload = registries.payload as { capture?: () => void } | undefined
+        payload?.capture?.()
+
         broadcastAll('page:finish')
     })
 
@@ -451,6 +466,10 @@ export default defineNuxtPlugin(() => {
             { key: 'provideInject', fallback: { provides: [], injects: [] } },
             { key: 'composable', fallback: [] },
             { key: 'pinia', fallback: [] },
+            {
+                key: 'payload',
+                fallback: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
+            },
             { key: 'render', fallback: {} },
             { key: 'transition', fallback: {} },
         ] as const
@@ -503,6 +522,7 @@ export default defineNuxtPlugin(() => {
             provideInjectGraph: !!registries.provideInject,
             composableTracker: !!registries.composable,
             piniaTracker: !!registries.pinia,
+            payloadInspector: !!registries.payload,
             composableNavigationMode,
             fetchPageSize: typeof config.fetchPageSize === 'number' ? config.fetchPageSize : 20,
             heatmapThresholdCount: typeof config.heatmapThresholdCount === 'number' ? config.heatmapThresholdCount : 3,

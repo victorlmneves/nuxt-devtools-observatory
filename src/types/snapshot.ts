@@ -196,3 +196,23 @@ export interface TraceEntry {
     metadata?: Record<string, unknown>
     spans: TraceSpan[]
 }
+
+export type PayloadBucket = 'data' | 'state' | 'pinia' | 'error' | 'other'
+
+export interface PayloadKeyEntry {
+    id: string
+    bucket: PayloadBucket
+    key: string
+    bytes: number
+    origin: 'ssr' | 'csr'
+    preview?: unknown
+}
+
+export interface PayloadInspectorSnapshot {
+    capturedAt: number
+    isHydrating: boolean
+    serverRendered: boolean
+    keyCount: number
+    totalBytes: number
+    keys: PayloadKeyEntry[]
+}

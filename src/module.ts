@@ -105,6 +105,12 @@ export interface ModuleOptions {
     piniaTracker?: boolean
 
     /**
+     * Enable the payload and hydration inspector tab
+     * @default true
+     */
+    payloadInspector?: boolean
+
+    /**
      * Enable the render heatmap tab
      * @default true
      */
@@ -226,6 +232,7 @@ export default defineNuxtModule<ModuleOptions>({
                 resolved.provideInjectGraph ||
                 resolved.composableTracker ||
                 resolved.piniaTracker ||
+                resolved.payloadInspector ||
                 resolved.renderHeatmap ||
                 resolved.transitionTracker ||
                 resolved.traceViewer
@@ -262,11 +269,13 @@ export default defineNuxtModule<ModuleOptions>({
             renders: [],
             transitions: [],
             traces: [],
+            payload: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
             features: {
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
                 composableTracker: !!resolved.composableTracker,
                 piniaTracker: !!resolved.piniaTracker,
+                payloadInspector: !!resolved.payloadInspector,
                 composableNavigationMode: resolved.composableNavigationMode,
                 fetchPageSize: resolved.fetchPageSize,
                 heatmapThresholdCount: resolved.heatmapThresholdCount,
@@ -370,6 +379,7 @@ export default defineNuxtModule<ModuleOptions>({
             provideInjectGraph: resolved.provideInjectGraph,
             composableTracker: resolved.composableTracker,
             piniaTracker: resolved.piniaTracker,
+            payloadInspector: resolved.payloadInspector,
             renderHeatmap: resolved.renderHeatmap,
             transitionTracker: resolved.transitionTracker,
             traceViewer: resolved.traceViewer,

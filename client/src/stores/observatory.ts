@@ -10,6 +10,7 @@ import type {
     RenderEntry,
     TransitionEntry,
     TraceEntry,
+    PayloadInspectorSnapshot,
 } from '@observatory/types/snapshot'
 
 type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] }
@@ -21,6 +22,15 @@ const piniaStores = ref<PiniaStoreEntry[]>([])
 const renders = ref<RenderEntry[]>([])
 const transitions = ref<TransitionEntry[]>([])
 const traces = ref<TraceEntry[]>([])
+const emptyPayload: PayloadInspectorSnapshot = {
+    capturedAt: 0,
+    isHydrating: false,
+    serverRendered: false,
+    keyCount: 0,
+    totalBytes: 0,
+    keys: [],
+}
+const payload = ref<PayloadInspectorSnapshot>({ ...emptyPayload })
 const connected = ref(false)
 const features = ref<ObservatorySnapshot['features']>({})
 const debugRpc = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debugRpc')
@@ -45,8 +55,8 @@ function cloneArray<T>(value: T[] | undefined): T[] {
 function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[] {
     return value
         ? value.map((item) => ({
-              ...item,
-          }))
+            ...item,
+        }))
         : []
 }
 
@@ -54,15 +64,26 @@ function applySnapshot(data: ObservatorySnapshot) {
     fetchEntries.value = cloneArray(data.fetch as FetchEntry[] | undefined)
     provideInject.value = data.provideInject
         ? {
-              provides: cloneArray(data.provideInject.provides as ProvideInjectSnapshot['provides']),
-              injects: cloneArray(data.provideInject.injects as ProvideInjectSnapshot['injects']),
-          }
+            provides: cloneArray(data.provideInject.provides as ProvideInjectSnapshot['provides']),
+            injects: cloneArray(data.provideInject.injects as ProvideInjectSnapshot['injects']),
+        }
         : { provides: [], injects: [] }
     composables.value = cloneArray(data.composables as ComposableEntry[] | undefined)
     piniaStores.value = cloneArray(data.piniaStores as PiniaStoreEntry[] | undefined)
     renders.value = normalizeRenderEntries(data.renders as RenderEntry[] | undefined)
     transitions.value = cloneArray(data.transitions as TransitionEntry[] | undefined)
     traces.value = cloneArray(data.traces as TraceEntry[] | undefined)
+    const nextPayload = data.payload as PayloadInspectorSnapshot | undefined
+    payload.value = nextPayload
+        ? {
+            capturedAt: nextPayload.capturedAt ?? 0,
+            isHydrating: !!nextPayload.isHydrating,
+            serverRendered: !!nextPayload.serverRendered,
+            keyCount: nextPayload.keyCount ?? nextPayload.keys?.length ?? 0,
+            totalBytes: nextPayload.totalBytes ?? 0,
+            keys: cloneArray(nextPayload.keys),
+        }
+        : { ...emptyPayload, keys: [] }
     features.value = data.features || {}
 
     // If the server snapshot disagrees with the user's requested mode,
@@ -243,9 +264,9 @@ export function useObservatoryData() {
                     applySnapshot(snapshot)
                 }
             })
-            .catch(() => {})
+            .catch(() => { })
 
-        rpc?.requestSnapshot().catch(() => {})
+        rpc?.requestSnapshot().catch(() => { })
     }
 
     return {
@@ -256,6 +277,7 @@ export function useObservatoryData() {
         renders,
         transitions,
         traces,
+        payload,
         features,
         connected,
         refresh,

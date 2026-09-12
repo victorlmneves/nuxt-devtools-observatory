@@ -53,6 +53,12 @@ const featureCards = [
         to: '/feature-guides/pinia-tracker',
     },
     {
+        title: 'Payload Inspector',
+        description: 'Break down Nuxt payload keys, serialized size, and whether each key came from SSR hydration or the client.',
+        icon: 'i-lucide-package',
+        to: '/feature-guides/payload-inspector',
+    },
+    {
         title: 'Render Heatmap',
         description: 'Identify hot components and noisy updates before they become performance regressions in real screens.',
         icon: 'i-lucide-flame',
