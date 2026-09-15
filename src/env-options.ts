@@ -59,7 +59,7 @@ export function createModuleDefaults() {
         maxComposableEntries: readEnvNumber('OBSERVATORY_MAX_COMPOSABLE_ENTRIES', 300),
         maxPiniaTimeline: readEnvNumber('OBSERVATORY_MAX_PINIA_TIMELINE', 100),
         maxRenderTimeline: readEnvNumber('OBSERVATORY_MAX_RENDER_TIMELINE', 100),
-        composableNavigationMode: process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : ('route' as const),
+        composableNavigationMode: process.env['OBSERVATORY_COMPOSABLE_NAVIGATION_MODE'] === 'session' ? 'session' : ('route' as const),
         heatmapHideInternals: readEnvFlag('OBSERVATORY_HEATMAP_HIDE_INTERNALS', false),
         debugRpc: readEnvFlag('OBSERVATORY_DEBUG_RPC', false),
     }
