@@ -70,6 +70,9 @@ export function createModuleDefaults() {
 
 /**
  * Resolve server instrumentation: user config, then env, then SSR on / SPA off.
+ * @param {boolean | undefined} option Optional module config override for instrumentServer.
+ * @param {boolean} ssrEnabled Whether Nuxt SSR is enabled for the current app.
+ * @returns {boolean} Final instrumentServer flag after applying option/env/SSR fallback.
  */
 export function resolveInstrumentServer(option: boolean | undefined, ssrEnabled: boolean): boolean {
     if (typeof option === 'boolean') {
