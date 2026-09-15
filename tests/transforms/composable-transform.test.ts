@@ -63,6 +63,36 @@ describe('composableTrackerPlugin', () => {
         })
     })
 
+    describe('library auto-import skip', () => {
+        it.each(['useMouse', 'useLocalStorage', 'useEventListener', 'useDark', 'useStorage'])(
+            'does not wrap auto-imported %s (VueUse / library composable)',
+            (fn) => {
+                const result = transform(`${fn}()`)
+
+                if (result?.code) {
+                    expect(result.code).not.toContain('__trackComposable')
+                } else {
+                    expect(result).toBeFalsy()
+                }
+            }
+        )
+
+        it('still wraps project composables such as useCart', () => {
+            const result = transform(`useCart()`)
+
+            expect(result).not.toBeNull()
+            expect(result!.code).toContain('"useCart"')
+        })
+
+        it('still wraps a project-local import that reuses a VueUse name', () => {
+            const result = transform(`import { useMouse } from './useMouse'\nuseMouse()`)
+
+            expect(result).not.toBeNull()
+            expect(result!.code).toContain('__trackComposable(')
+            expect(result!.code).toContain('"useMouse"')
+        })
+    })
+
     describe('SKIP_LIST enforcement', () => {
         it.each(SKIP_LIST)('does not wrap %s (built-in Nuxt/Vue composable)', (fn) => {
             const result = transform(`${fn}('/api')`)

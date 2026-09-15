@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
+import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
 import type { FetchEntry } from '@observatory/types/snapshot'
@@ -19,6 +20,7 @@ const tableScrollRef = ref<HTMLElement | null>(null)
 const currentPage = ref(1)
 
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 38, overscan: 6 })
+const { effective: virtualizationFlags } = useVirtualizationFlags()
 
 const entries = computed<FetchViewEntry[]>(() => {
     const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
@@ -81,7 +83,7 @@ const fetchPageSize = computed(() => {
 const pagedFiltered = computed(() => filtered.value.slice(0, currentPage.value * fetchPageSize.value))
 const hasMoreRows = computed(() => pagedFiltered.value.length < filtered.value.length)
 
-const virtualizedRowsEnabled = computed(() => true)
+const virtualizedRowsEnabled = computed(() => virtualizationFlags.value.fetch)
 
 const rowVirtualizerOptions = computed(() => ({
     count: pagedFiltered.value.length,

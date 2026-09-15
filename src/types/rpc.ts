@@ -27,6 +27,8 @@ export interface ObservatorySnapshot {
         piniaTracker?: boolean
         composableNavigationMode?: 'route' | 'session'
         fetchPageSize?: number
+        heatmapThresholdCount?: number
+        heatmapThresholdTime?: number
         renderHeatmap?: boolean
         transitionTracker?: boolean
         traceViewer?: boolean

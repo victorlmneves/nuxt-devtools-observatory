@@ -1,5 +1,6 @@
 import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
 import type { Slots } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 import { startSpan } from '../tracing/tracing'
 import type { Span } from '../tracing/trace'
 import { traceStore } from '../tracing/traceStore'
@@ -16,6 +17,7 @@ export interface TransitionEntry {
     cancelled: boolean
     appear: boolean
     mode?: string
+    component?: 'Transition' | 'TransitionGroup'
 }
 
 // Allow configuration via .env or Nuxt runtime config
@@ -34,6 +36,7 @@ export function setupTransitionRegistry() {
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     function register(entry: TransitionEntry) {
@@ -49,6 +52,7 @@ export function setupTransitionRegistry() {
                 cancelled: entry.cancelled,
                 appear: entry.appear,
                 mode: entry.mode,
+                component: entry.component,
             },
             startTime: entry.startTime,
         })
@@ -65,6 +69,7 @@ export function setupTransitionRegistry() {
             cancelled: entry.cancelled,
             appear: entry.appear,
             mode: entry.mode,
+            component: entry.component,
         })
 
         markDirty()
@@ -151,7 +156,7 @@ export function setupTransitionRegistry() {
             const id = typeof metadata.id === 'string' ? metadata.id : span.id
             const transitionName = typeof metadata.transitionName === 'string' ? metadata.transitionName : 'default'
             const parentComponent = typeof metadata.parentComponent === 'string' ? metadata.parentComponent : 'unknown'
-            const direction = metadata.direction === 'leave' ? 'leave' : 'enter'
+            const direction: TransitionEntry['direction'] = metadata.direction === 'leave' ? 'leave' : 'enter'
             const knownPhase = metadata.phase
             const phase: TransitionEntry['phase'] =
                 knownPhase === 'entering' ||

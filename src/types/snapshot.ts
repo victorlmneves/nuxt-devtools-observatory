@@ -169,6 +169,8 @@ export interface TransitionEntry {
     cancelled: boolean
     appear: boolean
     mode?: string
+    /** Built-in Vue component that produced the event. */
+    component?: 'Transition' | 'TransitionGroup'
 }
 
 export interface TraceSpan {

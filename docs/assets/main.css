@@ -1,5 +1,8 @@
-@import url("tailwindcss");
-@import url("@nuxt/ui");
+/* Tailwind v4 + Nuxt UI must use package imports, not url().
+   `@import url("tailwindcss")` is a network URL, so the docs site builds
+   unstyled. Do not let Stylelint --fix rewrite these to url() notation. */
+@import 'tailwindcss';
+@import '@nuxt/ui';
 
 /* stylelint-disable at-rule-no-unknown */
 @source "../content/**/*";
@@ -7,17 +10,17 @@
 @theme static {
     --container-8xl: 90rem;
     --font-sans: 'Public Sans', sans-serif;
-    --color-green-50: #EFFDF5;
-    --color-green-100: #D9FBE8;
-    --color-green-200: #B3F5D1;
-    --color-green-300: #75EDAE;
-    --color-green-400: #00DC82;
-    --color-green-500: #00C16A;
-    --color-green-600: #00A155;
-    --color-green-700: #007F45;
+    --color-green-50: #effdf5;
+    --color-green-100: #d9fbe8;
+    --color-green-200: #b3f5d1;
+    --color-green-300: #75edae;
+    --color-green-400: #00dc82;
+    --color-green-500: #00c16a;
+    --color-green-600: #00a155;
+    --color-green-700: #007f45;
     --color-green-800: #016538;
-    --color-green-900: #0A5331;
-    --color-green-950: #052E16;
+    --color-green-900: #0a5331;
+    --color-green-950: #052e16;
     --site-border: #203763;
 }
 /* stylelint-enable at-rule-no-unknown */
@@ -36,4 +39,25 @@
     color: #c8d7f4;
     font-size: 0.75rem;
     padding: 0.12rem 0.5rem;
+}
+
+.docs-site-footer {
+    margin-block-start: 2.5rem;
+}
+
+.docs-page-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-block-start: 2.5rem;
+    padding-block-start: 1.5rem;
+}
+
+.docs-surround {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 1.5rem 0 2.5rem;
 }
