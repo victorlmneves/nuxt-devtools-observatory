@@ -445,6 +445,23 @@ describe('__recordSsrComposableSpan', () => {
             })
         }).not.toThrow()
     })
+
+    it('reads request context from async local storage when no event is passed', async () => {
+        const { runWithSsrRequestContext } = await import('../../src/runtime/nitro/ssr-request-context')
+        const requestId = 'req-test-composable-als'
+        createSsrRecord(requestId, '/dashboard', 'GET')
+
+        runWithSsrRequestContext({ __observatoryRequestId: requestId, __ssrFetchStart: 100 }, () => {
+            __recordSsrComposableSpan('useAls', { file: 'composables/useAls.ts', line: 3 }, 110, 130)
+        })
+
+        const record = drainSsrRecord(requestId, 200)
+        const span = record?.spans.find((s) => s.name === 'composable:useAls')
+
+        expect(span).toBeDefined()
+        expect(span?.startTime).toBe(10)
+        expect(span?.endTime).toBe(30)
+    })
 })
 
 // ── Tests for fixes introduced in the bug-fix pass ────────────────────────
