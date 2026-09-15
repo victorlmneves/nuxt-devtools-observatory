@@ -7,7 +7,7 @@
 
 Nuxt DevTools Observatory is a module that brings advanced observability and runtime analysis to Nuxt apps, focusing on features not available in the official Nuxt DevTools.
 
-- **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
+- **useFetch Dashboard** — central view of `useFetch` / `useAsyncData` and client `$fetch` calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Pinia Tracker** — inspect Pinia store state, action/mutation timelines, dependency edges, and hydration attribution
@@ -120,7 +120,7 @@ transforms are skipped entirely — zero runtime overhead.
 
 [![useFetch Dashboard](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/fetch-dashboard.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/fetch-dashboard.png)
 
-A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim that records:
+A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim, and a runtime interceptor records direct `$fetch` / `$fetch.raw` / `$fetch.create()` calls:
 
 - Key, URL, status, origin (SSR/CSR)
 - Payload size and duration

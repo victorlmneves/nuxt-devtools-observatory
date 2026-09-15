@@ -1,4 +1,5 @@
 import { readonly, getCurrentInstance } from 'vue'
+import { beginNestedFetchSuppress, endNestedFetchSuppress, markObservatoryTrackedFetch } from '../instrumentation/fetch-dedup'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 
 export interface FetchEntry {
@@ -16,6 +17,8 @@ export interface FetchEntry {
     error?: unknown
     file?: string
     line?: number
+    method?: string
+    source?: string
 }
 
 interface ObservatoryWindow extends Window {
@@ -201,7 +204,10 @@ export function __devFetchHandler(
             cached: false,
             file: meta.file,
             line: meta.line,
+            source: 'useAsyncData',
         })
+
+        beginNestedFetchSuppress()
 
         return Promise.resolve(handler(...args))
             .then((result) => {
@@ -225,6 +231,9 @@ export function __devFetchHandler(
                 })
 
                 throw error
+            })
+            .finally(() => {
+                endNestedFetchSuppress()
             })
     }
 }
@@ -265,6 +274,7 @@ export function __devFetchCall(
     const id = `${meta.key}::${Date.now()}`
     const startTime = performance.now()
     const resolvedUrl = resolveUrl(url)
+    const trackedOpts = markObservatoryTrackedFetch((opts ?? {}) as Record<string, unknown>) as FetchOptions
 
     // When useFetch is called outside a component's setup() context (e.g. inside a
     // click handler), Nuxt warns and its deduplication machinery becomes unreliable:
@@ -284,6 +294,7 @@ export function __devFetchCall(
             cached: false,
             file: meta.file,
             line: meta.line,
+            source: 'useFetch',
         })
 
         fetch(resolvedUrl)
@@ -313,7 +324,7 @@ export function __devFetchCall(
                 registry.update(id, { status: 'error', endTime, ms: Math.round(endTime - startTime) })
             })
 
-        return originalFn(url, opts)
+        return originalFn(url, trackedOpts)
     }
 
     // Track how many times onResponse has fired for this entry in this closure.
@@ -332,7 +343,7 @@ export function __devFetchCall(
 
     // Call useFetch first so Nuxt can hydrate from SSR payload synchronously.
     const result = originalFn(url, {
-        ...opts,
+        ...trackedOpts,
         onRequest() {
             lastCallStart = performance.now()
 
@@ -370,6 +381,7 @@ export function __devFetchCall(
                     payload: response._data,
                     file: meta.file,
                     line: meta.line,
+                    source: 'useFetch',
                 })
             }
 
@@ -428,6 +440,7 @@ export function __devFetchCall(
         payload: isSsrHydrated ? result?.data?.value : undefined,
         file: meta.file,
         line: meta.line,
+        source: 'useFetch',
     })
 
     // Now that we know whether this was SSR, tell the onResponse closure.
