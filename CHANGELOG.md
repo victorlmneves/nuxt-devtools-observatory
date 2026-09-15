@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.2.3...v0.3.0) (2026-09-15)
+
+
+### Features
+
+* update ESLint configuration and CI workflows ([d6f63ea](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/d6f63ea69f4dc99b2674bb8d0ea7ad354801a810))
+
 ## [0.2.3](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.2.2...v0.2.3) (2026-09-15)
 
 
