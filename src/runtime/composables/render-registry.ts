@@ -1,5 +1,6 @@
 import type { ComponentPublicInstance } from 'vue'
 import { useRuntimeConfig } from '#app'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 import type { Span } from '../tracing/trace'
 import { traceStore } from '../tracing/traceStore'
 
@@ -67,6 +68,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     function setRoute(path: string) {

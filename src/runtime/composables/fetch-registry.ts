@@ -1,4 +1,5 @@
 import { readonly, getCurrentInstance } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 
 export interface FetchEntry {
     id: number | string
@@ -89,6 +90,7 @@ export function setupFetchRegistry() {
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     function register(entry: FetchEntry) {

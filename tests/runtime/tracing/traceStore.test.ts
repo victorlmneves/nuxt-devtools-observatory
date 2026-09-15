@@ -223,6 +223,44 @@ describe('TraceStore', () => {
         })
     })
 
+    describe('maxTraces cap', () => {
+        it('evicts the oldest finished trace when the cap is exceeded', () => {
+            store = new TraceStore(2)
+            store.createTrace({ id: 'a' })
+            store.endTrace('a')
+            store.createTrace({ id: 'b' })
+            store.endTrace('b')
+            store.createTrace({ id: 'c' })
+
+            const ids = store.getAllTraces().map((trace) => trace.id)
+
+            expect(ids).toHaveLength(2)
+            expect(ids).not.toContain('a')
+            expect(ids).toContain('c')
+        })
+
+        it('evicts the oldest active trace when every trace is still active', () => {
+            store = new TraceStore(2)
+            store.createTrace({ id: 'a' })
+            store.createTrace({ id: 'b' })
+            store.createTrace({ id: 'c' })
+
+            const ids = store.getAllTraces().map((trace) => trace.id)
+
+            expect(ids).toEqual(['b', 'c'])
+        })
+
+        it('setMaxTraces immediately trims the store', () => {
+            store.createTrace({ id: 'a' })
+            store.endTrace('a')
+            store.createTrace({ id: 'b' })
+            store.endTrace('b')
+            store.setMaxTraces(1)
+
+            expect(store.getAllTraces()).toHaveLength(1)
+        })
+    })
+
     describe('computeDuration edge case', () => {
         it('durationMs is 0 when endTime is before startTime', () => {
             store.createTrace({ id: 'trace-1', startTime: 1000 })

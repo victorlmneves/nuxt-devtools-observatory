@@ -67,6 +67,12 @@ export interface ModuleOptions {
     maxRenderTimeline?: number
 
     /**
+     * Maximum number of route traces to keep in memory
+     * @default 50
+     */
+    maxTraces?: number
+
+    /**
      * Composable tracker navigation mode.
      * - `route`: clear composable entries on every page navigation
      * - `session`: keep entries across navigations until manually cleared
@@ -375,6 +381,7 @@ export default defineNuxtModule<ModuleOptions>({
             maxComposableEntries: resolved.maxComposableEntries,
             maxPiniaTimeline: resolved.maxPiniaTimeline,
             maxRenderTimeline: resolved.maxRenderTimeline,
+            maxTraces: resolved.maxTraces,
             composableNavigationMode: resolved.composableNavigationMode,
             heatmapHideInternals: resolved.heatmapHideInternals,
             heatmapThresholdCount: resolved.heatmapThresholdCount,
