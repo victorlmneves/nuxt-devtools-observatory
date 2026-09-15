@@ -80,11 +80,22 @@ export default defineNuxtPlugin(() => {
     }
 
     if (config.piniaTracker) {
-        registries.pinia = setupPiniaStoreRegistry({
+        const piniaRegistry = setupPiniaStoreRegistry({
             pinia: (nuxtApp as { $pinia?: unknown }).$pinia,
             nuxtPayload: nuxtApp.payload,
             maxTimeline: config.maxPiniaTimeline,
         })
+
+        registries.pinia = piniaRegistry
+
+        const attachWhenPiniaReady = () => {
+            piniaRegistry.attachPinia((nuxtApp as { $pinia?: unknown }).$pinia)
+        }
+
+        // Pinia may inject $pinia after this plugin runs. Retry on Vue app
+        // creation and again after mount so stores are not silently skipped.
+        nuxtApp.hook('app:created', attachWhenPiniaReady)
+        nuxtApp.hook('app:mounted', attachWhenPiniaReady)
     }
 
     if (config.renderHeatmap) {
