@@ -1,11 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const isCI = Boolean(process.env['CI'])
+
 export default defineConfig({
     testDir: '.',
     fullyParallel: false,
-    forbidOnly: !!process.env.CI,
-    retries: process.env.CI ? 2 : 0,
-    workers: process.env.CI ? 1 : undefined,
+    forbidOnly: isCI,
+    retries: isCI ? 2 : 0,
+    ...(isCI ? { workers: 1 } : {}),
     reporter: 'list',
     use: {
         baseURL: 'http://localhost:3000',
@@ -20,7 +22,7 @@ export default defineConfig({
     webServer: {
         command: 'pnpm dev',
         url: 'http://localhost:3000',
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: !isCI,
         timeout: 60_000,
     },
 })

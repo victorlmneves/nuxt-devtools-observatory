@@ -492,6 +492,8 @@ export default defineNuxtPlugin(() => {
             piniaTracker: !!registries.pinia,
             composableNavigationMode,
             fetchPageSize: typeof config.fetchPageSize === 'number' ? config.fetchPageSize : 20,
+            heatmapThresholdCount: typeof config.heatmapThresholdCount === 'number' ? config.heatmapThresholdCount : 3,
+            heatmapThresholdTime: typeof config.heatmapThresholdTime === 'number' ? config.heatmapThresholdTime : 16,
             renderHeatmap: !!registries.render,
             transitionTracker: !!registries.transition,
             traceViewer: !!config.traceViewer,

@@ -30,6 +30,6 @@
         "allowSyntheticDefaultImports": true,
         "types": ["node", "@playwright/test"]
     },
-    "include": ["./**/*.ts", "../**/*.ts"],
+    "include": ["./**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }

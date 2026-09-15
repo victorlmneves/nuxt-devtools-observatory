@@ -135,8 +135,8 @@ export interface ModuleOptions {
     heatmapThresholdCount?: number
 
     /**
-     * Minimum render count / ms threshold to highlight in the heatmap
-     * @default 1600
+     * Minimum average render time (ms) to highlight in the heatmap
+     * @default 16
      */
     heatmapThresholdTime?: number
 
@@ -269,6 +269,8 @@ export default defineNuxtModule<ModuleOptions>({
                 piniaTracker: !!resolved.piniaTracker,
                 composableNavigationMode: resolved.composableNavigationMode,
                 fetchPageSize: resolved.fetchPageSize,
+                heatmapThresholdCount: resolved.heatmapThresholdCount,
+                heatmapThresholdTime: resolved.heatmapThresholdTime,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
                 traceViewer: !!resolved.traceViewer,
