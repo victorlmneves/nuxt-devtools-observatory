@@ -10,7 +10,9 @@
             "@observatory-client/*": ["./client/src/*"],
             "@observatory-tests/*": ["./tests/*"]
         },
+        "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts", "vitest.config.ts"]
+    "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts", "vitest.config.ts"],
+    "exclude": ["src/runtime/test-bridge.ts"]
 }
