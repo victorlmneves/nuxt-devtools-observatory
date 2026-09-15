@@ -26,6 +26,14 @@ const flags = ref<VirtualizationFlags>({ ...defaultFlags })
 
 let initialized = false
 
+function getStorage(): Storage | null {
+    if (typeof window === 'undefined') {
+        return null
+    }
+
+    return typeof localStorage === 'undefined' ? null : localStorage
+}
+
 function parseBooleanParam(value: string | null): boolean | null {
     if (value == null) {
         return null
@@ -47,12 +55,14 @@ function isFlagRecord(value: unknown): value is Partial<VirtualizationFlags> {
 }
 
 function readFromStorage(): VirtualizationFlags {
-    if (typeof window === 'undefined' || !window.localStorage) {
+    const storage = getStorage()
+
+    if (!storage) {
         return { ...defaultFlags }
     }
 
     try {
-        const raw = window.localStorage.getItem(VIRTUALIZATION_STORAGE_KEY)
+        const raw = storage.getItem(VIRTUALIZATION_STORAGE_KEY)
 
         if (!raw) {
             return { ...defaultFlags }
@@ -78,12 +88,14 @@ function readFromStorage(): VirtualizationFlags {
 }
 
 function persist(next: VirtualizationFlags) {
-    if (typeof window === 'undefined' || !window.localStorage) {
+    const storage = getStorage()
+
+    if (!storage) {
         return
     }
 
     try {
-        window.localStorage.setItem(VIRTUALIZATION_STORAGE_KEY, JSON.stringify(next))
+        storage.setItem(VIRTUALIZATION_STORAGE_KEY, JSON.stringify(next))
     } catch {
         // Ignore quota / private-mode failures.
     }

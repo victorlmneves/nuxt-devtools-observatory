@@ -2,7 +2,6 @@
 import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
-import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
 import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
@@ -60,6 +59,18 @@ function nodeBadges(node: ComponentNode): string[] {
     return badges
 }
 
+const TREE_DEPTH_PALETTE = [
+    { bg: 'rgb(104 189 122 / 16%)', border: 'rgb(142 226 160 / 35%)' },
+    { bg: 'rgb(95 159 225 / 16%)', border: 'rgb(130 193 255 / 35%)' },
+    { bg: 'rgb(229 176 92 / 16%)', border: 'rgb(247 203 132 / 35%)' },
+    { bg: 'rgb(176 129 220 / 16%)', border: 'rgb(206 163 246 / 35%)' },
+    { bg: 'rgb(225 122 142 / 16%)', border: 'rgb(245 161 178 / 35%)' },
+] as const
+
+function toneForDepth(depth: number) {
+    return TREE_DEPTH_PALETTE[depth % TREE_DEPTH_PALETTE.length]
+}
+
 const TreeNode = defineComponent({
     name: 'TreeNode',
     props: {
@@ -83,6 +94,7 @@ const TreeNode = defineComponent({
             return {
                 selected: props.selected === node.id,
                 hot: isHot(node),
+                'no-toggle': node.children.length === 0,
             }
         }
 
@@ -93,99 +105,111 @@ const TreeNode = defineComponent({
             const metric = props.mode === 'count' ? `${node.rerenders + node.mountCount}` : `${node.avgMs.toFixed(1)}ms`
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
             const badges = nodeBadges(node)
+            const tone = toneForDepth(node.depth)
 
-            return h('div', { class: 'tree-node' }, [
-                h(
-                    'div',
-                    {
-                        class: ['tree-row', rowClass(node)],
-                        style: { '--tree-depth': String(node.depth) },
-                        onClick: (event: MouseEvent) => {
-                            event.stopPropagation()
-                            emit('select', node)
-                        },
+            return h(
+                'div',
+                {
+                    class: 'tree-node',
+                    style: {
+                        '--tree-depth': String(node.depth),
+                        '--tree-node-bg': tone.bg,
+                        '--tree-node-border': tone.border,
                     },
-                    [
-                        h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
-                        h(
-                            'button',
-                            {
-                                class: ['tree-toggle', { empty: !canExpand }],
-                                disabled: !canExpand,
-                                onClick: (event: MouseEvent) => {
-                                    event.stopPropagation()
-
-                                    if (canExpand) {
-                                        emit('toggle', node.id)
-                                    }
-                                },
+                },
+                [
+                    h(
+                        'div',
+                        {
+                            class: ['tree-row', rowClass(node)],
+                            onClick: (event: MouseEvent) => {
+                                event.stopPropagation()
+                                emit('select', node)
                             },
-                            canExpand ? (expanded ? '⌄' : '›') : ''
-                        ),
-                        h('div', { class: 'tree-copy' }, [
-                            h('span', { class: 'tree-name mono', title: node.label }, node.label),
-                            badges.length
-                                ? h(
-                                      'div',
-                                      { class: 'tree-badges' },
-                                      badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
-                                  )
-                                : null,
-                        ]),
-                        h('div', { class: 'tree-metrics mono' }, [
-                            node.isPersistent
-                                ? h(
-                                      'span',
-                                      { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
-                                      'persistent'
-                                  )
-                                : null,
-                            node.isHydrationMount
-                                ? h(
-                                      'span',
-                                      {
-                                          class: 'tree-hydration-pill',
-                                          title: 'First mount was SSR hydration — not a user-triggered render',
-                                      },
-                                      'hydrated'
-                                  )
-                                : null,
-                            h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
-                            node.file && node.file !== 'unknown'
+                        },
+                        [
+                            h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
+                            canExpand
                                 ? h(
                                       'button',
                                       {
-                                          class: 'tree-jump-btn',
-                                          title: `Open ${node.file} in editor`,
-                                          onClick: (e: MouseEvent) => {
-                                              e.stopPropagation()
-                                              openInEditor(node.file)
+                                          class: 'tree-toggle',
+                                          onClick: (event: MouseEvent) => {
+                                              event.stopPropagation()
+                                              emit('toggle', node.id)
                                           },
                                       },
-                                      '↗'
+                                      expanded ? '⌄' : '›'
                                   )
                                 : null,
-                        ]),
-                    ]
-                ),
-                expanded && canExpand
-                    ? h(
-                          'div',
-                          { class: 'tree-children' },
-                          node.children.map((child) =>
-                              h(TreeNode, {
-                                  node: child,
-                                  mode: props.mode,
-                                  threshold: props.threshold,
-                                  selected: props.selected,
-                                  expandedIds: props.expandedIds,
-                                  onSelect: (value: ComponentNode) => emit('select', value),
-                                  onToggle: (value: string) => emit('toggle', value),
-                              })
+                            h('div', { class: 'tree-copy' }, [
+                                h('span', { class: 'tree-name mono', title: node.label }, node.label),
+                                badges.length
+                                    ? h(
+                                          'div',
+                                          { class: 'tree-badges' },
+                                          badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
+                                      )
+                                    : null,
+                            ]),
+                            h('div', { class: 'tree-metrics mono' }, [
+                                node.isPersistent
+                                    ? h(
+                                          'span',
+                                          { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
+                                          'persistent'
+                                      )
+                                    : null,
+                                node.isHydrationMount
+                                    ? h(
+                                          'span',
+                                          {
+                                              class: 'tree-hydration-pill',
+                                              title: 'First mount was SSR hydration — not a user-triggered render',
+                                          },
+                                          'hydrated'
+                                      )
+                                    : null,
+                                isHot(node)
+                                    ? h('span', { class: 'tree-hot-pill', title: 'Hot component — exceeds current threshold' }, 'hot')
+                                    : null,
+                                h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
+                                node.file && node.file !== 'unknown'
+                                    ? h(
+                                          'button',
+                                          {
+                                              class: 'tree-jump-btn',
+                                              title: `Open ${node.file} in editor`,
+                                              onClick: (e: MouseEvent) => {
+                                                  e.stopPropagation()
+                                                  openInEditor(node.file)
+                                              },
+                                          },
+                                          '↗'
+                                      )
+                                    : null,
+                            ]),
+                        ]
+                    ),
+                    expanded && canExpand
+                        ? h(
+                              'div',
+                              { class: 'tree-children' },
+                              node.children.map((child) =>
+                                  h(TreeNode, {
+                                      node: child,
+                                      mode: props.mode,
+                                      threshold: props.threshold,
+                                      selected: props.selected,
+                                      expandedIds: props.expandedIds,
+                                      onSelect: (value: ComponentNode) => emit('select', value),
+                                      onToggle: (value: string) => emit('toggle', value),
+                                  })
+                              )
                           )
-                      )
-                    : null,
-            ])
+                        : null,
+                ]
+            )
         }
     },
 })
@@ -246,7 +270,6 @@ const frozenSnapshot = ref<RenderEntry[]>([])
 const expansionReady = ref(false)
 const treeFrameRef = ref<HTMLElement | null>(null)
 
-const { effective: virtualizationFlags } = useVirtualizationFlags()
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 6 })
 
 function displayLabel(entry: RenderEntry) {
@@ -602,7 +625,9 @@ const visibleTreeRoots = computed(() => {
     return [visibleActiveRoot.value]
 })
 
-const virtualizedTreeEnabled = computed(() => virtualizationFlags.value.heatmap)
+// Keep true nested parent->child containers for this tree view.
+// The virtualized list flattens hierarchy and breaks the wrapping visual.
+const virtualizedTreeEnabled = computed(() => false)
 
 function flattenVisibleTree(root: ComponentNode | null, expanded: Set<string>) {
     if (!root) {
@@ -1051,18 +1076,16 @@ function formatTimestamp(t: number): string {
                                 v-for="row in visibleTreeRowItems"
                                 :key="row.node.id"
                                 class="tree-row"
-                                :class="{ selected: activeSelected?.id === row.node.id, hot: row.hot }"
+                                :class="[
+                                    `depth-${Math.min(row.node.depth, 4)}`,
+                                    { selected: activeSelected?.id === row.node.id, hot: row.hot, 'no-toggle': !row.node.children.length },
+                                ]"
                                 :style="{ '--tree-depth': String(row.node.depth) }"
                                 @click="selectNode(row.node)"
                             >
                                 <span class="tree-rail" aria-hidden="true" />
-                                <button
-                                    class="tree-toggle"
-                                    :class="{ empty: !row.node.children.length }"
-                                    :disabled="!row.node.children.length"
-                                    @click.stop="row.node.children.length ? toggleNode(row.node.id) : undefined"
-                                >
-                                    {{ row.node.children.length ? (expandedIds.has(row.node.id) ? '⌄' : '›') : '' }}
+                                <button v-if="row.node.children.length" class="tree-toggle" @click.stop="toggleNode(row.node.id)">
+                                    {{ expandedIds.has(row.node.id) ? '⌄' : '›' }}
                                 </button>
                                 <div class="tree-copy">
                                     <span class="tree-name mono" :title="row.node.label">{{ row.node.label }}</span>
@@ -1085,6 +1108,7 @@ function formatTimestamp(t: number): string {
                                     >
                                         hydrated
                                     </span>
+                                    <span v-if="row.hot" class="tree-hot-pill" title="Hot component — exceeds current threshold">hot</span>
                                     <span class="tree-metric-pill">
                                         {{ row.metricValue }}
                                         {{ row.metricLabel }}
@@ -1400,9 +1424,10 @@ function formatTimestamp(t: number): string {
 }
 
 .render-heatmap__tree-canvas {
-    display: inline-block;
-    min-width: 100%;
-    width: max-content;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .render-heatmap__tree-spacer {
@@ -1410,35 +1435,44 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-node) {
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    border: 1px solid var(--tree-node-border, #c8e6c9);
+    border-radius: var(--radius);
+    background: var(--tree-node-bg, #e8f5e9);
+    padding: 4px;
 }
 
 :deep(.tree-row) {
     display: grid;
-    grid-template-columns: 8px 18px minmax(0, 1fr) auto;
+    grid-template-columns: 18px minmax(140px, 1fr) auto;
     align-items: center;
     gap: 6px;
     min-width: 0;
     width: 100%;
-    padding: 4px 8px;
-    padding-left: calc(8px + (var(--tree-depth, 0) * 16px));
+    padding: 4px 0 4px 4px;
     border: 1px solid transparent;
+    background: transparent;
     border-radius: var(--radius);
     cursor: pointer;
     white-space: nowrap;
 }
 
+:deep(.tree-row.no-toggle) {
+    grid-template-columns: minmax(140px, 1fr) auto;
+}
+
 :deep(.tree-row:hover) {
-    background: var(--bg2);
+    background: color-mix(in srgb, var(--bg3) 45%, transparent);
 }
 
 :deep(.tree-row.selected) {
-    background: color-mix(in srgb, var(--teal) 12%, var(--bg2));
+    background: color-mix(in srgb, var(--teal) 12%, transparent);
     border-color: var(--teal);
 }
 
 :deep(.tree-row.hot) {
-    box-shadow: inset 2px 0 0 var(--red);
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    border-color: color-mix(in srgb, var(--red) 45%, var(--border));
 }
 
 :deep(.tree-toggle) {
@@ -1458,12 +1492,8 @@ function formatTimestamp(t: number): string {
     cursor: default;
 }
 
-:deep(.tree-toggle.empty) {
-    opacity: 0;
-}
-
 :deep(.tree-rail) {
-    display: block;
+    display: none;
     width: 2px;
     height: 14px;
     border-radius: 999px;
@@ -1473,23 +1503,29 @@ function formatTimestamp(t: number): string {
 :deep(.tree-copy) {
     display: flex;
     align-items: center;
+    flex: 1;
     min-width: 0;
-    gap: 6px;
+    gap: 4px;
     overflow: hidden;
 }
 
 :deep(.tree-name) {
     font-size: 12px;
     color: var(--text);
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
 }
 
 :deep(.tree-badges) {
-    display: flex;
+    display: none;
     gap: 6px;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 120px;
     overflow: hidden;
 }
 
@@ -1502,23 +1538,23 @@ function formatTimestamp(t: number): string {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 160px;
+    max-width: 120px;
 }
 
 :deep(.tree-metrics) {
     display: flex;
     align-items: center;
-    min-width: 92px;
+    min-width: 80px;
     justify-content: flex-end;
     flex-shrink: 0;
-    gap: 6px;
+    gap: 4px;
 }
 
 :deep(.tree-metric-pill) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 78px;
+    min-width: 64px;
     padding: 2px 8px;
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -1549,10 +1585,21 @@ function formatTimestamp(t: number): string {
     color: color-mix(in srgb, var(--teal) 80%, var(--text));
 }
 
+:deep(.tree-hot-pill) {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--red) 60%, var(--border));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--red) 12%, var(--bg2));
+    font-size: 10px;
+    color: color-mix(in srgb, var(--red) 85%, var(--text));
+}
+
 :deep(.tree-children) {
-    margin-left: 7px;
-    padding-left: 11px;
-    border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    margin-left: 4px;
+    padding-left: 6px;
+    border-left: none;
 }
 
 .render-heatmap__detail-empty {
@@ -1776,8 +1823,8 @@ function formatTimestamp(t: number): string {
         display: none;
     }
 
-    .render-heatmap__detail-panel {
+    /* .render-heatmap__detail-panel {
         max-height: 220px;
-    }
+    } */
 }
 </style>
