@@ -17,9 +17,9 @@
  * `@vue/compiler-sfc` still locates the script blocks correctly in those
  * cases. We only return `null` if no usable block was found at all.
  * @param {string} code
- * @returns {{ content: string; start: number; end: number } | null} The extracted script block with content and position offsets, or null if no script block was found
+ * @returns {{ content: string; start: number; end: number; lang: string | null } | null} The extracted script block with content, position offsets, and lang, or null if no script block was found
  */
-export function extractScriptBlock(code: string): { content: string; start: number; end: number } | null {
+export function extractScriptBlock(code: string): { content: string; start: number; end: number; lang: string | null } | null {
     try {
         // Dynamic require resolved at build time — @vue/compiler-sfc is a
         // transitive dependency of `nuxt` and is always present in the dev graph.
@@ -48,10 +48,63 @@ export function extractScriptBlock(code: string): { content: string; start: numb
         const start = block.loc.start.offset
         const end = block.loc.end.offset
 
-        return { content: block.content, start, end }
+        return { content: block.content, start, end, lang: block.lang ?? null }
     } catch {
         // If @vue/compiler-sfc is somehow unavailable, skip the transform rather
         // than crashing the dev server.
         return null
+    }
+}
+
+export function stripQueryId(id: string): string {
+    const query = id.indexOf('?')
+
+    return query === -1 ? id : id.slice(0, query)
+}
+
+export function isInstrumentableFilename(filename: string): boolean {
+    return filename.endsWith('.vue') || /\.[cm]?[jt]sx?$/.test(filename)
+}
+
+export function resolveTransformTarget(
+    code: string,
+    id: string
+): {
+    scriptCode: string
+    scriptStart: number
+    isVue: boolean
+    filename: string
+    lang: string | null
+} | null {
+    const filename = stripQueryId(id)
+
+    if (!isInstrumentableFilename(filename)) {
+        return null
+    }
+
+    const isVue = filename.endsWith('.vue')
+
+    if (!isVue) {
+        return {
+            scriptCode: code,
+            scriptStart: 0,
+            isVue: false,
+            filename,
+            lang: null,
+        }
+    }
+
+    const block = extractScriptBlock(code)
+
+    if (!block) {
+        return null
+    }
+
+    return {
+        scriptCode: block.content,
+        scriptStart: block.start,
+        isVue: true,
+        filename,
+        lang: block.lang,
     }
 }

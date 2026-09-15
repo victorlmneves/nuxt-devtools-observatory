@@ -211,5 +211,20 @@ describe('composableTrackerPlugin', () => {
 
             expect(result).toBeFalsy()
         })
+
+        it('transforms composables inside <script setup lang="tsx"> with JSX', () => {
+            const sfc = [
+                '<template></template>',
+                '<script setup lang="tsx">',
+                'const { count } = useCounter()',
+                'const node = <span>{count}</span>',
+                '</script>',
+            ].join('\n')
+            const result = transform(sfc, '/project/src/pages/Counter.vue')
+
+            expect(result).not.toBeNull()
+            expect(result!.code).toContain('__trackComposable(')
+            expect(result!.code).toContain('"useCounter"')
+        })
     })
 })
