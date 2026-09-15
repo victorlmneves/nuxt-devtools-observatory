@@ -43,3 +43,8 @@ export default defineNuxtConfig({
 
 Most options can also be set through environment variables (see `.env.example`).
 Nuxt config values take precedence over `.env` values.
+
+Shipped tracker tabs default to **on** when neither `nuxt.config` nor env sets them.
+Use `OBSERVATORY_*=false` (or `0`) to disable a tab without a config entry.
+`piniaTracker` stays off until that tracker is merged.
+`instrumentServer` defaults to on for SSR apps and off for SPA apps.

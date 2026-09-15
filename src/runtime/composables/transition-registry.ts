@@ -1,5 +1,6 @@
 import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
 import type { Slots } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 import { startSpan } from '../tracing/tracing'
 import type { Span } from '../tracing/trace'
 import { traceStore } from '../tracing/traceStore'
@@ -34,6 +35,7 @@ export function setupTransitionRegistry() {
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     function register(entry: TransitionEntry) {
@@ -151,7 +153,7 @@ export function setupTransitionRegistry() {
             const id = typeof metadata.id === 'string' ? metadata.id : span.id
             const transitionName = typeof metadata.transitionName === 'string' ? metadata.transitionName : 'default'
             const parentComponent = typeof metadata.parentComponent === 'string' ? metadata.parentComponent : 'unknown'
-            const direction = metadata.direction === 'leave' ? 'leave' : 'enter'
+            const direction: TransitionEntry['direction'] = metadata.direction === 'leave' ? 'leave' : 'enter'
             const knownPhase = metadata.phase
             const phase: TransitionEntry['phase'] =
                 knownPhase === 'entering' ||
