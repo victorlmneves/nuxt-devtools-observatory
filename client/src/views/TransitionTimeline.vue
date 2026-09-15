@@ -266,6 +266,7 @@ function directionColor(e: TransitionEntry): string {
                         >
                             <td>
                                 <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
+                                <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm"> group</span>
                             </td>
                             <td>
                                 <span class="transition-timeline__direction mono" :style="{ color: directionColor(row.entry) }">
@@ -336,6 +337,12 @@ function directionColor(e: TransitionEntry): string {
                         <div class="transition-timeline__detail-row">
                             <span class="transition-timeline__detail-key">Phase</span>
                             <span class="badge" :class="phaseBadgeClass(selected.phase)">{{ selected.phase }}</span>
+                        </div>
+                        <div class="transition-timeline__detail-row">
+                            <span class="transition-timeline__detail-key">Type</span>
+                            <span class="transition-timeline__detail-val transition-timeline__detail-val--mono mono">
+                                {{ selected.component ?? 'Transition' }}
+                            </span>
                         </div>
                         <div class="transition-timeline__detail-row">
                             <span class="transition-timeline__detail-key">Component</span>

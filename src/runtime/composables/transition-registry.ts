@@ -17,6 +17,7 @@ export interface TransitionEntry {
     cancelled: boolean
     appear: boolean
     mode?: string
+    component?: 'Transition' | 'TransitionGroup'
 }
 
 // Allow configuration via .env or Nuxt runtime config
@@ -51,6 +52,7 @@ export function setupTransitionRegistry() {
                 cancelled: entry.cancelled,
                 appear: entry.appear,
                 mode: entry.mode,
+                component: entry.component,
             },
             startTime: entry.startTime,
         })
@@ -67,6 +69,7 @@ export function setupTransitionRegistry() {
             cancelled: entry.cancelled,
             appear: entry.appear,
             mode: entry.mode,
+            component: entry.component,
         })
 
         markDirty()
