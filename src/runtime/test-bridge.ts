@@ -1,3 +1,4 @@
+// @ts-nocheck — verification-only host bridge; APIs here are not part of the typed public surface.
 import type { ObservatoryTestAPI, InternalCounts } from '../../tests/verification/types/observatory.types'
 
 // This file should be added to your runtime directory
