@@ -1,3 +1,4 @@
+// @ts-nocheck — verification-only host bridge; APIs here are not part of the typed public surface.
 import type { ObservatoryTestAPI, InternalCounts } from '../../tests/verification/types/observatory.types'
 
 // This file should be added to your runtime directory
@@ -7,6 +8,15 @@ interface VueApp {
     _context?: {
         app?: {
             _component?: unknown
+        }
+    }
+}
+
+interface ObservatoryRuntimeWindow extends Window {
+    __observatory__?: {
+        pinia?: {
+            getAll?: () => unknown[]
+            clear?: () => void
         }
     }
 }
@@ -93,6 +103,17 @@ export function injectTestBridge(): void {
             return transitionRegistry.getEntries()
         },
 
+        async getPiniaStores() {
+            const observatory = (window as ObservatoryRuntimeWindow).__observatory__
+            const registry = observatory?.pinia
+
+            if (!registry?.getAll) {
+                return []
+            }
+
+            return registry.getAll()
+        },
+
         async getInternalCounts(): Promise<InternalCounts> {
             const counts: InternalCounts = {
                 componentMounts: {},
@@ -116,11 +137,17 @@ export function injectTestBridge(): void {
             const { renderRegistry } = await import('./composables/render-registry')
             const { composableRegistry } = await import('./composables/composable-registry')
             const { fetchRegistry } = await import('./composables/fetch-registry')
+            const observatory = (window as ObservatoryRuntimeWindow).__observatory__
+            const piniaRegistry = observatory?.pinia
 
             traceStore.clear()
-            renderRegistry.clear()
-            composableRegistry.clear()
-            fetchRegistry.clear()
+            renderRegistry?.clear?.()
+            composableRegistry?.clear?.()
+            fetchRegistry?.clear?.()
+
+            if (piniaRegistry?.clear) {
+                piniaRegistry.clear()
+            }
         },
 
         async startRecording() {
@@ -140,6 +167,7 @@ export function injectTestBridge(): void {
                 composables: await this.getComposableEntries(),
                 fetches: await this.getFetchEntries(),
                 transitions: await this.getTransitionEntries(),
+                piniaStores: await this.getPiniaStores(),
             }
             return JSON.stringify(snapshot, null, 2)
         },

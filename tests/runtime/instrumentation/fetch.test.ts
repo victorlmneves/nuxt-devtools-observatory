@@ -1,12 +1,19 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setupFetchInstrumentation } from '@observatory/runtime/instrumentation/fetch'
+import {
+    OBSERVATORY_FETCH_TRACKED,
+    beginNestedFetchSuppress,
+    endNestedFetchSuppress,
+} from '@observatory/runtime/instrumentation/fetch-dedup'
+import { setupFetchRegistry } from '@observatory/runtime/composables/fetch-registry'
 import { traceStore } from '@observatory/runtime/tracing/traceStore'
 import type { NuxtApp } from '#app'
 
 const TRACE_CONTEXT_KEY = '__observatory_trace_context__'
 const WRAPPED_FLAG = '__observatory_wrapped_fetch__'
 
-function makeNuxtApp(fetchImpl?: (...args: unknown[]) => Promise<unknown>) {
+function makeNuxtApp(fetchImpl?: ((...args: unknown[]) => Promise<unknown>) & { raw?: unknown; create?: unknown }) {
     return {
         $fetch: fetchImpl ?? vi.fn().mockResolvedValue({}),
     } as unknown as NuxtApp
@@ -195,6 +202,88 @@ describe('setupFetchInstrumentation', () => {
 
             expect(() => setupFetchInstrumentation(nuxtApp)).not.toThrow()
             expect(getSpans()).toHaveLength(0)
+        })
+    })
+
+    describe('fetch dashboard registry', () => {
+        it('registers pending then ok for a direct $fetch call', async () => {
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({ id: 1 }))
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/stats', { method: 'get' })
+
+            const entries = registry.getAll()
+            expect(entries).toHaveLength(1)
+            expect(entries[0].url).toBe('/api/stats')
+            expect(entries[0].method).toBe('GET')
+            expect(entries[0].source).toBe('$fetch')
+            expect(entries[0].status).toBe('ok')
+            expect(entries[0].payload).toEqual({ id: 1 })
+        })
+
+        it('wraps $fetch.raw onto the same dashboard', async () => {
+            const raw = vi.fn().mockResolvedValue({ _data: { via: 'raw' } })
+            const original = Object.assign(vi.fn().mockResolvedValue({}), { raw })
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(original)
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            await (nuxtApp.$fetch as { raw: (...a: unknown[]) => Promise<unknown> }).raw('/api/raw')
+
+            const entries = registry.getAll()
+            expect(entries).toHaveLength(1)
+            expect(entries[0].source).toBe('$fetch.raw')
+            expect(entries[0].payload).toEqual({ via: 'raw' })
+            expect(raw).toHaveBeenCalled()
+        })
+
+        it('wraps instances returned by $fetch.create', async () => {
+            const child = vi.fn().mockResolvedValue({ created: true })
+            const original = Object.assign(vi.fn().mockResolvedValue({}), {
+                create: vi.fn(() => child),
+            })
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(original)
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            const api = (nuxtApp.$fetch as { create: () => (...a: unknown[]) => Promise<unknown> }).create()
+            await api('/api/from-create')
+
+            const entries = registry.getAll()
+            expect(entries).toHaveLength(1)
+            expect(entries[0].url).toBe('/api/from-create')
+            expect(entries[0].source).toBe('$fetch')
+            expect(child).toHaveBeenCalled()
+        })
+
+        it('does not add a dashboard row for useFetch-tagged options', async () => {
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/users', {
+                [OBSERVATORY_FETCH_TRACKED]: true,
+            })
+
+            expect(registry.getAll()).toHaveLength(0)
+            expect(getSpans()).toHaveLength(1)
+        })
+
+        it('does not add a dashboard row while nested useAsyncData suppress is active', async () => {
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            beginNestedFetchSuppress()
+            try {
+                await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/nested')
+            } finally {
+                endNestedFetchSuppress()
+            }
+
+            expect(registry.getAll()).toHaveLength(0)
+            expect(getSpans()).toHaveLength(1)
         })
     })
 })

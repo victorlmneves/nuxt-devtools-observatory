@@ -6,6 +6,7 @@ import type {
     ProvideEntry,
     InjectEntry,
     ComposableEntry,
+    PiniaStoreEntry,
     RenderEntry,
     TransitionEntry,
     TraceEntry,
@@ -16,6 +17,7 @@ type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] 
 const fetchEntries = ref<FetchEntry[]>([])
 const provideInject = ref<ProvideInjectSnapshot>({ provides: [], injects: [] })
 const composables = ref<ComposableEntry[]>([])
+const piniaStores = ref<PiniaStoreEntry[]>([])
 const renders = ref<RenderEntry[]>([])
 const transitions = ref<TransitionEntry[]>([])
 const traces = ref<TraceEntry[]>([])
@@ -57,6 +59,7 @@ function applySnapshot(data: ObservatorySnapshot) {
           }
         : { provides: [], injects: [] }
     composables.value = cloneArray(data.composables as ComposableEntry[] | undefined)
+    piniaStores.value = cloneArray(data.piniaStores as PiniaStoreEntry[] | undefined)
     renders.value = normalizeRenderEntries(data.renders as RenderEntry[] | undefined)
     transitions.value = cloneArray(data.transitions as TransitionEntry[] | undefined)
     traces.value = cloneArray(data.traces as TraceEntry[] | undefined)
@@ -87,6 +90,7 @@ function applySnapshot(data: ObservatorySnapshot) {
         debugLog('first snapshot received', {
             fetch: fetchEntries.value.length,
             composables: composables.value.length,
+            piniaStores: piniaStores.value.length,
             renders: renders.value.length,
             transitions: transitions.value.length,
             traces: traces.value.length,
@@ -200,6 +204,21 @@ export function editComposableValue(id: string, key: string, value: unknown) {
     })
 }
 
+export function clearPiniaStores() {
+    piniaStores.value = []
+    rpc?.clearPiniaStores()
+        .then(() => rpc?.requestSnapshot())
+        .catch((error) => {
+            debugLog('clearPiniaStores failed', error)
+        })
+}
+
+export function editPiniaState(storeId: string, path: string, value: unknown) {
+    rpc?.editPiniaState(storeId, path, value).catch((error) => {
+        debugLog('editPiniaState failed', error)
+    })
+}
+
 export function openInEditor(file: string) {
     if (!file || file === 'unknown') {
         return
@@ -233,6 +252,7 @@ export function useObservatoryData() {
         fetch: fetchEntries,
         provideInject,
         composables,
+        piniaStores,
         renders,
         transitions,
         traces,

@@ -214,7 +214,7 @@ const TreeNode = defineComponent({
     },
 })
 
-const { renders, connected } = useObservatoryData()
+const { renders, connected, features } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown: onDetailHandleMouseDown } = useResizablePane(280, 'observatory:heatmap:detailWidth')
 
 const activeMode = ref<'count' | 'time'>('count')
@@ -223,10 +223,31 @@ const activeRoute = ref('')
 // Separate thresholds per mode so switching modes doesn't produce nonsense results.
 // Count: flag components that rendered 3+ times (1 hydration mount is normal).
 // Time: flag components averaging 16ms+ (one animation frame budget).
-const COUNT_THRESHOLD = import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT ?? 3
-const TIME_THRESHOLD = import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME ?? 1600
-const countThreshold = ref(Number(COUNT_THRESHOLD))
-const timeThreshold = ref(Number(TIME_THRESHOLD))
+const countThreshold = ref(3)
+const timeThreshold = ref(16)
+let hostThresholdsApplied = false
+
+watch(
+    features,
+    (next) => {
+        if (hostThresholdsApplied || !next) {
+            return
+        }
+
+        if (typeof next.heatmapThresholdCount === 'number') {
+            countThreshold.value = next.heatmapThresholdCount
+        }
+
+        if (typeof next.heatmapThresholdTime === 'number') {
+            timeThreshold.value = next.heatmapThresholdTime
+        }
+
+        if (typeof next.heatmapThresholdCount === 'number' || typeof next.heatmapThresholdTime === 'number') {
+            hostThresholdsApplied = true
+        }
+    },
+    { immediate: true }
+)
 // Writable computed so the threshold slider can use v-model directly.
 const activeThreshold = computed({
     get: () => (activeMode.value === 'count' ? countThreshold.value : timeThreshold.value),

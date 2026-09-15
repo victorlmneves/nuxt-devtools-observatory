@@ -13,22 +13,15 @@ export default defineNuxtConfig({
         autoImport: true,
     },
 
+    // Tracker tabs inherit module defaults (on in dev). Optional OBSERVATORY_* env
+    // vars still override those defaults. Heatmap time stays 16ms here so playground
+    // demos light up without waiting for a 1600ms render.
     observatory: {
-        instrumentServer: import.meta.env.VITE_OBSERVATORY_INSTRUMENT_SERVER === 'true',
-        fetchDashboard: import.meta.env.VITE_OBSERVATORY_FETCH_DASHBOARD === 'true',
-        provideInjectGraph: import.meta.env.VITE_OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
-        composableTracker: import.meta.env.VITE_OBSERVATORY_COMPOSABLE_TRACKER === 'true',
-        renderHeatmap: import.meta.env.VITE_OBSERVATORY_RENDER_HEATMAP === 'true',
-        transitionTracker: import.meta.env.VITE_OBSERVATORY_TRANSITION_TRACKER === 'true',
-        traceViewer: import.meta.env.VITE_OBSERVATORY_TRACE_VIEWER === 'true',
-        heatmapThresholdCount: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT
-            ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
+        heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT
+            ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT)
             : 3,
-        heatmapThresholdTime: import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME
-            ? Number(import.meta.env.VITE_OBSERVATORY_HEATMAP_THRESHOLD_TIME)
-            : 16,
-        heatmapHideInternals: import.meta.env.VITE_OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
-        fetchPageSize: import.meta.env.VITE_OBSERVATORY_FETCH_PAGE_SIZE ? Number(import.meta.env.VITE_OBSERVATORY_FETCH_PAGE_SIZE) : 20,
+        heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 16,
+        fetchPageSize: process.env.OBSERVATORY_FETCH_PAGE_SIZE ? Number(process.env.OBSERVATORY_FETCH_PAGE_SIZE) : 20,
     },
 
     devtools: { enabled: true },

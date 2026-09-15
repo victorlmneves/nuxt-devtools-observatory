@@ -104,7 +104,7 @@ test.describe('Provide/Inject Graph Correctness', () => {
 
         if (updatedProvider) {
             const updatedValue = updatedProvider.value as Record<string, unknown>
-            expect(updatedValue.name).toBe('Updated Name')
+            expect(updatedValue['name']).toBe('Updated Name')
         }
     })
 

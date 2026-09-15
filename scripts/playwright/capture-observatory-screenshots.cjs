@@ -10,6 +10,7 @@ const screenshots = [
   { name: 'fetch-dashboard', path: '/fetch', file: 'docs/screenshots/fetch-dashboard.png' },
   { name: 'provide-inject-graph', path: '/provide', file: 'docs/screenshots/provide-inject-graph.png' },
   { name: 'composable-tracker', path: '/composables', file: 'docs/screenshots/composable-tracker.png' },
+  { name: 'pinia-tracker', path: '/pinia', file: 'docs/screenshots/pinia-tracker.png' },
   { name: 'render-heatmap', path: '/heatmap', file: 'docs/screenshots/render-heatmap.png' },
   { name: 'transition-tracker', path: '/transitions', file: 'docs/screenshots/transition-tracker.png' },
   { name: 'trace-viewer', path: '/traces', file: 'docs/screenshots/trace-viewer.png' },
@@ -242,7 +243,53 @@ const mockData = {
         if (firstRow) firstRow.click();
       });
       await page.waitForTimeout(400);
+    } else if (tab.name === 'pinia-tracker') {
+      // Wait for the SPA to render tabs
+      await page.waitForTimeout(1000);
+
+      // Click the Pinia Tracker tab if not already active
+      let tabButton =
+        (await page.$('[data-testid="pinia-tracker-tab"]')) ||
+        (await page.$('button:has-text("Pinia Tracker")')) ||
+        (await page.$('[role="tab"]:has-text("Pinia Tracker")')) ||
+        (await page.$('text=Pinia Tracker'));
+
+      if (tabButton) {
+        await tabButton.click();
+        await page.waitForTimeout(500);
+      }
+
+
+      // Force Pinia store usage in the app context so the tracker detects it
+      await page.evaluate(() => {
+        if (window.__APP__ && window.__APP__.pinia) {
+          // Try to access a real store if available
+          if (window.__APP__.pinia.useCartStore) {
+            window.__APP__.pinia.useCartStore();
+          } else if (window.Pinia && window.Pinia.defineStore) {
+            // Fallback: define and access a test store
+            const { defineStore } = window.Pinia;
+            const useScreenshotStore = defineStore('screenshot', {
+              state: () => ({ count: 1, label: 'Screenshot Store' }),
+              actions: {
+                increment() { this.count++; }
+              }
+            });
+            useScreenshotStore(window.__APP__.pinia)();
+          }
+        }
+      });
+      await page.waitForTimeout(500);
+
+      // Optionally select the first store row if present (for visual focus)
+      await page.waitForSelector('.pinia-store-row, .data-table tbody tr', { timeout: 5000 }).catch(() => {});
+      await page.evaluate(() => {
+        const firstRow = document.querySelector('.pinia-store-row, .data-table tbody tr');
+        if (firstRow) firstRow.click();
+      });
+      await page.waitForTimeout(200);
     }
+
     // Save screenshot
     await page.screenshot({ path: path.resolve(tab.file), fullPage: true });
     console.log(`Saved screenshot: ${tab.file}`);

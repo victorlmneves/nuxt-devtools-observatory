@@ -1,6 +1,6 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.1.33",
+    "version": "0.4.0",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Render Heatmap",
     "license": "MIT",
     "repository": {
@@ -37,6 +37,10 @@
         "dist",
         "client"
     ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "scripts": {
         "dev": "concurrently -r -n client,nuxt \"pnpm dev:client\" \"nuxi dev playground\"",
         "dev:client": "vite build --watch --config client/vite.config.ts",
@@ -48,9 +52,11 @@
         "build:client": "vite build --config client/vite.config.ts",
         "build": "npm run build:client && nuxt-module-build build",
         "prepack": "npm run build",
+        "prepare": "husky",
+        "release": "semantic-release",
         "lint": "eslint .",
         "format": "prettier --write '**/*.{ts,vue,js,json}' --ignore-path .prettierignore && stylelint '**/*.{css,vue}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --ignore-pattern 'docs/dist/**' --fix && eslint --fix '**/*.{ts,vue,js}' --ignore-pattern '**/.nuxt/**' --ignore-pattern '**/.output/**' --ignore-pattern 'coverage/**' --ignore-pattern 'client/dist/**' --ignore-pattern 'scripts/**' --ignore-pattern 'docs/dist/**'",
-        "typecheck": "vue-tsc --noEmit",
+        "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p client/tsconfig.json",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:coverage": "vitest run --coverage",
@@ -72,6 +78,8 @@
         "@babel/types": "^7.29.0"
     },
     "devDependencies": {
+        "@commitlint/cli": "^21.2.2",
+        "@commitlint/config-conventional": "^21.2.2",
         "@eslint/js": "^9.39.2",
         "@nuxt/devtools-kit": "4.0.0-alpha.3",
         "@nuxt/eslint": "^1.13.0",
@@ -80,6 +88,10 @@
         "@nuxt/schema": "^3.0.0",
         "@pinia/nuxt": "^0.11.3",
         "@playwright/test": "^1.58.2",
+        "@semantic-release/changelog": "^7.0.0",
+        "@semantic-release/git": "^11.0.1",
+        "@semantic-release/github": "^12.0.9",
+        "@semantic-release/npm": "^13.1.5",
         "@tanstack/vue-virtual": "^3.13.12",
         "@types/babel__generator": "^7.27.0",
         "@types/babel__traverse": "^7.28.0",
@@ -96,11 +108,13 @@
         "eslint-plugin-vue": "^10.7.0",
         "globals": "^17.3.0",
         "happy-dom": "^20.8.4",
+        "husky": "^9.1.7",
         "nuxt": "^3.0.0 || ^4.0.0",
         "pinia": "^3.0.4",
         "playwright": "^1.58.2",
         "postcss-html": "^1.8.1",
         "prettier": "^3.8.1",
+        "semantic-release": "^25.0.9",
         "sinon": "^21.1.2",
         "sirv": "^3.0.2",
         "stylelint": "^17.4.0",
@@ -108,6 +122,7 @@
         "stylelint-config-standard-vue": "^1.0.0",
         "tsx": "^4.21.0",
         "typescript": "^5.9.3",
+        "vue-tsc": "^3.2.2",
         "typescript-eslint": "^8.54.0",
         "unbuild": "^3.6.1",
         "vite": "^6.4.1",

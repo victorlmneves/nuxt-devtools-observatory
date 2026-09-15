@@ -7,7 +7,7 @@ description: Track transition phases, durations, and cancellations in real time.
 
 ## What it tracks
 
-- Transition name and direction
+- `<Transition>` and `<TransitionGroup>` name and direction
 - Lifecycle phase
 - Measured duration
 - Parent component context

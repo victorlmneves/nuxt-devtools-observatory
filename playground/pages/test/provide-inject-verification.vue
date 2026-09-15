@@ -54,6 +54,34 @@ if (import.meta.dev && import.meta.client) {
             <button data-testid="update-user-profile" @click="updateUserProfile">Update User Profile</button>
         </div>
 
+        <div class="live-preview">
+            <h3>Live Provided Value Preview</h3>
+            <p>
+                <strong>Name:</strong>
+                {{ userProfile.name }}
+            </p>
+            <p>
+                <strong>Theme:</strong>
+                {{ userProfile.settings.theme }}
+            </p>
+            <p>
+                <strong>Notifications:</strong>
+                {{ userProfile.settings.notifications ? 'on' : 'off' }}
+            </p>
+            <p>
+                <strong>Language:</strong>
+                {{ userProfile.settings.language }}
+            </p>
+            <p>
+                <strong>Layout:</strong>
+                {{ userProfile.preferences.layout }}
+            </p>
+            <p>
+                <strong>Items/Page:</strong>
+                {{ userProfile.preferences.itemsPerPage }}
+            </p>
+        </div>
+
         <div class="component-tree">
             <h3>Component Tree Structure</h3>
             <div class="tree">
@@ -147,6 +175,25 @@ button:hover {
     border-radius: 8px;
     background-color: #fafafa;
     margin-bottom: 20px;
+}
+
+.live-preview {
+    margin-bottom: 20px;
+    padding: 14px;
+    border: 1px solid #d7e9dd;
+    border-radius: 8px;
+    background-color: #f4fbf6;
+}
+
+.live-preview h3 {
+    margin: 0 0 8px;
+    color: #2f5a3f;
+}
+
+.live-preview p {
+    margin: 4px 0;
+    color: #2f3d34;
+    font-size: 13px;
 }
 
 .tree {

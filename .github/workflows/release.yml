@@ -13,6 +13,8 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: write
+            issues: write
+            pull-requests: write
             id-token: write
 
         steps:
@@ -40,42 +42,19 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            - name: Lint
+              run: pnpm lint
+
+            - name: Typecheck
+              run: pnpm typecheck
+
             - name: Run tests
               run: pnpm test
 
             - name: Build package
               run: pnpm build
 
-            - name: Verify tag matches package version
-              id: package_meta
-              run: |
-                  PACKAGE_NAME="$(node -p 'require("./package.json").name')"
-                  PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
-                  echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
-                  echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-
-            - name: Check if version exists on npm
-              id: npm_check
-              run: |
-                  PACKAGE_NAME="${{ steps.package_meta.outputs.package_name }}"
-                  PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
-
-                  if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
-                    echo "published=true" >> "$GITHUB_OUTPUT"
-                    echo "Version $PACKAGE_VERSION is already published on npm."
-                  else
-                    echo "published=false" >> "$GITHUB_OUTPUT"
-                    echo "Version $PACKAGE_VERSION is not published yet."
-                  fi
-
-            - name: Publish decision
-              run: |
-                  echo "package=${{ steps.package_meta.outputs.package_name }}"
-                  echo "version=${{ steps.package_meta.outputs.package_version }}"
-                  echo "already_published=${{ steps.npm_check.outputs.published }}"
-
             - name: Validate trusted publishing context
-              if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.npm_check.outputs.published == 'false'
               run: |
                   echo "event_name=${GITHUB_EVENT_NAME}"
                   echo "ref=${GITHUB_REF}"
@@ -85,44 +64,13 @@ jobs:
 
                   if [ -z "$ACTIONS_ID_TOKEN_REQUEST_URL" ] || [ -z "$ACTIONS_ID_TOKEN_REQUEST_TOKEN" ]; then
                     echo "Trusted Publishing OIDC context is not available in this run."
-                    echo "Check npm Trusted Publisher mapping: owner/repo/workflow(branch)."
+                    echo "Check npm Trusted Publisher mapping: owner/repo/workflow filename release.yml on branch main."
                     exit 1
                   fi
 
-                  echo "OIDC context detected. Continuing with npm publish."
+                  echo "OIDC context detected. semantic-release will publish to npm when there are releasable commits."
 
-            - name: Publish to npm
-              if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.npm_check.outputs.published == 'false'
-              run: npm publish --access public --provenance
-
-            - name: Create git tag for version
-              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-              run: |
-                  PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
-                  TAG_NAME="v$PACKAGE_VERSION"
-
-                  if git ls-remote --tags origin "refs/tags/$TAG_NAME" | grep -q "$TAG_NAME"; then
-                    echo "Tag $TAG_NAME already exists on remote."
-                    exit 0
-                  fi
-
-                  git config user.name "github-actions[bot]"
-                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                  git tag "$TAG_NAME"
-                  git push origin "$TAG_NAME"
-
-            - name: Create GitHub Release
-              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-              run: |
-                  PACKAGE_VERSION="${{ steps.package_meta.outputs.package_version }}"
-                  TAG_NAME="v$PACKAGE_VERSION"
-
-                  if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-                    echo "GitHub Release $TAG_NAME already exists. Updating title to $PACKAGE_VERSION."
-                    gh release edit "$TAG_NAME" --title "$PACKAGE_VERSION"
-                    exit 0
-                  fi
-
-                  gh release create "$TAG_NAME" --generate-notes --title "$PACKAGE_VERSION"
+            - name: Release and publish to npm
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: pnpm exec semantic-release

@@ -8,10 +8,13 @@ description: Inspect request timing, origin, status, and payload size.
 ## What it tracks
 
 - Request key and URL
+- HTTP method and caller (`useFetch` / `useAsyncData` / `$fetch` / `$fetch.raw`)
 - SSR or CSR origin
 - Status and duration
 - Payload size
 - Waterfall timeline position
+
+Direct `$fetch`, `$fetch.raw`, and instances from `$fetch.create()` are recorded on the client in addition to the `useFetch` / `useAsyncData` family. Nested HTTP from those composables is not duplicated.
 
 ## Paging and virtualization
 

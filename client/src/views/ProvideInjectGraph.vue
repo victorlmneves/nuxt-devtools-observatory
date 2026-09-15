@@ -380,6 +380,22 @@ const visibleNodes = computed<TreeNodeData[]>(() => {
 
 const visibleLeafCountById = computed(() => buildLeafCountMap(visibleNodes.value))
 
+function findNodeById(roots: TreeNodeData[], id: string): TreeNodeData | null {
+    const stack = [...roots]
+
+    while (stack.length) {
+        const node = stack.pop()!
+
+        if (node.id === id) {
+            return node
+        }
+
+        stack.push(...node.children)
+    }
+
+    return null
+}
+
 watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
     if (!currentSelected) {
         return
@@ -396,6 +412,15 @@ watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
 
     if (!ids.has(currentSelected.id)) {
         selectedNode.value = null
+
+        return
+    }
+
+    // Keep details reactive: remap to the latest node instance after snapshots refresh.
+    const latest = findNodeById(currentNodes, currentSelected.id)
+
+    if (latest && latest !== currentSelected) {
+        selectedNode.value = latest
     }
 })
 

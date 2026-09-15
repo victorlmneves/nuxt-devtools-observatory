@@ -4,6 +4,7 @@ import { useObservatoryData } from './stores/observatory'
 import FetchDashboard from './views/FetchDashboard.vue'
 import ProvideInjectGraph from './views/ProvideInjectGraph.vue'
 import ComposableTracker from './views/ComposableTracker.vue'
+import PiniaStoreTracker from './views/PiniaStoreTracker.vue'
 import RenderHeatmap from './views/RenderHeatmap.vue'
 import TransitionTimeline from './views/TransitionTimeline.vue'
 import TraceViewer from './views/TraceViewer.vue'
@@ -13,6 +14,7 @@ const pathMap: Record<string, string> = {
     fetch: 'fetch',
     provide: 'provide',
     composables: 'composable',
+    pinia: 'pinia',
     heatmap: 'heatmap',
     transitions: 'transitions',
     traces: 'traces',
@@ -32,6 +34,7 @@ const tabs = computed(() => {
         f.fetchDashboard && { id: 'fetch', label: 'useFetch', icon: '⬡' },
         f.provideInjectGraph && { id: 'provide', label: 'provide/inject', icon: '⬡' },
         f.composableTracker && { id: 'composable', label: 'Composables', icon: '⬡' },
+        f.piniaTracker && { id: 'pinia', label: 'Pinia', icon: '⬡' },
         f.renderHeatmap && { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
         f.transitionTracker && { id: 'transitions', label: 'Transitions', icon: '⬡' },
         f.traceViewer && { id: 'traces', label: 'Traces', icon: '⬡' },
@@ -53,6 +56,7 @@ const tabs = computed(() => {
             <FetchDashboard v-if="activeTab === 'fetch'" />
             <ProvideInjectGraph v-else-if="activeTab === 'provide'" />
             <ComposableTracker v-else-if="activeTab === 'composable'" />
+            <PiniaStoreTracker v-else-if="activeTab === 'pinia'" />
             <RenderHeatmap v-else-if="activeTab === 'heatmap'" />
             <TransitionTimeline v-else-if="activeTab === 'transitions'" />
             <TraceViewer v-else-if="activeTab === 'traces'" />

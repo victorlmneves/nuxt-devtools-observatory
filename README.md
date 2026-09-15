@@ -5,14 +5,26 @@
 > [!WARNING]
 > **Performance note:** Instrumentation wraps every useFetch, composable, and lifecycle hook. In large apps this can slow down the DevTools UI or increase memory usage. Disable unused features via the observatory config.
 
-Nuxt DevTools module providing six missing observability features:
+Nuxt DevTools Observatory is a module that brings advanced observability and runtime analysis to Nuxt apps, focusing on features not available in the official Nuxt DevTools.
 
-- **useFetch Dashboard** — central view of all async data calls, cache keys, waterfall timeline
+- **useFetch Dashboard** — central view of `useFetch` / `useAsyncData` and client `$fetch` calls, cache keys, waterfall timeline
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
+- **Pinia Tracker** — inspect Pinia store state, action/mutation timelines, dependency edges, and hydration attribution
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 - **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, and navigation events in a unified Flamegraph and Waterfall view
+
+### How is this different from Nuxt DevTools?
+
+Observatory focuses on advanced runtime instrumentation and analysis, complementing the official Nuxt DevTools:
+
+- **More granular runtime tracking** — Tracks composable usage, provide/inject relationships, Pinia store events, and render/hydration details not surfaced by Nuxt DevTools.
+- **Advanced debugging panels** — Includes a Trace Viewer, Render Heatmap, and Transition Tracker for in-depth performance and lifecycle analysis.
+- **Leak and anomaly detection** — Highlights watcher/composable leaks, missing providers, shadowed injections, and persistent component issues.
+- **Automated test/demo flows** — Built-in support for Playwright-based screenshot and verification flows.
+
+Observatory is designed to complement Nuxt DevTools, not replace it. Use both for the most complete development and debugging experience.
 
 ## Documentation website
 
@@ -77,7 +89,7 @@ export default defineNuxtConfig({
         traceViewer: true, // Enable trace viewer
         composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
-        heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
+        heatmapThresholdTime: 16, // Highlight components with render time above this (ms)
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
         debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
         maxFetchEntries: 200, // Max fetch entries to keep in memory
@@ -108,7 +120,7 @@ transforms are skipped entirely — zero runtime overhead.
 
 [![useFetch Dashboard](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/fetch-dashboard.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/fetch-dashboard.png)
 
-A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim that records:
+A Vite plugin wraps `useFetch` / `useAsyncData` calls with a thin shim, and a runtime interceptor records direct `$fetch` / `$fetch.raw` / `$fetch.create()` calls:
 
 - Key, URL, status, origin (SSR/CSR)
 - Payload size and duration
@@ -236,6 +248,25 @@ The panel provides:
 
 - The route filter shows components active on a route but cannot hide persistent
   components (they appear on every route by definition)
+
+### Pinia Tracker
+
+[![Pinia Tracker](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/pinia-tracker.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/pinia-tracker.png)
+
+The Pinia Tracker helps you understand how each store changes over time and where those changes come from.
+
+- Store state snapshots for each detected Pinia store
+- Action and mutation timeline events with before/after state and field-level diffs
+- Dependency edges showing which components and composables touch each store
+- Hydration attribution timeline (`nuxt-payload`, `persistedstate`, or `runtime`)
+
+The panel provides:
+
+- **Store list** — all detected Pinia stores with event counts
+- **Timeline** — chronological action/mutation events
+- **Inspector** — current store state, selected event diff, and before/after snapshots
+- **Dependency graph** — which components and composables interacted with each store
+- **Hydration timeline** — attribution for initial state source(s)
 
 ### Trace Viewer
 
@@ -461,6 +492,15 @@ docs/
 ├── pages/                              ← Landing page + content catch-all route
 └── server/api/                         ← Docs-specific API handlers
 ```
+
+## Releasing
+
+Releases are automated with [semantic-release](https://semantic-release.gitbook.io/) from `main`. See [CONTRIBUTING.md](CONTRIBUTING.md) for commit message rules.
+
+- Merge conventional commits to `main`. Do **not** bump the version in `package.json` or create tags by hand.
+- `feat:` publishes a minor, `fix:` a patch, and a breaking change a major. `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, and `style:` do not publish.
+- The `Release` GitHub Action tests, builds, then publishes `nuxt-devtools-observatory` to npm via Trusted Publishing (OIDC). Keep the npm trusted publisher mapped to workflow **`release.yml`**.
+- The first run after this setup only publishes if there are releasable commits since tag `v0.1.34`.
 
 ## License
 

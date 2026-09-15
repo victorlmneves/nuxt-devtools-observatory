@@ -33,6 +33,7 @@ class VerificationRunner {
             'trace-viewer',
             'render-heatmap', 
             'composable-tracker',
+            'pinia-tracker',
             'provide-inject',
             'transition-tracker',
             'fetch-dashboard'
@@ -54,7 +55,7 @@ class VerificationRunner {
         try {
             const start: number = performance.now()
             const { stdout, stderr } = await execAsync(
-                `pnpm playwright test tests/verification/${suite}.spec.ts --reporter=json`
+                `pnpm playwright test --config tests/verification/playwright.config.ts tests/verification/${suite}.spec.ts --reporter=json`
             )
             const duration: number = performance.now() - start
             
