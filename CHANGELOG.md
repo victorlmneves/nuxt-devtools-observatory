@@ -1,3 +1,19 @@
+# [0.4.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.3.0...v0.4.0) (2026-09-15)
+
+
+### Bug Fixes
+
+* enhance runtime plugin handling by introducing Trace Viewer support ([825b415](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/825b415b0c5a614e276396ded4db96c67b60c366))
+* **nitro:** isolate SSR observatory context per request ([f5af912](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/f5af912ce5da6a7d9ae96d98c0c21c31444c0fdd))
+* update heatmap threshold time from 1600ms to 16ms across configuration files and documentation ([074e140](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/074e1403c1e5fe7e2f2dd168249c710aa6189c04))
+
+
+### Features
+
+* refactor composableNavigationMode assignment in createModuleDefaults ([9afcf43](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/9afcf43e2743e529aabcbe0d74a152ff92c02453))
+* update environment variable access and improve test configurations ([af7d44c](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/af7d44c1e62d500d3d17a1a4dd78b5081159c587))
+* update environment variable configuration and documentation for observatory features ([3784f57](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/3784f57384df1da9b5ccf86b98f37eb7b622619b))
+
 # [0.3.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.2.3...v0.3.0) (2026-09-15)
 
 
