@@ -221,15 +221,20 @@ export default defineNuxtModule<ModuleOptions>({
             addVitePlugin(transitionTrackerPlugin(), vitePluginScope)
         }
 
-        // ── Runtime plugins ───────────────────────────────────────────────────
-        if (
+        const trackersEnabled = Boolean(
             resolved.fetchDashboard ||
-            resolved.provideInjectGraph ||
-            resolved.composableTracker ||
-            resolved.piniaTracker ||
-            resolved.renderHeatmap ||
-            resolved.transitionTracker
-        ) {
+                resolved.provideInjectGraph ||
+                resolved.composableTracker ||
+                resolved.piniaTracker ||
+                resolved.renderHeatmap ||
+                resolved.transitionTracker ||
+                resolved.traceViewer
+        )
+
+        // ── Runtime plugins ───────────────────────────────────────────────────
+        // Trace Viewer needs the client plugin for route/component/fetch spans
+        // even when every other tab is disabled.
+        if (trackersEnabled) {
             addPlugin(resolver.resolve('./runtime/plugin'))
         }
 
@@ -346,14 +351,7 @@ export default defineNuxtModule<ModuleOptions>({
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         nuxt.hook('devtools:customTabs' as any, (tabs: any[]) => {
-            if (
-                resolved.fetchDashboard ||
-                resolved.provideInjectGraph ||
-                resolved.composableTracker ||
-                resolved.piniaTracker ||
-                resolved.renderHeatmap ||
-                resolved.transitionTracker
-            ) {
+            if (trackersEnabled) {
                 tabs.push({
                     name: 'observatory-trackers',
                     title: 'Observatory Trackers',
