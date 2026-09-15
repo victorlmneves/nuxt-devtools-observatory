@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.2.2...v0.2.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* cap traces and avoid heartbeat snapshot stringify ([cf9a88a](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/cf9a88a125e7b16228002aefd9e581821e1d3e1c))
+
 ## [0.2.2](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.2.1...v0.2.2) (2026-09-12)
 
 
