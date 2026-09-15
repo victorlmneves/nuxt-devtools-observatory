@@ -6,6 +6,7 @@ import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { transitionTrackerPlugin } from './transforms/transition-transform'
 import type { ObservatoryCommand, ObservatorySnapshot, ObservatoryClientFunctions, ObservatoryServerFunctions } from './types/rpc'
+import { createModuleDefaults, resolveInstrumentServer } from './env-options'
 
 export interface ModuleOptions {
     /**
@@ -99,7 +100,7 @@ export interface ModuleOptions {
 
     /**
      * Enable the Pinia state tracker tab
-     * @default true
+     * @default false
      */
     piniaTracker?: boolean
 
@@ -146,33 +147,8 @@ export interface ModuleOptions {
     debugRpc?: boolean
 }
 
-const defaults = {
-    // Auto-enable server instrumentation for SSR projects unless explicitly overridden.
-    // This ensures initial SSR snapshots include server-side composables/fetch events.
-    instrumentServer: process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true',
-    fetchDashboard: process.env.OBSERVATORY_FETCH_DASHBOARD === 'true',
-    provideInjectGraph: process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true',
-    composableTracker: process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true',
-    piniaTracker: process.env.OBSERVATORY_PINIA_TRACKER === 'true',
-    renderHeatmap: process.env.OBSERVATORY_RENDER_HEATMAP === 'true',
-    transitionTracker: process.env.OBSERVATORY_TRANSITION_TRACKER === 'true',
-    traceViewer: process.env.OBSERVATORY_TRACE_VIEWER === 'true',
-    heatmapThresholdCount: process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3,
-    heatmapThresholdTime: process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600,
-    maxFetchEntries: process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200,
-    maxPayloadBytes: process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000,
-    fetchPageSize: process.env.OBSERVATORY_FETCH_PAGE_SIZE ? Number(process.env.OBSERVATORY_FETCH_PAGE_SIZE) : 20,
-    maxTransitions: process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500,
-    maxComposableHistory: process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50,
-    maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
-    maxPiniaTimeline: process.env.OBSERVATORY_MAX_PINIA_TIMELINE ? Number(process.env.OBSERVATORY_MAX_PINIA_TIMELINE) : 100,
-    maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
-    maxTraces: process.env.OBSERVATORY_MAX_TRACES ? Number(process.env.OBSERVATORY_MAX_TRACES) : 50,
-    composableNavigationMode:
-        process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : ('route' as 'route' | 'session'),
-    heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
-    debugRpc: process.env.OBSERVATORY_DEBUG_RPC === 'true',
-}
+// Feature tabs default on. instrumentServer is resolved in setup from SSR/SPA.
+const defaults = createModuleDefaults()
 
 export default defineNuxtModule<ModuleOptions>({
     meta: {
@@ -198,75 +174,11 @@ export default defineNuxtModule<ModuleOptions>({
 
         const resolver = createResolver(import.meta.url)
 
-        // Explicitly resolve each option: user config > env > default
+        // Nuxt already merged user config over `defaults` (env + product fallbacks).
+        // Only instrumentServer is resolved here so SPA vs SSR can still decide.
         const resolved = {
-            ...defaults,
             ...options,
-            // Allow runtime overrides via env
-            heatmapHideInternals:
-                typeof process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS !== 'undefined'
-                    ? process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true'
-                    : typeof options.heatmapHideInternals !== 'undefined'
-                      ? options.heatmapHideInternals
-                      : defaults.heatmapHideInternals,
-            fetchDashboard:
-                options.fetchDashboard ??
-                (process.env.OBSERVATORY_FETCH_DASHBOARD ? process.env.OBSERVATORY_FETCH_DASHBOARD === 'true' : true),
-            provideInjectGraph:
-                options.provideInjectGraph ??
-                (process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH ? process.env.OBSERVATORY_PROVIDE_INJECT_GRAPH === 'true' : true),
-            composableTracker:
-                options.composableTracker ??
-                (process.env.OBSERVATORY_COMPOSABLE_TRACKER ? process.env.OBSERVATORY_COMPOSABLE_TRACKER === 'true' : true),
-            piniaTracker:
-                options.piniaTracker ?? (process.env.OBSERVATORY_PINIA_TRACKER ? process.env.OBSERVATORY_PINIA_TRACKER === 'true' : true),
-            renderHeatmap:
-                options.renderHeatmap ??
-                (process.env.OBSERVATORY_RENDER_HEATMAP ? process.env.OBSERVATORY_RENDER_HEATMAP === 'true' : true),
-            transitionTracker:
-                options.transitionTracker ??
-                (process.env.OBSERVATORY_TRANSITION_TRACKER ? process.env.OBSERVATORY_TRANSITION_TRACKER === 'true' : true),
-            traceViewer:
-                options.traceViewer ?? (process.env.OBSERVATORY_TRACE_VIEWER ? process.env.OBSERVATORY_TRACE_VIEWER === 'true' : true),
-            instrumentServer:
-                options.instrumentServer ??
-                (process.env.OBSERVATORY_INSTRUMENT_SERVER
-                    ? process.env.OBSERVATORY_INSTRUMENT_SERVER === 'true'
-                    : nuxt.options.ssr !== false),
-            heatmapThresholdCount:
-                options.heatmapThresholdCount ??
-                (process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_COUNT) : 3),
-            heatmapThresholdTime:
-                options.heatmapThresholdTime ??
-                (process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME ? Number(process.env.OBSERVATORY_HEATMAP_THRESHOLD_TIME) : 1600),
-            maxFetchEntries:
-                options.maxFetchEntries ??
-                (process.env.OBSERVATORY_MAX_FETCH_ENTRIES ? Number(process.env.OBSERVATORY_MAX_FETCH_ENTRIES) : 200),
-            maxPayloadBytes:
-                options.maxPayloadBytes ??
-                (process.env.OBSERVATORY_MAX_PAYLOAD_BYTES ? Number(process.env.OBSERVATORY_MAX_PAYLOAD_BYTES) : 10000),
-            fetchPageSize:
-                options.fetchPageSize ?? (process.env.OBSERVATORY_FETCH_PAGE_SIZE ? Number(process.env.OBSERVATORY_FETCH_PAGE_SIZE) : 20),
-            maxTransitions:
-                options.maxTransitions ?? (process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500),
-            maxComposableHistory:
-                options.maxComposableHistory ??
-                (process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY) : 50),
-            maxComposableEntries:
-                options.maxComposableEntries ??
-                (process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300),
-            maxPiniaTimeline:
-                options.maxPiniaTimeline ??
-                (process.env.OBSERVATORY_MAX_PINIA_TIMELINE ? Number(process.env.OBSERVATORY_MAX_PINIA_TIMELINE) : 100),
-            maxRenderTimeline:
-                options.maxRenderTimeline ??
-                (process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100),
-            maxTraces:
-                options.maxTraces ?? (process.env.OBSERVATORY_MAX_TRACES ? Number(process.env.OBSERVATORY_MAX_TRACES) : 50),
-            composableNavigationMode:
-                options.composableNavigationMode ??
-                (process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : 'route'),
-            debugRpc: options.debugRpc ?? (process.env.OBSERVATORY_DEBUG_RPC ? process.env.OBSERVATORY_DEBUG_RPC === 'true' : false),
+            instrumentServer: resolveInstrumentServer(options.instrumentServer, nuxt.options.ssr !== false),
         }
 
         // ── Vite aliases for runtime shims (dev resolution) ──────────────────
