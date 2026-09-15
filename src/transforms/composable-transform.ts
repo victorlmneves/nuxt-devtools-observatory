@@ -4,6 +4,7 @@ import _traverse from '@babel/traverse'
 import _generate from '@babel/generator'
 import * as t from '@babel/types'
 import { extractScriptBlock } from './transform-utils'
+import { LIBRARY_COMPOSABLE_SKIP_LIST } from './library-composable-skip-list'
 
 const traverse = (_traverse as typeof _traverse & { default?: typeof _traverse }).default ?? _traverse
 const generate = (_generate as typeof _generate & { default?: typeof _generate }).default ?? _generate
@@ -134,6 +135,11 @@ export function composableTrackerPlugin(): Plugin {
                             if (source && !source.startsWith('.') && !source.startsWith('/')) {
                                 return
                             }
+                        } else if (LIBRARY_COMPOSABLE_SKIP_LIST.has(name)) {
+                            // Unbound call — Nuxt auto-import. Skip VueUse and similar libraries
+                            // so we do not wrap timers/watchers inside those packages. Project
+                            // composables are also unbound; they are not on this denylist.
+                            return
                         }
 
                         // Skip if the call is already inside __trackComposable
