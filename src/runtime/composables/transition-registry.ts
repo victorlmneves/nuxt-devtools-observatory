@@ -1,5 +1,6 @@
 import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
 import type { Slots } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 import { startSpan } from '../tracing/tracing'
 import type { Span } from '../tracing/trace'
 import { traceStore } from '../tracing/traceStore'
@@ -34,6 +35,7 @@ export function setupTransitionRegistry() {
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     function register(entry: TransitionEntry) {

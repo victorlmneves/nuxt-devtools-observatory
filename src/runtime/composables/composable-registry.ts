@@ -1,5 +1,6 @@
 import { isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
 import { addSsrPhaseSpan } from '../nitro/ssr-trace-store'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 
 export interface RefChangeEvent {
     t: number // performance.now() timestamp
@@ -171,6 +172,7 @@ export function setupComposableRegistry() {
 
     function markDirty() {
         dirty = true
+        bumpSnapshotRevision()
     }
 
     function invalidateSharedKeysForName(name: string) {

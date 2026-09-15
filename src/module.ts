@@ -66,6 +66,12 @@ export interface ModuleOptions {
     maxRenderTimeline?: number
 
     /**
+     * Maximum number of route traces to keep in memory
+     * @default 50
+     */
+    maxTraces?: number
+
+    /**
      * Composable tracker navigation mode.
      * - `route`: clear composable entries on every page navigation
      * - `session`: keep entries across navigations until manually cleared
@@ -161,6 +167,7 @@ const defaults = {
     maxComposableEntries: process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES) : 300,
     maxPiniaTimeline: process.env.OBSERVATORY_MAX_PINIA_TIMELINE ? Number(process.env.OBSERVATORY_MAX_PINIA_TIMELINE) : 100,
     maxRenderTimeline: process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100,
+    maxTraces: process.env.OBSERVATORY_MAX_TRACES ? Number(process.env.OBSERVATORY_MAX_TRACES) : 50,
     composableNavigationMode:
         process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : ('route' as 'route' | 'session'),
     heatmapHideInternals: process.env.OBSERVATORY_HEATMAP_HIDE_INTERNALS === 'true',
@@ -254,6 +261,8 @@ export default defineNuxtModule<ModuleOptions>({
             maxRenderTimeline:
                 options.maxRenderTimeline ??
                 (process.env.OBSERVATORY_MAX_RENDER_TIMELINE ? Number(process.env.OBSERVATORY_MAX_RENDER_TIMELINE) : 100),
+            maxTraces:
+                options.maxTraces ?? (process.env.OBSERVATORY_MAX_TRACES ? Number(process.env.OBSERVATORY_MAX_TRACES) : 50),
             composableNavigationMode:
                 options.composableNavigationMode ??
                 (process.env.OBSERVATORY_COMPOSABLE_NAVIGATION_MODE === 'session' ? 'session' : 'route'),
@@ -460,6 +469,7 @@ export default defineNuxtModule<ModuleOptions>({
             maxComposableEntries: resolved.maxComposableEntries,
             maxPiniaTimeline: resolved.maxPiniaTimeline,
             maxRenderTimeline: resolved.maxRenderTimeline,
+            maxTraces: resolved.maxTraces,
             composableNavigationMode: resolved.composableNavigationMode,
             heatmapHideInternals: resolved.heatmapHideInternals,
             heatmapThresholdCount: resolved.heatmapThresholdCount,
