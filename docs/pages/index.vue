@@ -231,7 +231,7 @@ const quickLinks = [
         transitionTracker: true, // Enable transition tracker
         composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 3, // Highlight components with 3+ renders
-        heatmapThresholdTime: 1600, // Highlight components with render time above this (ms)
+        heatmapThresholdTime: 16, // Highlight components with render time above this (ms)
         heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
         debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
         maxFetchEntries: 200, // Max fetch entries to keep in memory
@@ -257,7 +257,7 @@ const quickLinks = [
 </span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">transitionTracker</span><span class="sMK4o">: true</span><span class="sMK4o">,
 </span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">composableNavigationMode</span><span class="sMK4o">: true</span><span class="sMK4o">,
 </span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapThresholdCount</span><span class="sMK4o">: 3</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapThresholdTime</span><span class="sMK4o">: 1600</span><span class="sMK4o">,
+</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapThresholdTime</span><span class="sMK4o">: 16</span><span class="sMK4o">,
 </span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapHideInternals</span><span class="sMK4o">: true</span><span class="sMK4o">,
 </span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">debugRpc</span><span class="sMK4o">: true</span><span class="sMK4o">,
 </span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxFetchEntries</span><span class="sMK4o">: 200</span><span class="sMK4o">,

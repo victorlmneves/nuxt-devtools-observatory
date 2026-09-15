@@ -9,25 +9,26 @@ Use this page when validating Observatory behavior on larger projects or sustain
 
 The initial scalability rollout has been completed:
 
-- Virtualized rendering for heavy observer screens behind rollout flags.
+- Virtualized rendering for heavy observer screens is **on by default**.
 - Multiple optimization passes to reduce repeated list scans and per-row recomputation.
 - Verification guardrails to catch large regressions early.
 
 ## Rollout Flags
 
-Query flags can be used to scope or force virtualization behavior:
+Query flags can still force virtualization on or off. Preferences are stored in
+`localStorage` under `observatory:virtualization`.
 
-- `virt`
+- `virt` — master switch (`0` / `false` / `off` disables every screen)
 - `virtFetch`
 - `virtHeatmap`
 - `virtTraces`
 - `virtComposables`
 - `virtTransitions`
 
-Example:
+Example (disable all lists for comparison):
 
 ```text
-http://localhost:3000/__observatory/?virt=1&virtHeatmap=1&virtTraces=1
+http://localhost:3000/__observatory/?virt=0
 ```
 
 ## Benchmark Notes

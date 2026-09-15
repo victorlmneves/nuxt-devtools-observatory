@@ -36,6 +36,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `maxComposableHistory`
 - `maxComposableEntries`
 - `maxRenderTimeline`
+- `maxTraces`
 - `maxPiniaTimeline`
 
 ## Guidance

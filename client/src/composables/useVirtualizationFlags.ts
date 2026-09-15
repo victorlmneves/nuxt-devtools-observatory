@@ -11,18 +11,28 @@ type VirtualizationFlags = {
     transitions: boolean
 }
 
+export const VIRTUALIZATION_STORAGE_KEY = 'observatory:virtualization'
+
 const defaultFlags: VirtualizationFlags = {
-    enabled: false,
-    heatmap: false,
-    traces: false,
-    composables: false,
-    fetch: false,
-    transitions: false,
+    enabled: true,
+    heatmap: true,
+    traces: true,
+    composables: true,
+    fetch: true,
+    transitions: true,
 }
 
 const flags = ref<VirtualizationFlags>({ ...defaultFlags })
 
 let initialized = false
+
+function getStorage(): Storage | null {
+    if (typeof window === 'undefined') {
+        return null
+    }
+
+    return typeof localStorage === 'undefined' ? null : localStorage
+}
 
 function parseBooleanParam(value: string | null): boolean | null {
     if (value == null) {
@@ -40,8 +50,55 @@ function parseBooleanParam(value: string | null): boolean | null {
     return null
 }
 
+function isFlagRecord(value: unknown): value is Partial<VirtualizationFlags> {
+    return Boolean(value) && typeof value === 'object'
+}
+
 function readFromStorage(): VirtualizationFlags {
-    return { ...defaultFlags }
+    const storage = getStorage()
+
+    if (!storage) {
+        return { ...defaultFlags }
+    }
+
+    try {
+        const raw = storage.getItem(VIRTUALIZATION_STORAGE_KEY)
+
+        if (!raw) {
+            return { ...defaultFlags }
+        }
+
+        const parsed: unknown = JSON.parse(raw)
+
+        if (!isFlagRecord(parsed)) {
+            return { ...defaultFlags }
+        }
+
+        return {
+            enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : defaultFlags.enabled,
+            heatmap: typeof parsed.heatmap === 'boolean' ? parsed.heatmap : defaultFlags.heatmap,
+            traces: typeof parsed.traces === 'boolean' ? parsed.traces : defaultFlags.traces,
+            composables: typeof parsed.composables === 'boolean' ? parsed.composables : defaultFlags.composables,
+            fetch: typeof parsed.fetch === 'boolean' ? parsed.fetch : defaultFlags.fetch,
+            transitions: typeof parsed.transitions === 'boolean' ? parsed.transitions : defaultFlags.transitions,
+        }
+    } catch {
+        return { ...defaultFlags }
+    }
+}
+
+function persist(next: VirtualizationFlags) {
+    const storage = getStorage()
+
+    if (!storage) {
+        return
+    }
+
+    try {
+        storage.setItem(VIRTUALIZATION_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+        // Ignore quota / private-mode failures.
+    }
 }
 
 function applyQueryOverrides(current: VirtualizationFlags): VirtualizationFlags {
@@ -84,8 +141,7 @@ function init() {
 
     initialized = true
     const stored = readFromStorage()
-    const merged = applyQueryOverrides(stored)
-    flags.value = merged
+    flags.value = applyQueryOverrides(stored)
 }
 
 function setAllEnabled(value: boolean) {
@@ -95,6 +151,7 @@ function setAllEnabled(value: boolean) {
     }
 
     flags.value = next
+    persist(next)
 }
 
 function setScreenEnabled(screen: VirtualizationScreen, value: boolean) {
@@ -104,6 +161,7 @@ function setScreenEnabled(screen: VirtualizationScreen, value: boolean) {
     }
 
     flags.value = next
+    persist(next)
 }
 
 export function useVirtualizationFlags() {

@@ -1,4 +1,5 @@
 import type { Span, SpanStatus, Trace, TraceStatus } from './trace'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 
 export interface CreateTraceInput {
     id?: string
@@ -37,8 +38,20 @@ function computeDuration(startTime: number, endTime: number) {
 
 export class TraceStore {
     private readonly traces = new Map<string, Trace>()
+    private maxTraces: number
+
+    constructor(maxTraces = 50) {
+        this.maxTraces = Math.max(1, maxTraces)
+    }
+
+    setMaxTraces(maxTraces: number) {
+        this.maxTraces = Math.max(1, maxTraces)
+        this.evictOverflow()
+    }
 
     createTrace(input: CreateTraceInput = {}): Trace {
+        this.evictOverflow(1)
+
         const startTime = input.startTime ?? performance.now()
         const trace: Trace = {
             id: input.id ?? createId('trace'),
@@ -50,6 +63,7 @@ export class TraceStore {
         }
 
         this.traces.set(trace.id, trace)
+        bumpSnapshotRevision()
 
         return trace
     }
@@ -72,6 +86,7 @@ export class TraceStore {
         }
 
         trace.spans.push(span)
+        bumpSnapshotRevision()
 
         if (trace.endTime !== undefined) {
             trace.durationMs = computeDuration(trace.startTime, trace.endTime)
@@ -98,6 +113,8 @@ export class TraceStore {
                 ...input.metadata,
             }
         }
+
+        bumpSnapshotRevision()
 
         return trace
     }
@@ -127,6 +144,8 @@ export class TraceStore {
             }
         }
 
+        bumpSnapshotRevision()
+
         return span
     }
 
@@ -139,7 +158,40 @@ export class TraceStore {
     }
 
     clear() {
+        if (this.traces.size === 0) {
+            return
+        }
+
         this.traces.clear()
+        bumpSnapshotRevision()
+    }
+
+    private evictOverflow(roomFor = 0) {
+        while (this.traces.size + roomFor > this.maxTraces) {
+            if (!this.evictOne()) {
+                break
+            }
+        }
+    }
+
+    private evictOne(): boolean {
+        for (const [id, trace] of this.traces) {
+            if (trace.status !== 'active') {
+                this.traces.delete(id)
+
+                return true
+            }
+        }
+
+        const oldest = this.traces.keys().next().value
+
+        if (oldest === undefined) {
+            return false
+        }
+
+        this.traces.delete(oldest)
+
+        return true
     }
 
     private ensureTrace(traceId: string, startTime?: number) {

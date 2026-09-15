@@ -18,9 +18,9 @@ export default defineConfig({
         },
     ],
     webServer: {
-        command: 'pnpm dev',
+        command: process.env.CI ? 'pnpm build:client && pnpm exec nuxi dev playground' : 'pnpm dev',
         url: 'http://localhost:3000',
         reuseExistingServer: !process.env.CI,
-        timeout: 60_000,
+        timeout: 180_000,
     },
 })

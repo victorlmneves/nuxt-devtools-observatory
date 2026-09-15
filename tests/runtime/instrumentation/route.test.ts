@@ -83,6 +83,7 @@ describe('setupRouteInstrumentation', () => {
 
             expect(firstTrace?.status).toBe('cancelled')
             expect(firstTrace?.endTime).toBeDefined()
+            expect(firstTrace?.spans.some((span) => span.name === 'navigation:abort')).toBe(true)
             expect(traceStore.getAllTraces()).toHaveLength(2)
         })
     })

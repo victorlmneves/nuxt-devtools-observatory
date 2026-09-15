@@ -27,11 +27,12 @@ const spansByType = computed(() => {
         .sort((a, b) => {
             const typeOrder: Record<string, number> = {
                 navigation: 0,
-                fetch: 1,
-                composable: 2,
-                component: 3,
-                render: 4,
-                transition: 5,
+                error: 1,
+                fetch: 2,
+                composable: 3,
+                component: 4,
+                render: 5,
+                transition: 6,
             }
 
             return (typeOrder[a.type] ?? 999) - (typeOrder[b.type] ?? 999)
@@ -102,6 +103,7 @@ function getSpanColorClass(type: string) {
         composable: 'bg-purple-500',
         component: 'bg-green-500',
         navigation: 'bg-yellow-500',
+        error: 'bg-red-500',
         render: 'bg-orange-500',
         transition: 'bg-pink-500',
     }
@@ -152,6 +154,10 @@ function getSpanDisplayName(span: TraceSpan): string {
 
     if (url) {
         return url
+    }
+
+    if (asString(m.message) && span.type === 'error') {
+        return `${span.name}: ${asString(m.message)}`
     }
 
     if (route) {

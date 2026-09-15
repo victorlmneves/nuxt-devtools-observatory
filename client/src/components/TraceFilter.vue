@@ -82,6 +82,7 @@ function getSpanTypeColor(type: string): string {
         composable: '#a855f7',
         component: '#22c55e',
         navigation: '#eab308',
+        error: '#ef4444',
         render: '#f97316',
         transition: '#ec4899',
     }

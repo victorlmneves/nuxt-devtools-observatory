@@ -1,13 +1,10 @@
 import { getRequestURL, setResponseHeader, type H3Event } from 'h3'
+import { clearSsrRequestContext, enterSsrRequestContext } from './ssr-request-context'
 import { addSsrPhaseSpan, createSsrRecord, drainSsrRecord, type SsrTraceRecord } from './ssr-trace-store'
 
 interface ObservatoryContext {
     __observatoryRequestId?: string
     __ssrFetchStart?: number
-}
-
-interface GlobalSsrContextCarrier {
-    __observatorySsrContext__?: ObservatoryContext
 }
 
 // Nitro plugins receive plain H3Event objects; extend the context inline.
@@ -63,10 +60,10 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
         event.context.__observatoryRequestId = requestId
 
         createSsrRecord(requestId, route, method)
-        ;(globalThis as GlobalSsrContextCarrier).__observatorySsrContext__ = {
+        enterSsrRequestContext({
             __observatoryRequestId: requestId,
             __ssrFetchStart: start,
-        }
+        })
     })
 
     // ── afterResponse ──────────────────────────────────────────────────────
@@ -102,12 +99,7 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
 
             const durationMs = start !== undefined ? Math.max(performance.now() - start, 0) : 0
             drainSsrRecord(requestId, durationMs)
-        }
-
-        const active = (globalThis as GlobalSsrContextCarrier).__observatorySsrContext__
-
-        if (active?.__observatoryRequestId === requestId) {
-            delete (globalThis as GlobalSsrContextCarrier).__observatorySsrContext__
+            clearSsrRequestContext(requestId)
         }
     })
 

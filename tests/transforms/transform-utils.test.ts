@@ -92,4 +92,13 @@ describe('extractScriptBlock', () => {
         expect(result!.content).toBe(scriptContent)
         expect(sfc.slice(result!.start, result!.end)).toBe(scriptContent)
     })
+
+    it('returns lang from <script setup lang="tsx">', () => {
+        const sfc = `<template></template>\n<script setup lang="tsx">\nconst x = <div />\n</script>`
+        const result = extractScriptBlock(sfc)
+
+        expect(result).not.toBeNull()
+        expect(result!.lang).toBe('tsx')
+        expect(result!.content).toContain('const x')
+    })
 })

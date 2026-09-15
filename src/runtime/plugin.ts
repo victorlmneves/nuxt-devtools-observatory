@@ -9,8 +9,10 @@ import { setupTransitionRegistry } from './composables/transition-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
 import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
+import { setupErrorInstrumentation } from './instrumentation/error'
 import { injectTestBridge } from './test-bridge'
 import { traceStore } from './tracing/traceStore'
+import { getSnapshotRevision } from './snapshot-revision'
 import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
 
 interface ObservatoryWindow extends Window {
@@ -39,6 +41,7 @@ export default defineNuxtPlugin(() => {
         traceViewer?: boolean
         heatmapHideInternals?: boolean
         maxPiniaTimeline?: number
+        maxTraces?: number
     }
 
     const debugRpc = config.debugRpc === true
@@ -51,7 +54,11 @@ export default defineNuxtPlugin(() => {
 
     let composableNavigationMode: 'route' | 'session' = config.composableNavigationMode === 'session' ? 'session' : 'route'
     let heartbeatId: number | null = null
-    let lastSnapshotSignature = ''
+    let lastSnapshotRevision = -1
+
+    if (typeof config.maxTraces === 'number') {
+        traceStore.setMaxTraces(config.maxTraces)
+    }
 
     // Enable Vue performance API for render heatmap if enabled
     if (config.renderHeatmap) {
@@ -74,11 +81,22 @@ export default defineNuxtPlugin(() => {
     }
 
     if (config.piniaTracker) {
-        registries.pinia = setupPiniaStoreRegistry({
+        const piniaRegistry = setupPiniaStoreRegistry({
             pinia: (nuxtApp as { $pinia?: unknown }).$pinia,
             nuxtPayload: nuxtApp.payload,
             maxTimeline: config.maxPiniaTimeline,
         })
+
+        registries.pinia = piniaRegistry
+
+        const attachWhenPiniaReady = () => {
+            piniaRegistry.attachPinia((nuxtApp as { $pinia?: unknown }).$pinia)
+        }
+
+        // Pinia may inject $pinia after this plugin runs. Retry on Vue app
+        // creation and again after mount so stores are not silently skipped.
+        nuxtApp.hook('app:created', attachWhenPiniaReady)
+        nuxtApp.hook('app:mounted', attachWhenPiniaReady)
     }
 
     if (config.renderHeatmap) {
@@ -295,17 +313,16 @@ export default defineNuxtPlugin(() => {
         }, 250)
 
         // Heartbeat fallback: some trackers (fetch/provide/render/transition)
-        // don't currently emit a direct callback into this plugin. Poll the
-        // aggregated snapshot and only broadcast when the payload changed.
+        // don't currently emit a direct callback into this plugin. Compare a
+        // generation counter instead of JSON.stringify of the full snapshot.
         if (import.meta.client && heartbeatId === null) {
             heartbeatId = window.setInterval(() => {
-                const snapshot = buildSnapshot()
-                const signature = JSON.stringify(snapshot)
+                const revision = getSnapshotRevision()
 
-                if (signature !== lastSnapshotSignature) {
-                    lastSnapshotSignature = signature
+                if (revision !== lastSnapshotRevision) {
+                    lastSnapshotRevision = revision
                     debugLog('heartbeat detected snapshot change')
-                    import.meta.hot?.send('observatory:snapshot', snapshot)
+                    import.meta.hot?.send('observatory:snapshot', buildSnapshot())
                 }
             }, 400)
         }
@@ -322,6 +339,7 @@ export default defineNuxtPlugin(() => {
             setupRouteInstrumentation(nuxtApp, {
                 getCurrentPath: () => router.currentRoute.value.path ?? '/',
             })
+            setupErrorInstrumentation(nuxtApp)
         }
 
         // router.beforeEach fires BEFORE Vue renders anything for the new route —
@@ -405,7 +423,7 @@ export default defineNuxtPlugin(() => {
             traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
         })
 
-        lastSnapshotSignature = JSON.stringify(snapshot)
+        lastSnapshotRevision = getSnapshotRevision()
         import.meta.hot.send('observatory:snapshot', snapshot)
     }
 
@@ -487,6 +505,8 @@ export default defineNuxtPlugin(() => {
             piniaTracker: !!registries.pinia,
             composableNavigationMode,
             fetchPageSize: typeof config.fetchPageSize === 'number' ? config.fetchPageSize : 20,
+            heatmapThresholdCount: typeof config.heatmapThresholdCount === 'number' ? config.heatmapThresholdCount : 3,
+            heatmapThresholdTime: typeof config.heatmapThresholdTime === 'number' ? config.heatmapThresholdTime : 16,
             renderHeatmap: !!registries.render,
             transitionTracker: !!registries.transition,
             traceViewer: !!config.traceViewer,

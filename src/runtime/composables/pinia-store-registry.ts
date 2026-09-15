@@ -1,4 +1,5 @@
 import { getCurrentInstance } from 'vue'
+import { bumpSnapshotRevision } from '../snapshot-revision'
 import type { PiniaHydrationEvent, PiniaMutationEvent, PiniaStateDiff, PiniaStoreDependency, PiniaStoreEntry } from '../../types/snapshot'
 
 type PiniaSubscribeMutation = {
@@ -156,7 +157,7 @@ function inferDependencyFromInstance(): PiniaStoreDependency | null {
 }
 
 function parseStackLine(line: string): { name?: string; file?: string } {
-    const callsiteMatch = line.match(/^at\s+(.+?)\s+\((.+?):\d+:\d+\)$/)
+    const callsiteMatch = line.match(/^at ([^()]+) \((.+):\d+:\d+\)$/)
 
     if (callsiteMatch) {
         return {
@@ -165,7 +166,7 @@ function parseStackLine(line: string): { name?: string; file?: string } {
         }
     }
 
-    const fileOnlyMatch = line.match(/^at\s+(.+?):\d+:\d+$/)
+    const fileOnlyMatch = line.match(/^at (.+):\d+:\d+$/)
 
     if (fileOnlyMatch) {
         return {
@@ -242,9 +243,11 @@ export function setupPiniaStoreRegistry(options: {
     maxTimeline?: number
     stackProvider?: () => string[]
 }) {
-    const pinia = options.pinia as PiniaLike | undefined
     const maxTimeline = typeof options.maxTimeline === 'number' ? options.maxTimeline : 100
     const stackProvider = options.stackProvider ?? stackFromError
+
+    let pinia = options.pinia as PiniaLike | undefined
+    let piniaPluginInstalled = false
 
     const entries = new Map<string, PiniaStoreEntry>()
     const stores = new Map<string, PiniaStoreLike>()
@@ -257,6 +260,7 @@ export function setupPiniaStoreRegistry(options: {
 
     function notifyChange() {
         dirty = true
+        bumpSnapshotRevision()
 
         for (const listener of listeners) {
             listener()
@@ -579,19 +583,35 @@ export function setupPiniaStoreRegistry(options: {
         cached = '[]'
     }
 
-    if (pinia?._s) {
-        for (const store of pinia._s.values()) {
-            ensureStore(store)
+    function attachPinia(next?: unknown) {
+        const candidate = (next ?? pinia) as PiniaLike | undefined
+
+        if (!candidate) {
+            return false
         }
+
+        pinia = candidate
+
+        if (candidate._s) {
+            for (const store of candidate._s.values()) {
+                ensureStore(store)
+            }
+        }
+
+        if (!piniaPluginInstalled && typeof candidate.use === 'function') {
+            candidate.use(({ store }) => {
+                ensureStore(store)
+            })
+            piniaPluginInstalled = true
+        }
+
+        return true
     }
 
-    if (typeof pinia?.use === 'function') {
-        pinia.use(({ store }) => {
-            ensureStore(store)
-        })
-    }
+    attachPinia(pinia)
 
     return {
+        attachPinia,
         clear,
         editState,
         getAll,
