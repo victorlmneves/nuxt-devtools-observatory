@@ -55,6 +55,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `fetchDashboard` (boolean) — Enable useFetch dashboard
 - `provideInjectGraph` (boolean) — Enable provide/inject graph
 - `composableTracker` (boolean) — Enable composable tracker
+- `piniaTracker` (boolean) — Enable Pinia store tracker (set via `OBSERVATORY_PINIA_TRACKER`)
 - `renderHeatmap` (boolean) — Enable render heatmap
 - `transitionTracker` (boolean) — Enable transition tracker (set via `OBSERVATORY_TRANSITION_TRACKER`)
 - `traceViewer` (boolean) — Enable trace viewer tab with per-route Flamegraph and Waterfall (set via `OBSERVATORY_TRACE_VIEWER`)
@@ -69,6 +70,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `maxTransitions` (number) — Max transition entries to keep in memory
 - `maxComposableHistory` (number) — Max composable history events per entry
 - `maxComposableEntries` (number) — Max composable entries to keep in memory
+- `maxPiniaTimeline` (number) — Max Pinia timeline events per store (set via `OBSERVATORY_MAX_PINIA_TIMELINE`)
 - `maxRenderTimeline` (number) — Max render timeline events per entry
 
 Feature tabs are enabled by default in development. `instrumentServer` defaults to
@@ -84,6 +86,7 @@ export default defineNuxtConfig({
         fetchDashboard: true, // Enable useFetch dashboard
         provideInjectGraph: true, // Enable provide/inject graph
         composableTracker: true, // Enable composable tracker
+        piniaTracker: true, // Enable Pinia store tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer
@@ -98,6 +101,7 @@ export default defineNuxtConfig({
         maxTransitions: 500, // Max transition entries to keep in memory
         maxComposableHistory: 50, // Max composable history events per entry
         maxComposableEntries: 300, // Max composable entries to keep in memory
+        maxPiniaTimeline: 100, // Max Pinia timeline events per store
         maxRenderTimeline: 100, // Max render timeline events per entry
     },
 
@@ -105,7 +109,7 @@ export default defineNuxtConfig({
 })
 ```
 
-Open the Nuxt DevTools panel — six new tabs will appear.
+Open the Nuxt DevTools panel — seven Observatory tabs will appear when all features are enabled.
 
 The DevTools client SPA is served same-origin via the Nuxt dev server at `/__observatory/`.
 
@@ -113,8 +117,9 @@ The DevTools client SPA is served same-origin via the Nuxt dev server at `/__obs
 
 All instrumentation is **dev-only**. The module registers Vite transforms that wrap
 `useFetch`, `provide/inject`, `useX()` composable calls, and `<Transition>` at the
-AST/module level before compilation. In production (`import.meta.dev === false`) the
-transforms are skipped entirely — zero runtime overhead.
+AST/module level before compilation. Pinia is instrumented at runtime through a Pinia
+plugin. In production (`import.meta.dev === false`) the transforms and plugin are
+skipped entirely — zero runtime overhead.
 
 ### useFetch Dashboard
 
@@ -412,12 +417,13 @@ src/
     │   ├── fetch-registry.ts           ← Fetch tracking store + __devFetch shim
     │   ├── provide-inject-registry.ts  ← Injection tracking + __devProvide/__devInject
     │   ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
+    │   ├── pinia-store-registry.ts     ← Pinia plugin: store state, actions, hydration
     │   ├── render-registry.ts          ← Render registry (timeline, route attribution, bbox snapshots)
     │   └── transition-registry.ts      ← Transition lifecycle store
     ├── instrumentation/
     │   ├── route.ts                    ← router.afterEach hook — opens/closes traces per navigation
     │   ├── component.ts                ← Vue mixin lifecycle hooks — component + render spans
-    │   ├── fetch.ts                    ← useFetch/useAsyncData span recording
+    │   ├── fetch.ts                    ← $fetch wrap + fetch span recording
     │   └── asyncData.ts                ← useAsyncData-specific span handling
     ├── tracing/
     │   ├── trace.ts                    ← Span + Trace types (server-side internal)
@@ -425,7 +431,8 @@ src/
     │   ├── tracing.ts                  ← Span open/close helpers
     │   └── context.ts                  ← Current-trace context (per async task)
     └── nitro/
-      └── fetch-capture.ts            ← SSR request tracing bridge (fetch + server phases + context)
+        ├── fetch-capture.ts            ← SSR request tracing bridge (fetch + server phases + context)
+        └── ssr-trace-store.ts          ← Per-request SSR span record
 
 client/
 ├── index.html
@@ -441,12 +448,15 @@ client/
     │   ├── trace-render-aggregation.ts ← Per-trace and cross-trace render aggregation helpers
     │   ├── useExportImport.ts          ← JSON export (download) and import (file picker) utilities
     │   ├── useResizablePane.ts         ← Resizable split-pane drag handle
-    │   └── useTraceFilter.ts           ← Trace filter state and filtering logic
+    │   ├── useTraceFilter.ts           ← Trace filter state and filtering logic
+    │   ├── useVirtualizationConfig.ts  ← Virtual list row sizing
+    │   └── useVirtualizationFlags.ts   ← Query-param virtualization rollout flags
     ├── stores/
     └── views/
         ├── FetchDashboard.vue          ← useFetch tab UI
         ├── ProvideInjectGraph.vue      ← provide/inject tab UI
         ├── ComposableTracker.vue       ← Composable tab UI
+        ├── PiniaStoreTracker.vue       ← Pinia tab UI
         ├── ComponentBlock.vue          ← Shared component detail block
         ├── ValueInspector.vue          ← Inline JSON value inspector
         ├── RenderHeatmap.vue           ← Heatmap tab UI
@@ -465,6 +475,9 @@ playground/
 │   ├── usePersistentCartSummary.ts     ← Cart summary across navigations
 │   ├── useProductFilter.ts             ← Product search/filter state
 │   └── useUserPreferences.ts           ← User preferences store
+├── stores/
+│   ├── cart.ts                         ← Pinia cart store
+│   └── user.ts                         ← Pinia user store
 ├── components/
 │   ├── ThemeConsumer.vue               ← Successfully injects 'theme'
 │   ├── MissingProviderConsumer.vue     ← Injects 'cartContext' (no provider — red node)

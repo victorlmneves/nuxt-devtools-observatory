@@ -6,7 +6,6 @@ import { parseObservatoryScript } from './parse-script'
 import { resolveTransformTarget } from './transform-utils'
 import { LIBRARY_COMPOSABLE_SKIP_LIST } from './library-composable-skip-list'
 
-
 const traverse = (_traverse as typeof _traverse & { default?: typeof _traverse }).default ?? _traverse
 const generate = (_generate as typeof _generate & { default?: typeof _generate }).default ?? _generate
 

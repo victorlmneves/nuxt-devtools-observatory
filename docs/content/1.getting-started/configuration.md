@@ -12,6 +12,7 @@ export default defineNuxtConfig({
         fetchDashboard: true, // Enable useFetch dashboard
         provideInjectGraph: true, // Enable provide/inject graph
         composableTracker: true, // Enable composable tracker
+        piniaTracker: true, // Enable Pinia store tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer
@@ -26,6 +27,7 @@ export default defineNuxtConfig({
         maxTransitions: 500, // Max transition entries to keep in memory
         maxComposableHistory: 50, // Max composable history events per entry
         maxComposableEntries: 300, // Max composable entries to keep in memory
+        maxPiniaTimeline: 100, // Max Pinia timeline events per store
         maxRenderTimeline: 100, // Max render timeline events per entry
     },
 })
@@ -38,6 +40,8 @@ export default defineNuxtConfig({
 - `debugRpc` helps diagnose host/iframe bridge issues.
 - Caps reduce memory growth during long dev sessions.
 - `fetchPageSize` controls how many useFetch rows are appended per scroll step.
+- `piniaTracker` records Pinia store state, action/mutation timelines, and hydration attribution.
+- `maxPiniaTimeline` caps timeline events kept per store.
 
 ## Environment variables
 
