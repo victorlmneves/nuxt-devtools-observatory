@@ -229,7 +229,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(original)
             setupFetchInstrumentation(nuxtApp, registry)
 
-            await (nuxtApp.$fetch as { raw: (...a: unknown[]) => Promise<unknown> }).raw('/api/raw')
+            await (nuxtApp.$fetch as unknown as { raw: (...a: unknown[]) => Promise<unknown> }).raw('/api/raw')
 
             const entries = registry.getAll()
             expect(entries).toHaveLength(1)
@@ -247,7 +247,7 @@ describe('setupFetchInstrumentation', () => {
             const nuxtApp = makeNuxtApp(original)
             setupFetchInstrumentation(nuxtApp, registry)
 
-            const api = (nuxtApp.$fetch as { create: () => (...a: unknown[]) => Promise<unknown> }).create()
+            const api = (nuxtApp.$fetch as unknown as { create: () => (...a: unknown[]) => Promise<unknown> }).create()
             await api('/api/from-create')
 
             const entries = registry.getAll()
