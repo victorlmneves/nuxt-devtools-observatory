@@ -115,7 +115,7 @@
         "postcss-html": "^1.8.1",
         "prettier": "^3.9.8",
         "semantic-release": "^25.0.9",
-        "sinon": "^21.1.2",
+        "sinon": "^22.1.0",
         "sirv": "^3.0.2",
         "stylelint": "^17.15.0",
         "stylelint-config-standard": "^40.0.0",
