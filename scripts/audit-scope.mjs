@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { accessSync, constants, statSync } from 'node:fs'
 
 const scope = process.argv[2] || 'root'
 if (!['root', 'docs', 'all'].includes(scope)) {
@@ -6,9 +7,46 @@ if (!['root', 'docs', 'all'].includes(scope)) {
   process.exit(2)
 }
 
+const FIXED_PATH_DIRS = [
+  '/usr/local/sbin',
+  '/usr/local/bin',
+  '/opt/homebrew/bin',
+  '/opt/homebrew/sbin',
+  '/usr/sbin',
+  '/usr/bin',
+  '/sbin',
+  '/bin',
+]
+
+function isWriteableDir(dir) {
+  try {
+    const stats = statSync(dir)
+    if (!stats.isDirectory()) {
+      return true
+    }
+
+    accessSync(dir, constants.W_OK)
+    return false
+  }
+  catch {
+    return false
+  }
+}
+
+const safePath = FIXED_PATH_DIRS.filter((dir) => !isWriteableDir(dir)).join(':')
+
+if (!safePath) {
+  console.error('No safe PATH directories are available for pnpm audit.')
+  process.exit(2)
+}
+
 const run = spawnSync('pnpm', ['audit', '--json'], {
   encoding: 'utf8',
-  shell: process.platform === 'win32',
+  env: {
+    ...process.env,
+    PATH: safePath,
+  },
+  shell: false,
 })
 
 const raw = (run.stdout || '').trim()
