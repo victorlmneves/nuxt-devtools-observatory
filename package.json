@@ -71,6 +71,10 @@
         "verify:report": "playwright show-report",
         "test:accuracy": "vitest run tests/verification/accuracy.test.ts",
         "type-check": "tsc --noEmit --project tests/verification/tsconfig.json"
+        ,"audit:all": "pnpm audit"
+        ,"audit:root": "node scripts/audit-scope.mjs root"
+        ,"audit:docs": "node scripts/audit-scope.mjs docs"
+        ,"audit:ci": "node scripts/audit-scope.mjs root"
     },
     "dependencies": {
         "@babel/generator": "7.29.1",
