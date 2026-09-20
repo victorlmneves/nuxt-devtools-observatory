@@ -1,9 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 const scope = process.argv[2] || 'root'
 if (!['root', 'docs', 'all'].includes(scope)) {
   console.error('Usage: node scripts/audit-scope.mjs <root|docs|all>')
+
   process.exit(2)
 }
 
@@ -37,21 +41,36 @@ const safePath = FIXED_PATH_DIRS.filter((dir) => !isWriteableDir(dir)).join(':')
 
 if (!safePath) {
   console.error('No safe PATH directories are available for pnpm audit.')
+
   process.exit(2)
 }
 
-const run = spawnSync('pnpm', ['audit', '--json'], {
-  encoding: 'utf8',
-  env: {
-    ...process.env,
-    PATH: safePath,
+const pnpmBinary = (() => {
+  try {
+    return require.resolve('pnpm/bin/pnpm.cjs')
+  }
+  catch {
+    return 'pnpm'
+  }
+})()
+
+const run = spawnSync(
+  pnpmBinary === 'pnpm' ? 'pnpm' : process.execPath,
+  pnpmBinary === 'pnpm' ? ['audit', '--json'] : [pnpmBinary, 'audit', '--json'],
+  {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: safePath,
+    },
+    shell: false,
   },
-  shell: false,
-})
+)
 
 const raw = (run.stdout || '').trim()
 if (!raw) {
   console.error(run.stderr || 'pnpm audit produced no JSON output')
+
   process.exit(2)
 }
 
@@ -62,6 +81,7 @@ try {
 catch (error) {
   console.error('Failed to parse pnpm audit JSON output')
   console.error(error instanceof Error ? error.message : String(error))
+
   process.exit(2)
 }
 
@@ -100,12 +120,14 @@ for (const item of scoped) {
 
 if (scoped.length === 0) {
   console.log(`No vulnerabilities found for scope: ${scope}`)
+
   process.exit(0)
 }
 
 console.log(`Vulnerabilities for scope: ${scope}`)
 for (const item of scoped) {
   console.log(`- [${item.advisory.severity}] ${item.advisory.module_name} (${item.advisory.github_advisory_id || item.advisory.id})`)
+
   for (const p of item.paths) {
     console.log(`  path: ${p}`)
   }
