@@ -9,6 +9,7 @@
     },
     "homepage": "https://github.com/victorlmneves/nuxt-devtools-observatory#readme",
     "type": "module",
+    "packageManager": "pnpm@10.28.2",
     "main": "./dist/module.mjs",
     "module": "./dist/module.mjs",
     "exports": {
