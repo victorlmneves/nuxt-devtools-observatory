@@ -59,12 +59,12 @@ function handleTypeToggle(type: string) {
 }
 
 function handleMinDurationChange(value: string) {
-    const num = Math.max(0, parseInt(value) || 0)
+    const num = Math.max(0, Number.parseInt(value) || 0)
     emit('update:min-duration', num)
 }
 
 function handleMaxDurationChange(value: string) {
-    const num = Math.max(0, parseInt(value) || Infinity)
+    const num = Math.max(0, Number.parseInt(value) || Infinity)
     emit('update:max-duration', num)
 }
 
@@ -95,8 +95,9 @@ function getSpanTypeColor(type: string): string {
     <div class="trace-filter">
         <!-- Search bar -->
         <div class="trace-filter__section">
-            <label class="trace-filter__label">Search</label>
+            <label class="trace-filter__label" for="trace-search-input">Search</label>
             <input
+                id="trace-search-input"
                 :value="props.searchQuery"
                 type="text"
                 class="trace-filter__search-input"
@@ -107,8 +108,8 @@ function getSpanTypeColor(type: string): string {
 
         <!-- Span type filter -->
         <div v-if="availableSpanTypes.length > 0" class="trace-filter__section">
-            <label class="trace-filter__label">Span Type</label>
-            <div class="trace-filter__type-filters">
+            <fieldset class="trace-filter__type-filters">
+                <legend class="trace-filter__label">Span Type</legend>
                 <button
                     v-for="type in availableSpanTypes"
                     :key="type"
@@ -120,12 +121,12 @@ function getSpanTypeColor(type: string): string {
                     <span class="trace-filter__type-dot" :style="{ backgroundColor: getSpanTypeColor(type) }"></span>
                     {{ type }}
                 </button>
-            </div>
+            </fieldset>
         </div>
 
         <!-- Duration filter -->
-        <div class="trace-filter__section">
-            <label class="trace-filter__label">Duration (ms)</label>
+        <fieldset class="trace-filter__section">
+            <legend class="trace-filter__label">Duration (ms)</legend>
             <div class="trace-filter__duration-inputs">
                 <input
                     :value="props.minDuration"
@@ -133,6 +134,7 @@ function getSpanTypeColor(type: string): string {
                     min="0"
                     class="trace-filter__duration-input"
                     placeholder="Min"
+                    aria-label="Minimum duration in milliseconds"
                     @input="handleMinDurationChange(getInputValue($event))"
                 />
                 <span class="trace-filter__duration-separator">–</span>
@@ -143,24 +145,29 @@ function getSpanTypeColor(type: string): string {
                     :max="maxTraceDuration"
                     class="trace-filter__duration-input"
                     placeholder="Max"
+                    aria-label="Maximum duration in milliseconds"
                     @input="handleMaxDurationChange(getInputValue($event))"
                 />
             </div>
-            <input
-                v-if="maxTraceDuration"
-                :value="props.maxDuration === Infinity ? maxTraceDuration : props.maxDuration"
-                type="range"
-                :min="0"
-                :max="maxTraceDuration"
-                class="trace-filter__duration-slider"
-                @input="handleMaxDurationChange(getInputValue($event))"
-            />
-        </div>
+            <template v-if="maxTraceDuration">
+                <label for="trace-duration-slider" class="trace-filter__label--sr-only">Maximum duration slider</label>
+                <input
+                    id="trace-duration-slider"
+                    :value="props.maxDuration === Infinity ? maxTraceDuration : props.maxDuration"
+                    type="range"
+                    :min="0"
+                    :max="maxTraceDuration"
+                    class="trace-filter__duration-slider"
+                    @input="handleMaxDurationChange(getInputValue($event))"
+                />
+            </template>
+        </fieldset>
 
         <!-- Route filter -->
         <div class="trace-filter__section">
-            <label class="trace-filter__label">Route</label>
+            <label class="trace-filter__label" for="trace-route-input">Route</label>
             <input
+                id="trace-route-input"
                 :value="props.routeFilter"
                 type="text"
                 class="trace-filter__search-input"
@@ -196,6 +203,18 @@ function getSpanTypeColor(type: string): string {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.trace-filter__label--sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 
 .trace-filter__search-input {

@@ -223,12 +223,12 @@ export default defineNuxtModule<ModuleOptions>({
 
         const trackersEnabled = Boolean(
             resolved.fetchDashboard ||
-                resolved.provideInjectGraph ||
-                resolved.composableTracker ||
-                resolved.piniaTracker ||
-                resolved.renderHeatmap ||
-                resolved.transitionTracker ||
-                resolved.traceViewer
+            resolved.provideInjectGraph ||
+            resolved.composableTracker ||
+            resolved.piniaTracker ||
+            resolved.renderHeatmap ||
+            resolved.transitionTracker ||
+            resolved.traceViewer
         )
 
         // ── Runtime plugins ───────────────────────────────────────────────────

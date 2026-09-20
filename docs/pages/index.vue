@@ -114,8 +114,9 @@ const quickLinks = [
             <template #body>
                 <div class="landing-hero-copy">
                     <p>
-                        Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, Pinia stores, provide/inject chains, renders,
-                        transitions, and route traces so you can debug app behavior from the same place you inspect the rest of Nuxt.
+                        Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, Pinia stores, provide/inject
+                        chains, renders, transitions, and route traces so you can debug app behavior from the same place you inspect the
+                        rest of Nuxt.
                     </p>
                 </div>
             </template>
@@ -195,81 +196,6 @@ const quickLinks = [
                     </linearGradient>
                 </defs>
             </svg>
-
-            <!-- <div class="relative group [&amp;&gt;pre]:rounded-t-none [&amp;&gt;pre]:my-0 my-5">
-                <div class="flex items-center gap-1.5 border border-muted bg-default border-b-0 relative rounded-t-md px-4 py-3">
-                    <span class="iconify i-vscode-icons:file-type-nuxt size-4 shrink-0" aria-hidden="true"></span>
-                    <span class="text-default text-sm/6">nuxt.config.ts</span>
-                </div>
-                <button
-                    type="button"
-                    aria-label="Copy code to clipboard"
-                    tabindex="-1"
-                    data-slot="base"
-                    class="rounded-md font-medium inline-flex items-center disabled:cursor-not-allowed aria-disabled:cursor-not-allowed disabled:opacity-75 aria-disabled:opacity-75 text-xs gap-1.5 ring ring-inset ring-accented text-default bg-default hover:bg-elevated active:bg-elevated disabled:bg-default aria-disabled:bg-default focus:outline-none focus-visible:ring-2 focus-visible:ring-inverted p-1.5 absolute top-[11px] right-[11px] lg:opacity-0 lg:group-hover:opacity-100 transition"
-                >
-                    <span class="iconify i-lucide:copy shrink-0 size-4" aria-hidden="true" data-slot="leadingIcon"></span>
-                </button>
-                <pre
-                    class="group font-mono text-sm/6 border border-muted bg-muted rounded-md px-4 py-3 whitespace-pre-wrap break-words overflow-x-auto focus:outline-none **:[.line]:block **:[.line.highlight]:-mx-4 **:[.line.highlight]:px-4 **:[.line.highlight]:bg-accented/50!"
-                ><pre class="language-ts shiki shiki-themes material-theme-lighter material-theme material-theme-palenight" code="export default defineNuxtConfig({
-  modules: [
-    'nuxt-devtools-observatory',
-  ],
-
-  devtools: {
-    enabled: true,
-  },
-
-  observatory: {
-    observatory: {
-        instrumentServer: true, // Instrument the server for SSR/Nitro fetch and composable tracking. Enable this when using SSR so server-side composable calls are captured. Disable for SPA projects to avoid double-registration caused by the transform running on both builds.
-        fetchDashboard: true, // Enable useFetch dashboard
-        provideInjectGraph: true, // Enable provide/inject graph
-        composableTracker: true, // Enable composable tracker
-        renderHeatmap: true, // Enable render heatmap
-        transitionTracker: true, // Enable transition tracker
-        composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
-        heatmapThresholdCount: 3, // Highlight components with 3+ renders
-        heatmapThresholdTime: 16, // Highlight components with render time above this (ms)
-        heatmapHideInternals: true, // Hide node_modules and internal components in the render heatmap
-        debugRpc: false, // Enable RPC handshake debug logs (useful for troubleshooting)
-        maxFetchEntries: 200, // Max fetch entries to keep in memory
-        maxPayloadBytes: 10000, // Max payload size (bytes) per fetch entry
-        maxTransitions: 500, // Max transition entries to keep in memory
-        maxComposableHistory: 50, // Max composable history events per entry
-        maxComposableEntries: 300, // Max composable entries to keep in memory
-        maxRenderTimeline: 100, // Max render timeline events per entry
-    },
-  },
-})
-" filename="nuxt.config.ts" language="ts" meta="" style=""><code><span class="line" line="1"><span class="s7zQu">export</span><span class="s7zQu"> default</span><span class="s2Zo4"> defineNuxtConfig</span><span class="sTEyZ">(</span><span class="sMK4o">{
-</span></span><span class="line" line="2"><span class="swJcz">  modules</span><span class="sMK4o">:</span><span class="sTEyZ"> [
-</span></span><span class="line" line="3"><span class="sMK4o">    '</span><span class="sfazB">nuxt-devtools-observatory</span><span class="sMK4o">'</span><span class="sMK4o">,
-</span></span><span class="line" line="4"><span class="sTEyZ">  ]</span><span class="sMK4o">,
-</span></span><span class="line" line="5"><span emptylineplaceholder="true">
-</span></span><span class="line" line="6"><span class="swJcz">  observatory</span><span class="sMK4o">:</span><span class="sTEyZ"> {
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">instrumentServer</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">fetchDashboard</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">provideInjectGraph</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">composableTracker</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">renderHeatmap</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">transitionTracker</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">composableNavigationMode</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapThresholdCount</span><span class="sMK4o">: 3</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapThresholdTime</span><span class="sMK4o">: 16</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">heatmapHideInternals</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">debugRpc</span><span class="sMK4o">: true</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxFetchEntries</span><span class="sMK4o">: 200</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxPayloadBytes</span><span class="sMK4o">: 10000</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxTransitions</span><span class="sMK4o">: 500</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxComposableHistory</span><span class="sMK4o">: 59</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxComposableEntries</span><span class="sMK4o">: 300</span><span class="sMK4o">,
-</span></span><span class="line" line="7"><span class="sMK4o">    </span><span class="sfazB">maxRenderTimeline</span><span class="sMK4o">: 100</span><span class="sMK4o">,
-</span></span><span class="line" line="9"><span class="sTEyZ">  }</span><span class="sMK4o">,
-</span></span><span class="line" line="10"><span class="sMK4o">}</span><span class="sTEyZ">)
-</span></span></code></pre></pre>
-            </div> -->
         </UPageHero>
 
         <UPageSection
