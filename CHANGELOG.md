@@ -1,3 +1,27 @@
+# [0.5.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.4.0...v0.5.0) (2026-09-18)
+
+
+### Bug Fixes
+
+* parse JSX/TSX in Observatory AST transforms ([f0bbe15](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/f0bbe15acd85f8f057ad9941dc477d53ef18f99b))
+* skip wrapping auto-imported VueUse composables ([57bc072](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/57bc0724ac9326924f07120d279e049f4e6af692))
+* update `getStorage` function to prefer `window.localStorage` for better test compatibility ([978e8f7](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/978e8f7d51710d7e029a606bf8cfbb65686cb711))
+
+
+### Features
+
+* Add `getStorage` function and refactor `localStorage` access in `useVirtualizationFlags ([02e9287](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/02e9287ad0d92560471a12aa9af59e77a0459074))
+* add error handling instrumentation and UI updates ([c545a8a](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/c545a8a6d7f3dabe578cb2c8843e9ac0e8d3ed2b))
+* code format ([6b6ca30](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/6b6ca3042e4964b4273f932ed8f72825214e78ca))
+* instrument TransitionGroup in the transition tracker ([d251691](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/d251691aeed76405a1daf46d068aa3e6b4018db7))
+* **pinia-tracker:** enhance Pinia store registry with attachPinia functionality ([88a4621](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/88a4621a1ad33376425cfa578f3eb1e2bcea5bdc))
+* record $fetch, $fetch.raw, and $fetch.create in the fetch dashboard ([eb8581e](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/eb8581e7840dd17dbd87ace588863762aec8b810))
+* **RenderHeatmap:** add visual indication for hot components exceeding threshold ([e4d4280](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/e4d42802f0680a7a87f4e8510b6d267d78df865a))
+* **RenderHeatmap:** enhance tree node depth styling and adjust layout for better visibility ([44142a6](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/44142a6478e81972c147a08e85226dab370c2c41))
+* **RenderHeatmap:** implement dynamic tree node styling based on depth ([360e2cb](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/360e2cbc04ef37f7b2184be118c69ce86f434d2a))
+* Update type assertions for $fetch in fetch.test.ts ([ab5afe8](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/ab5afe88507db398647f204076cebf5076a4be41))
+* **virtualization:** enable virtualization flags by default and implement localStorage persistence ([11cae7e](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/11cae7e7a49f8b6315d4b06d857ec3a717d74631))
+
 # [0.4.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.3.0...v0.4.0) (2026-09-15)
 
 
