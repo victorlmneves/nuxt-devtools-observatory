@@ -20,6 +20,8 @@ logs
 .DS_Store
 .fleet
 .idea
+.vscode/*
+.sonarlint/*
 
 # Local env files
 .env
