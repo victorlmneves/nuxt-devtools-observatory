@@ -2,6 +2,8 @@ import path from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+const dirname = import.meta.dirname
+
 export default defineConfig({
     root: new URL('.', import.meta.url).pathname,
     // Served via sirv middleware at /__observatory on the Nuxt dev server (same-origin).
@@ -11,9 +13,9 @@ export default defineConfig({
     plugins: [vue()],
     resolve: {
         alias: {
-            '@observatory': path.resolve(__dirname, '../src'),
-            '@observatory-client': path.resolve(__dirname, './src'),
-            '@observatory-tests': path.resolve(__dirname, '../tests'),
+            '@observatory': path.resolve(dirname, '../src'),
+            '@observatory-client': path.resolve(dirname, './src'),
+            '@observatory-tests': path.resolve(dirname, '../tests'),
         },
     },
     build: {
