@@ -224,7 +224,14 @@ function directionColor(e: TransitionEntry): string {
 
         <!-- Toolbar -->
         <div class="transition-timeline__toolbar tracker-toolbar">
-            <input v-model="search" type="search" placeholder="filter by name or component…" class="transition-timeline__search" />
+            <label class="sr-only" for="transition-timeline-search">Filter transitions</label>
+            <input
+                id="transition-timeline-search"
+                v-model="search"
+                type="search"
+                placeholder="filter by name or component…"
+                class="transition-timeline__search"
+            />
             <div class="transition-timeline__filters">
                 <button :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
                 <button :class="{ active: filter === 'active' }" @click="filter = 'active'">Active</button>
@@ -251,11 +258,7 @@ function directionColor(e: TransitionEntry): string {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr
-                            v-if="virtualizedRowsEnabled && topTablePadding > 0"
-                            class="transition-timeline__virtual-spacer-row"
-                            aria-hidden="true"
-                        >
+                        <tr v-if="virtualizedRowsEnabled && topTablePadding > 0" class="transition-timeline__virtual-spacer-row">
                             <td colspan="6" :style="{ height: `${topTablePadding}px` }"></td>
                         </tr>
                         <tr
@@ -266,7 +269,7 @@ function directionColor(e: TransitionEntry): string {
                         >
                             <td>
                                 <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
-                                <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm"> group</span>
+                                <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm">group</span>
                             </td>
                             <td>
                                 <span class="transition-timeline__direction mono" :style="{ color: directionColor(row.entry) }">
@@ -295,11 +298,7 @@ function directionColor(e: TransitionEntry): string {
                             </td>
                         </tr>
 
-                        <tr
-                            v-if="virtualizedRowsEnabled && bottomTablePadding > 0"
-                            class="transition-timeline__virtual-spacer-row"
-                            aria-hidden="true"
-                        >
+                        <tr v-if="virtualizedRowsEnabled && bottomTablePadding > 0" class="transition-timeline__virtual-spacer-row">
                             <td colspan="6" :style="{ height: `${bottomTablePadding}px` }"></td>
                         </tr>
 
