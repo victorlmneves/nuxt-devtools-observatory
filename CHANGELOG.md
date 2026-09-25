@@ -1,3 +1,12 @@
+## [0.6.1](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.6.0...v0.6.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* add --ignore-scripts flag to npm installation for trusted publishing in Release workflow ([fe43d2d](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/fe43d2df1058a1e70c5866f8b495cdc087e7a394))
+* install npm 11 in Release so trusted publishing can authenticate ([5a76895](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/5a768957b1c2d87324973b9e5d7824a28bcaf0da))
+* update npm version to 12.1.0 for trusted publishing in Release workflow ([554eb52](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/554eb52939deaf7f366455634b6b8a67daf90c3a))
+
 # [0.6.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.5.0...v0.6.0) (2026-09-25)
 
 
