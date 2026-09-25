@@ -1,0 +1,21 @@
+---
+description: Observatory layer map — where capture, snapshot, and UI code belong
+alwaysApply: true
+---
+
+# Architecture
+
+Observatory is a Nuxt DevTools module. Capture happens in the **host app**. The iframe only renders snapshots.
+
+| Layer | Path | Role |
+| --- | --- | --- |
+| Contracts | `src/types/snapshot.ts`, `src/types/rpc.ts` | Shared entry shapes and `IObservatorySnapshot` |
+| Registry | `src/runtime/composables/*-registry.ts` | Host store; expose `getSnapshot()` and call `bumpSnapshotRevision()` |
+| Transform | `src/transforms/` | Optional Vite rewrite that calls into a registry |
+| Plugin | `src/runtime/plugin.ts` | Register trackers, build snapshot, `import.meta.hot.send` |
+| Module | `src/module.ts`, `src/env-options.ts` | Feature flags, env defaults, Vite plugins, RPC |
+| Client store | `client/src/stores/observatory.ts` | `applySnapshot` into refs |
+| Client UI | `client/src/views/`, `client/src/App.vue` | Tab + panel |
+| Playground | `playground/` | Demo host app only |
+
+Do not capture host-app state inside the iframe. Do not add a second snapshot channel. Alias registry keys in `SNAPSHOT_KEY_ALIASES` when the registry key differs from the snapshot field (`stateCookie` → `stateCookies`).
