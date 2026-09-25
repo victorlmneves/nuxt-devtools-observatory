@@ -1,3 +1,11 @@
+# [0.8.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.7.0...v0.8.0) (2026-09-25)
+
+
+### Features
+
+* add State Cookie Tracker to Observatory ([fec668a](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/fec668a489e676c0dc19227d639319ed31d8653e))
+* enhance observatory and State Cookie Tracker with type safety and message event handling ([74fa208](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/74fa208a056eb0db65d9b57517f4c4e60f73355e))
+
 # [0.7.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.6.1...v0.7.0) (2026-09-25)
 
 
