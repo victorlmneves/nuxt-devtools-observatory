@@ -1,6 +1,6 @@
 {
     "name": "nuxt-devtools-observatory",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "description": "Nuxt DevTools: useFetch Dashboard, provide/inject Graph, Composable Tracker, Pinia Tracker, Render Heatmap, Transition Tracker, Trace Viewer",
     "license": "MIT",
     "repository": {
@@ -70,11 +70,11 @@
         "verify:trace": "playwright test --trace on",
         "verify:report": "playwright show-report",
         "test:accuracy": "vitest run tests/verification/accuracy.test.ts",
-        "type-check": "tsc --noEmit --project tests/verification/tsconfig.json"
-        ,"audit:all": "pnpm audit"
-        ,"audit:root": "node scripts/audit-scope.mjs root"
-        ,"audit:docs": "node scripts/audit-scope.mjs docs"
-        ,"audit:ci": "node scripts/audit-scope.mjs root"
+        "type-check": "tsc --noEmit --project tests/verification/tsconfig.json",
+        "audit:all": "pnpm audit",
+        "audit:root": "node scripts/audit-scope.mjs root",
+        "audit:docs": "node scripts/audit-scope.mjs docs",
+        "audit:ci": "node scripts/audit-scope.mjs root"
     },
     "dependencies": {
         "@babel/generator": "7.29.1",

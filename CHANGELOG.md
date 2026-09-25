@@ -1,3 +1,16 @@
+# [0.6.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.5.0...v0.6.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* stop using corepack to set up npm in the Release workflow ([3abad27](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/3abad27aa041b0e878a3f98204f1a166b74d215e))
+
+
+### Features
+
+* add Payload Inspector for Nuxt payload keys ([c7a62f4](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/c7a62f4590ca4a5cf6dedbe7e2ae3279be755eea))
+* enhance Payload Inspector with improved entry selection and search functionality ([c8b845c](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/c8b845c78a08289c526cc00c65e5ab41ffa36979))
+
 # [0.5.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.4.0...v0.5.0) (2026-09-18)
 
 
