@@ -199,7 +199,7 @@ export default defineNuxtModule<ModuleOptions>({
             aliases['nuxt-devtools-observatory/runtime/async-data-instrumentation'] = resolver.resolve(
                 './runtime/instrumentation/asyncData'
             )
-                ; (config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
+            ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
         // ── Vite transforms ───────────────────────────────────────────────────
