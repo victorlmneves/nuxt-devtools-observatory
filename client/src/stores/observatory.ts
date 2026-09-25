@@ -31,6 +31,7 @@ const emptyPayload: PayloadInspectorSnapshot = {
     keys: [],
 }
 const payload = ref<PayloadInspectorSnapshot>({ ...emptyPayload })
+const stateCookies = ref<IStateCookieEntry[]>([])
 const connected = ref(false)
 const features = ref<ObservatorySnapshot['features']>({})
 const debugRpc = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debugRpc')
@@ -84,6 +85,7 @@ function applySnapshot(data: ObservatorySnapshot) {
               keys: cloneArray(nextPayload.keys),
           }
         : { ...emptyPayload, keys: [] }
+    stateCookies.value = cloneArray(data.stateCookies as IStateCookieEntry[] | undefined)
     features.value = data.features || {}
 
     // If the server snapshot disagrees with the user's requested mode,
@@ -278,6 +280,7 @@ export function useObservatoryData() {
         transitions,
         traces,
         payload,
+        stateCookies,
         features,
         connected,
         refresh,

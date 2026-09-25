@@ -5,6 +5,7 @@ import { composableTrackerPlugin } from './transforms/composable-transform'
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { transitionTrackerPlugin } from './transforms/transition-transform'
+import { stateCookieTrackerPlugin } from './transforms/state-cookie-transform'
 import type { ObservatoryCommand, ObservatorySnapshot, ObservatoryClientFunctions, ObservatoryServerFunctions } from './types/rpc'
 import { createModuleDefaults, resolveInstrumentServer } from './env-options'
 
@@ -111,6 +112,18 @@ export interface ModuleOptions {
     payloadInspector?: boolean
 
     /**
+     * Enable the useState / useCookie tracker tab
+     * @default true
+     */
+    stateCookieTracker?: boolean
+
+    /**
+     * Maximum number of useState / useCookie entries to keep in memory
+     * @default 200
+     */
+    maxStateCookieEntries?: number
+
+    /**
      * Enable the render heatmap tab
      * @default true
      */
@@ -199,6 +212,9 @@ export default defineNuxtModule<ModuleOptions>({
             aliases['nuxt-devtools-observatory/runtime/async-data-instrumentation'] = resolver.resolve(
                 './runtime/instrumentation/asyncData'
             )
+            aliases['nuxt-devtools-observatory/runtime/state-cookie-registry'] = resolver.resolve(
+                './runtime/composables/state-cookie-registry'
+            )
             ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
@@ -227,12 +243,18 @@ export default defineNuxtModule<ModuleOptions>({
             addVitePlugin(transitionTrackerPlugin(), vitePluginScope)
         }
 
+        if (resolved.stateCookieTracker) {
+            addVitePlugin(stateCookieTrackerPlugin(), vitePluginScope)
+            addImports([{ name: '__trackStateCookie', from: resolver.resolve('./runtime/composables/state-cookie-registry') }])
+        }
+
         const trackersEnabled = Boolean(
             resolved.fetchDashboard ||
             resolved.provideInjectGraph ||
             resolved.composableTracker ||
             resolved.piniaTracker ||
             resolved.payloadInspector ||
+            resolved.stateCookieTracker ||
             resolved.renderHeatmap ||
             resolved.transitionTracker ||
             resolved.traceViewer
@@ -278,12 +300,14 @@ export default defineNuxtModule<ModuleOptions>({
             transitions: [],
             traces: [],
             payload: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
+            stateCookies: [],
             features: {
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
                 composableTracker: !!resolved.composableTracker,
                 piniaTracker: !!resolved.piniaTracker,
                 payloadInspector: !!resolved.payloadInspector,
+                stateCookieTracker: !!resolved.stateCookieTracker,
                 composableNavigationMode: resolved.composableNavigationMode,
                 fetchPageSize: resolved.fetchPageSize,
                 heatmapThresholdCount: resolved.heatmapThresholdCount,
@@ -388,6 +412,8 @@ export default defineNuxtModule<ModuleOptions>({
             composableTracker: resolved.composableTracker,
             piniaTracker: resolved.piniaTracker,
             payloadInspector: resolved.payloadInspector,
+            stateCookieTracker: resolved.stateCookieTracker,
+            maxStateCookieEntries: resolved.maxStateCookieEntries,
             renderHeatmap: resolved.renderHeatmap,
             transitionTracker: resolved.transitionTracker,
             traceViewer: resolved.traceViewer,

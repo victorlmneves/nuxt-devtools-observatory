@@ -7,6 +7,7 @@ import { setupPiniaStoreRegistry } from './composables/pinia-store-registry'
 import { setupRenderRegistry } from './composables/render-registry'
 import { setupTransitionRegistry } from './composables/transition-registry'
 import { setupPayloadRegistry } from './composables/payload-registry'
+import { setupStateCookieRegistry } from './composables/state-cookie-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
 import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
@@ -32,6 +33,8 @@ type ObservatoryPublicConfig = {
     composableTracker?: boolean
     piniaTracker?: boolean
     payloadInspector?: boolean
+    stateCookieTracker?: boolean
+    maxStateCookieEntries?: number
     renderHeatmap?: boolean
     transitionTracker?: boolean
     traceViewer?: boolean
@@ -57,6 +60,7 @@ const SNAPSHOT_KEY_ALIASES: Record<string, string> = {
     pinia: 'piniaStores',
     render: 'renders',
     transition: 'transitions',
+    stateCookie: 'stateCookies',
 }
 
 let timelineRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -207,6 +211,13 @@ function createObservatoryContext(nuxtApp: NuxtAppInstance, config: ObservatoryP
         })
     }
 
+    if (config.stateCookieTracker) {
+        registries.stateCookie = setupStateCookieRegistry({
+            maxEntries: config.maxStateCookieEntries,
+            isHydrating: () => isSsrHydrating(nuxtApp),
+        })
+    }
+
     if (config.transitionTracker) {
         registries.transition = setupTransitionRegistry()
     }
@@ -260,6 +271,7 @@ function buildSnapshot(ctx: ObservatoryPluginContext): ObservatorySnapshot {
             key: 'payload',
             fallback: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
         },
+        { key: 'stateCookie', fallback: [] },
         { key: 'render', fallback: {} },
         { key: 'transition', fallback: {} },
     ] as const
@@ -281,6 +293,7 @@ function buildSnapshot(ctx: ObservatoryPluginContext): ObservatorySnapshot {
         composableTracker: !!ctx.registries.composable,
         piniaTracker: !!ctx.registries.pinia,
         payloadInspector: !!ctx.registries.payload,
+        stateCookieTracker: !!ctx.registries.stateCookie,
         composableNavigationMode: ctx.composableNavigationMode,
         fetchPageSize: typeof ctx.config.fetchPageSize === 'number' ? ctx.config.fetchPageSize : 20,
         heatmapThresholdCount: typeof ctx.config.heatmapThresholdCount === 'number' ? ctx.config.heatmapThresholdCount : 3,
@@ -308,6 +321,7 @@ function broadcastAll(ctx: ObservatoryPluginContext, reason = 'unknown') {
         renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
         transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
         traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
+        stateCookies: Array.isArray(snapshot.stateCookies) ? snapshot.stateCookies.length : 0,
     })
 
     ctx.lastSnapshotRevision = getSnapshotRevision()
@@ -487,12 +501,16 @@ function setupClientHost(ctx: ObservatoryPluginContext) {
 
     const composableRegistry = ctx.registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
     const piniaRegistry = ctx.registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
+    const stateCookieRegistry = ctx.registries.stateCookie as ReturnType<typeof setupStateCookieRegistry> | undefined
 
     composableRegistry?.onComposableChange?.(() => {
         broadcastAll(ctx, 'composable:onChange')
     })
     piniaRegistry?.onChange?.(() => {
         broadcastAll(ctx, 'pinia:onChange')
+    })
+    stateCookieRegistry?.onChange?.(() => {
+        broadcastAll(ctx, 'stateCookie:onChange')
     })
 
     import.meta.hot?.on('observatory:command', (rawPayload: unknown) => {

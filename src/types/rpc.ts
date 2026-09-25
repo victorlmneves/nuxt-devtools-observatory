@@ -21,12 +21,14 @@ export interface ObservatorySnapshot {
     transitions?: unknown[]
     traces?: unknown[]
     payload?: unknown
+    stateCookies?: unknown[]
     features?: {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
         composableTracker?: boolean
         piniaTracker?: boolean
         payloadInspector?: boolean
+        stateCookieTracker?: boolean
         composableNavigationMode?: 'route' | 'session'
         fetchPageSize?: number
         heatmapThresholdCount?: number

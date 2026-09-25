@@ -208,6 +208,24 @@ export interface PayloadKeyEntry {
     preview?: unknown
 }
 
+export type TStateCookieKind = 'useState' | 'useCookie'
+
+export interface IStateCookieEntry {
+    id: string
+    kind: TStateCookieKind
+    key: string
+    origin: 'ssr' | 'csr'
+    preview?: unknown
+    updatedAt: number
+    file?: string
+    line?: number
+    cookie?: {
+        maxAge?: number
+        path?: string
+        httpOnly?: boolean
+    }
+}
+
 export interface PayloadInspectorSnapshot {
     capturedAt: number
     isHydrating: boolean
