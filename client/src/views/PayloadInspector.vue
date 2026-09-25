@@ -45,15 +45,37 @@ function previewText(entry: PayloadKeyEntry, pretty = false) {
     }
 
     try {
-        const text = typeof entry.preview === 'string' ? entry.preview : JSON.stringify(entry.preview, null, pretty ? 2 : 0)
+        const indent = pretty ? 2 : 0
+        let text: string
+
+        if (typeof entry.preview === 'string') {
+            text = entry.preview
+        } else {
+            text = JSON.stringify(entry.preview, null, indent)
+        }
 
         if (pretty) {
             return text
         }
 
-        return text.length > 80 ? text.slice(0, 80) + '…' : text
+        if (text.length > 80) {
+            return text.slice(0, 80) + '…'
+        }
+
+        return text
     } catch {
         return '[unserializable]'
+    }
+}
+
+function selectEntry(id: string) {
+    selectedId.value = id
+}
+
+function onRowKeydown(event: KeyboardEvent, id: string) {
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        selectEntry(id)
     }
 }
 </script>
@@ -84,7 +106,14 @@ function previewText(entry: PayloadKeyEntry, pretty = false) {
             <button :class="{ active: filter === 'data' }" @click="filter = 'data'">data</button>
             <button :class="{ active: filter === 'state' }" @click="filter = 'state'">state</button>
             <button :class="{ active: filter === 'csr' }" @click="filter = 'csr'">csr only</button>
-            <input v-model="search" type="search" class="payload-inspector__search tracker-toolbar__spacer" placeholder="search key…" />
+            <label class="payload-inspector__search-label muted" for="payload-inspector-search">search</label>
+            <input
+                id="payload-inspector-search"
+                v-model="search"
+                type="search"
+                class="payload-inspector__search tracker-toolbar__spacer"
+                placeholder="search key…"
+            />
         </div>
 
         <div class="tracker-split">
@@ -109,7 +138,9 @@ function previewText(entry: PayloadKeyEntry, pretty = false) {
                             v-for="entry in filtered"
                             :key="entry.id"
                             :class="{ selected: selected?.id === entry.id }"
-                            @click="selectedId = entry.id"
+                            tabindex="0"
+                            @click="selectEntry(entry.id)"
+                            @keydown="onRowKeydown($event, entry.id)"
                         >
                             <td class="mono">{{ entry.key }}</td>
                             <td>
@@ -134,6 +165,10 @@ function previewText(entry: PayloadKeyEntry, pretty = false) {
 </template>
 
 <style scoped>
+.payload-inspector__search-label {
+    font-size: 11px;
+}
+
 .payload-inspector__search {
     max-width: 240px;
 }

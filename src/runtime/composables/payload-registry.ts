@@ -55,12 +55,12 @@ export function collectPayloadKeys(payload: unknown): PayloadKeyEntry[] {
     }
 
     const root = payload as Record<string, unknown>
-    const keys: PayloadKeyEntry[] = []
-
-    keys.push(...walkRecord(root.data, 'data'))
-    keys.push(...walkRecord(root.state, 'state'))
-    keys.push(...walkRecord(root.pinia, 'pinia'))
-    keys.push(...walkRecord(root._errors, 'error'))
+    const keys: PayloadKeyEntry[] = [
+        ...walkRecord(root.data, 'data'),
+        ...walkRecord(root.state, 'state'),
+        ...walkRecord(root.pinia, 'pinia'),
+        ...walkRecord(root._errors, 'error'),
+    ]
 
     const skip = new Set(['data', 'state', 'pinia', '_errors', 'serverRendered', 'prerenderedAt'])
 
