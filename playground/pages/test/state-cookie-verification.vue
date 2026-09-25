@@ -20,7 +20,15 @@ function clearToken() {
 <template>
     <section class="layout">
         <h2>State / cookies verification</h2>
-        <p>Open Observatory → State. Keys should be <code>playground-visits</code>, <code>playground-theme</code>, and <code>playground-token</code>.</p>
+        <p>
+            Open Observatory → State. Keys should be
+            <code>playground-visits</code>
+            ,
+            <code>playground-theme</code>
+            , and
+            <code>playground-token</code>
+            .
+        </p>
         <p>visits: {{ visitCount }} · theme: {{ theme }} · cookie: {{ token ?? '—' }}</p>
         <div class="controls">
             <button data-testid="state-bump-visits" @click="bumpVisits">Bump visits (updates cookie)</button>

@@ -1,13 +1,13 @@
-import type { ComposableEntry } from '@observatory/types/snapshot'
+import type { IComposableEntry } from '@observatory/types/snapshot'
 
 const MAX_SEARCH_DEPTH = 6
 const MAX_SEARCH_NODES = 1500
 
-interface SearchBudget {
+interface ISearchBudget {
     nodes: number
 }
 
-function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>, budget: SearchBudget, depth = 0): boolean {
+function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth = 0): boolean {
     if (budget.nodes >= MAX_SEARCH_NODES) {
         return false
     }
@@ -91,11 +91,11 @@ function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>,
 /**
  * Returns true when a composable entry matches the search query.
  * Search scope includes name, file, ref keys, and nested reactive key/value content.
- * @param {ComposableEntry} entry - Composable entry to inspect.
+ * @param {IComposableEntry} entry - Composable entry to inspect.
  * @param {string} query - Case-insensitive search query.
  * @returns {boolean} True when the entry matches the query.
  */
-export function matchesComposableEntryQuery(entry: ComposableEntry, query: string): boolean {
+export function matchesComposableEntryQuery(entry: IComposableEntry, query: string): boolean {
     const normalizedQuery = query.trim().toLowerCase()
 
     if (!normalizedQuery) {
@@ -111,7 +111,7 @@ export function matchesComposableEntryQuery(entry: ComposableEntry, query: strin
     }
 
     const seen = new WeakSet<object>()
-    const budget: SearchBudget = { nodes: 0 }
+    const budget: ISearchBudget = { nodes: 0 }
 
     for (const [refKey, refInfo] of Object.entries(entry.refs)) {
         if (refKey.toLowerCase().includes(normalizedQuery)) {

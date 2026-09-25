@@ -2,7 +2,7 @@
 // No store is accessed or created here, so Pinia Tracker will show 'no store available' by default.
 import { computed, ref } from 'vue'
 import { useObservatoryData, clearPiniaStores /* editPiniaState */ } from '@observatory-client/stores/observatory'
-import type { PiniaMutationEvent, PiniaStoreEntry } from '@observatory/types/snapshot'
+import type { IPiniaMutationEvent, IPiniaStoreEntry } from '@observatory/types/snapshot'
 
 const { piniaStores, connected } = useObservatoryData()
 
@@ -15,7 +15,7 @@ const editError = ref('')
 
 const stores = computed(() => [...piniaStores.value].sort((a, b) => a.id.localeCompare(b.id)))
 
-const selectedStore = computed<PiniaStoreEntry | null>(() => {
+const selectedStore = computed<IPiniaStoreEntry | null>(() => {
     if (!selectedStoreId.value) {
         return stores.value[0] ?? null
     }
@@ -23,11 +23,11 @@ const selectedStore = computed<PiniaStoreEntry | null>(() => {
     return stores.value.find((item) => item.id === selectedStoreId.value) ?? null
 })
 
-const timeline = computed<PiniaMutationEvent[]>(() => {
+const timeline = computed<IPiniaMutationEvent[]>(() => {
     return selectedStore.value ? [...selectedStore.value.timeline].slice().reverse() : []
 })
 
-const selectedEvent = computed<PiniaMutationEvent | null>(() => {
+const selectedEvent = computed<IPiniaMutationEvent | null>(() => {
     if (!selectedEventId.value) {
         return timeline.value[0] ?? null
     }
@@ -49,7 +49,7 @@ function pretty(value: unknown) {
     }
 }
 
-function renderDuration(event: PiniaMutationEvent) {
+function renderDuration(event: IPiniaMutationEvent) {
     if (typeof event.durationMs !== 'number') {
         return '-'
     }

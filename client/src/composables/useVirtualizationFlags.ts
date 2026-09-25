@@ -1,8 +1,8 @@
 import { computed, ref } from 'vue'
 
-type VirtualizationScreen = 'heatmap' | 'traces' | 'composables' | 'fetch' | 'transitions'
+type TVirtualizationScreen = 'heatmap' | 'traces' | 'composables' | 'fetch' | 'transitions'
 
-type VirtualizationFlags = {
+type TVirtualizationFlags = {
     enabled: boolean
     heatmap: boolean
     traces: boolean
@@ -13,7 +13,7 @@ type VirtualizationFlags = {
 
 export const VIRTUALIZATION_STORAGE_KEY = 'observatory:virtualization'
 
-const defaultFlags: VirtualizationFlags = {
+const defaultFlags: TVirtualizationFlags = {
     enabled: true,
     heatmap: true,
     traces: true,
@@ -22,7 +22,7 @@ const defaultFlags: VirtualizationFlags = {
     transitions: true,
 }
 
-const flags = ref<VirtualizationFlags>({ ...defaultFlags })
+const flags = ref<TVirtualizationFlags>({ ...defaultFlags })
 
 let initialized = false
 
@@ -52,11 +52,11 @@ function parseBooleanParam(value: string | null): boolean | null {
     return null
 }
 
-function isFlagRecord(value: unknown): value is Partial<VirtualizationFlags> {
+function isFlagRecord(value: unknown): value is Partial<TVirtualizationFlags> {
     return Boolean(value) && typeof value === 'object'
 }
 
-function readFromStorage(): VirtualizationFlags {
+function readFromStorage(): TVirtualizationFlags {
     const storage = getStorage()
 
     if (!storage) {
@@ -89,7 +89,7 @@ function readFromStorage(): VirtualizationFlags {
     }
 }
 
-function persist(next: VirtualizationFlags) {
+function persist(next: TVirtualizationFlags) {
     const storage = getStorage()
 
     if (!storage) {
@@ -103,7 +103,7 @@ function persist(next: VirtualizationFlags) {
     }
 }
 
-function applyQueryOverrides(current: VirtualizationFlags): VirtualizationFlags {
+function applyQueryOverrides(current: TVirtualizationFlags): TVirtualizationFlags {
     if (typeof window === 'undefined') {
         return current
     }
@@ -117,7 +117,7 @@ function applyQueryOverrides(current: VirtualizationFlags): VirtualizationFlags 
         next.enabled = globalParam
     }
 
-    const perScreen: Array<[VirtualizationScreen, string]> = [
+    const perScreen: Array<[TVirtualizationScreen, string]> = [
         ['heatmap', 'virtHeatmap'],
         ['traces', 'virtTraces'],
         ['composables', 'virtComposables'],
@@ -156,7 +156,7 @@ function setAllEnabled(value: boolean) {
     persist(next)
 }
 
-function setScreenEnabled(screen: VirtualizationScreen, value: boolean) {
+function setScreenEnabled(screen: TVirtualizationScreen, value: boolean) {
     const next = {
         ...flags.value,
         [screen]: value,
@@ -186,4 +186,4 @@ export function useVirtualizationFlags() {
     }
 }
 
-export type { VirtualizationFlags, VirtualizationScreen }
+export type { TVirtualizationFlags, TVirtualizationScreen }

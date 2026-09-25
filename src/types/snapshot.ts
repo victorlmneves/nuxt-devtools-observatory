@@ -3,7 +3,7 @@
  * These are used by both the module server side (src/) and the iframe client (client/).
  */
 
-export interface FetchEntry {
+export interface IFetchEntry {
     id: string
     key: string
     url: string
@@ -22,7 +22,7 @@ export interface FetchEntry {
     source?: string
 }
 
-export interface ProvideEntry {
+export interface IProvideEntry {
     key: string
     componentName: string
     componentFile: string
@@ -36,7 +36,7 @@ export interface ProvideEntry {
     isShadowing: boolean
 }
 
-export interface InjectEntry {
+export interface IInjectEntry {
     key: string
     componentName: string
     componentFile: string
@@ -49,13 +49,13 @@ export interface InjectEntry {
     line: number
 }
 
-export interface RefChangeEvent {
+export interface IRefChangeEvent {
     t: number
     key: string
     value: unknown
 }
 
-export interface ComposableEntry {
+export interface IComposableEntry {
     id: string
     name: string
     componentFile: string
@@ -64,7 +64,7 @@ export interface ComposableEntry {
     leak: boolean
     leakReason?: string
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
-    history: RefChangeEvent[]
+    history: IRefChangeEvent[]
     sharedKeys: string[]
     sharedKeyGroups?: Record<string, string>
     watcherCount: number
@@ -82,26 +82,26 @@ export interface ComposableEntry {
     isLayoutComposable?: boolean
 }
 
-export interface PiniaStateDiff {
+export interface IPiniaStateDiff {
     path: string
     before: unknown
     after: unknown
 }
 
-export interface PiniaStoreDependency {
+export interface IPiniaStoreDependency {
     id: string
     kind: 'component' | 'composable' | 'unknown'
     name: string
     file?: string
 }
 
-export interface PiniaHydrationEvent {
+export interface IPiniaHydrationEvent {
     at: number
     source: 'nuxt-payload' | 'persistedstate' | 'runtime' | 'unknown'
     details?: string
 }
 
-export interface PiniaMutationEvent {
+export interface IPiniaMutationEvent {
     id: string
     storeId: string
     storeName: string
@@ -113,25 +113,25 @@ export interface PiniaMutationEvent {
     status: 'active' | 'ok' | 'error'
     beforeState: unknown
     afterState: unknown
-    diff: PiniaStateDiff[]
+    diff: IPiniaStateDiff[]
     callerStack?: string[]
     payload?: unknown
     error?: string
 }
 
-export interface PiniaStoreEntry {
+export interface IPiniaStoreEntry {
     id: string
     name: string
     state: unknown
-    dependencies: PiniaStoreDependency[]
-    timeline: PiniaMutationEvent[]
-    hydrationTimeline: PiniaHydrationEvent[]
+    dependencies: IPiniaStoreDependency[]
+    timeline: IPiniaMutationEvent[]
+    hydrationTimeline: IPiniaHydrationEvent[]
     lastMutationAt?: number
     lastActionAt?: number
-    hydration?: PiniaHydrationEvent
+    hydration?: IPiniaHydrationEvent
 }
 
-export interface RenderEvent {
+export interface IRenderEvent {
     kind: 'mount' | 'update'
     t: number
     durationMs: number
@@ -139,7 +139,7 @@ export interface RenderEvent {
     route: string
 }
 
-export interface RenderEntry {
+export interface IRenderEntry {
     uid: number
     name: string
     file: string
@@ -149,7 +149,7 @@ export interface RenderEntry {
     totalMs: number
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
-    timeline: RenderEvent[]
+    timeline: IRenderEvent[]
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
     parentUid?: number
     isPersistent: boolean
@@ -157,7 +157,7 @@ export interface RenderEntry {
     route: string
 }
 
-export interface TransitionEntry {
+export interface ITransitionEntry {
     id: string
     transitionName: string
     parentComponent: string
@@ -173,7 +173,7 @@ export interface TransitionEntry {
     component?: 'Transition' | 'TransitionGroup'
 }
 
-export interface TraceSpan {
+export interface ITraceSpan {
     id: string
     traceId: string
     parentSpanId?: string
@@ -186,7 +186,7 @@ export interface TraceSpan {
     metadata?: Record<string, unknown>
 }
 
-export interface TraceEntry {
+export interface ITraceEntry {
     id: string
     name: string
     startTime: number
@@ -194,14 +194,14 @@ export interface TraceEntry {
     durationMs?: number
     status: 'active' | 'ok' | 'error' | 'cancelled'
     metadata?: Record<string, unknown>
-    spans: TraceSpan[]
+    spans: ITraceSpan[]
 }
 
-export type PayloadBucket = 'data' | 'state' | 'pinia' | 'error' | 'other'
+export type TPayloadBucket = 'data' | 'state' | 'pinia' | 'error' | 'other'
 
-export interface PayloadKeyEntry {
+export interface IPayloadKeyEntry {
     id: string
-    bucket: PayloadBucket
+    bucket: TPayloadBucket
     key: string
     bytes: number
     origin: 'ssr' | 'csr'
@@ -226,11 +226,11 @@ export interface IStateCookieEntry {
     }
 }
 
-export interface PayloadInspectorSnapshot {
+export interface IPayloadInspectorSnapshot {
     capturedAt: number
     isHydrating: boolean
     serverRendered: boolean
     keyCount: number
     totalBytes: number
-    keys: PayloadKeyEntry[]
+    keys: IPayloadKeyEntry[]
 }

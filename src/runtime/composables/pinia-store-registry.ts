@@ -1,14 +1,20 @@
 import { getCurrentInstance } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
-import type { PiniaHydrationEvent, PiniaMutationEvent, PiniaStateDiff, PiniaStoreDependency, PiniaStoreEntry } from '../../types/snapshot'
+import type {
+    IPiniaHydrationEvent,
+    IPiniaMutationEvent,
+    IPiniaStateDiff,
+    IPiniaStoreDependency,
+    IPiniaStoreEntry,
+} from '../../types/snapshot'
 
-type PiniaSubscribeMutation = {
+type TPiniaSubscribeMutation = {
     storeId: string
     type: 'direct' | 'patch object' | 'patch function'
     payload?: unknown
 }
 
-type PiniaStoreLike = {
+type TPiniaStoreLike = {
     $id: string
     $state: Record<string, unknown>
     $onAction: (
@@ -20,7 +26,7 @@ type PiniaStoreLike = {
         }) => void
     ) => () => void
     $subscribe: (
-        cb: (mutation: PiniaSubscribeMutation, state: Record<string, unknown>) => void,
+        cb: (mutation: TPiniaSubscribeMutation, state: Record<string, unknown>) => void,
         opts?: { detached?: boolean; flush?: 'pre' | 'post' | 'sync' }
     ) => () => void
     $patch?: ((mutator: (state: Record<string, unknown>) => void) => void) | ((patch: Record<string, unknown>) => void)
@@ -29,9 +35,9 @@ type PiniaStoreLike = {
     persist?: unknown
 }
 
-type PiniaLike = {
-    _s?: Map<string, PiniaStoreLike>
-    use?: (plugin: (ctx: { store: PiniaStoreLike }) => void) => void
+type TPiniaLike = {
+    _s?: Map<string, TPiniaStoreLike>
+    use?: (plugin: (ctx: { store: TPiniaStoreLike }) => void) => void
 }
 
 function nowMs() {
@@ -88,7 +94,7 @@ function setAtPath(target: Record<string, unknown>, path: string, value: unknown
     ;(cursor as Record<string, unknown>)[String(parts[parts.length - 1])] = value
 }
 
-function collectDiff(before: unknown, after: unknown, path = '', depth = 0, out: PiniaStateDiff[] = []): PiniaStateDiff[] {
+function collectDiff(before: unknown, after: unknown, path = '', depth = 0, out: IPiniaStateDiff[] = []): IPiniaStateDiff[] {
     if (out.length >= 80 || depth > 6) {
         return out
     }
@@ -135,7 +141,7 @@ function stackFromError() {
         .map((line) => line.trim())
 }
 
-function inferDependencyFromInstance(): PiniaStoreDependency | null {
+function inferDependencyFromInstance(): IPiniaStoreDependency | null {
     const instance = getCurrentInstance()
 
     if (!instance) {
@@ -177,8 +183,8 @@ function parseStackLine(line: string): { name?: string; file?: string } {
     return {}
 }
 
-function inferDependenciesFromStack(stack: string[]): PiniaStoreDependency[] {
-    const result: PiniaStoreDependency[] = []
+function inferDependenciesFromStack(stack: string[]): IPiniaStoreDependency[] {
+    const result: IPiniaStoreDependency[] = []
 
     for (const line of stack) {
         const parsed = parseStackLine(line)
@@ -225,7 +231,7 @@ function inferDependenciesFromStack(stack: string[]): PiniaStoreDependency[] {
     return result
 }
 
-function pushUniqueDependency(deps: PiniaStoreDependency[], dependency: PiniaStoreDependency) {
+function pushUniqueDependency(deps: IPiniaStoreDependency[], dependency: IPiniaStoreDependency) {
     if (!dependency.id) {
         return
     }
@@ -246,13 +252,13 @@ export function setupPiniaStoreRegistry(options: {
     const maxTimeline = typeof options.maxTimeline === 'number' ? options.maxTimeline : 100
     const stackProvider = options.stackProvider ?? stackFromError
 
-    let pinia = options.pinia as PiniaLike | undefined
+    let pinia = options.pinia as TPiniaLike | undefined
     let piniaPluginInstalled = false
 
-    const entries = new Map<string, PiniaStoreEntry>()
-    const stores = new Map<string, PiniaStoreLike>()
+    const entries = new Map<string, IPiniaStoreEntry>()
+    const stores = new Map<string, TPiniaStoreLike>()
     const stopHandles = new Map<string, Array<() => void>>()
-    const activeActions = new Map<string, PiniaMutationEvent>()
+    const activeActions = new Map<string, IPiniaMutationEvent>()
     const listeners = new Set<() => void>()
 
     let dirty = true
@@ -267,7 +273,7 @@ export function setupPiniaStoreRegistry(options: {
         }
     }
 
-    function inferPersistedStorageDetails(store: PiniaStoreLike): string {
+    function inferPersistedStorageDetails(store: TPiniaStoreLike): string {
         const persistConfig = store.$persist ?? store.$options?.persist ?? store.persist
 
         if (!persistConfig) {
@@ -306,11 +312,11 @@ export function setupPiniaStoreRegistry(options: {
         return `Persist plugin detected (${[...storageLabels].join(', ')})`
     }
 
-    function inferHydrationTimeline(store: PiniaStoreLike): PiniaHydrationEvent[] {
+    function inferHydrationTimeline(store: TPiniaStoreLike): IPiniaHydrationEvent[] {
         const payload = options.nuxtPayload as { pinia?: Record<string, unknown> } | undefined
         const fromPayload = !!payload?.pinia?.[store.$id]
         const hasPersist = !!store.$persist || !!store.$options?.persist || !!store.persist
-        const events: PiniaHydrationEvent[] = []
+        const events: IPiniaHydrationEvent[] = []
         let at = nowMs()
 
         if (fromPayload) {
@@ -342,7 +348,7 @@ export function setupPiniaStoreRegistry(options: {
         return events
     }
 
-    function trimTimeline(entry: PiniaStoreEntry) {
+    function trimTimeline(entry: IPiniaStoreEntry) {
         if (entry.timeline.length <= maxTimeline) {
             return
         }
@@ -350,14 +356,14 @@ export function setupPiniaStoreRegistry(options: {
         entry.timeline.splice(0, entry.timeline.length - maxTimeline)
     }
 
-    function ensureStore(store: PiniaStoreLike) {
+    function ensureStore(store: TPiniaStoreLike) {
         if (!store?.$id || stores.has(store.$id)) {
             return
         }
 
         stores.set(store.$id, store)
 
-        const entry: PiniaStoreEntry = {
+        const entry: IPiniaStoreEntry = {
             id: store.$id,
             name: store.$id,
             state: safeSnapshot(store.$state),
@@ -392,7 +398,7 @@ export function setupPiniaStoreRegistry(options: {
                 pushUniqueDependency(current.dependencies, dependency)
             }
 
-            const event: PiniaMutationEvent = {
+            const event: IPiniaMutationEvent = {
                 id: actionId,
                 storeId: store.$id,
                 storeName: store.$id,
@@ -467,7 +473,7 @@ export function setupPiniaStoreRegistry(options: {
                 const afterState = safeSnapshot(state)
                 const at = nowMs()
 
-                const event: PiniaMutationEvent = {
+                const event: IPiniaMutationEvent = {
                     id: `${store.$id}:mutation:${at}:${Math.random().toString(36).slice(2, 8)}`,
                     storeId: store.$id,
                     storeName: store.$id,
@@ -584,7 +590,7 @@ export function setupPiniaStoreRegistry(options: {
     }
 
     function attachPinia(next?: unknown) {
-        const candidate = (next ?? pinia) as PiniaLike | undefined
+        const candidate = (next ?? pinia) as TPiniaLike | undefined
 
         if (!candidate) {
             return false

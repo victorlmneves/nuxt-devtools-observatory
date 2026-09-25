@@ -7,7 +7,7 @@ export type { IStateCookieEntry, TStateCookieKind }
 const MAX_PREVIEW_BYTES = 500
 const DEFAULT_MAX_ENTRIES = 200
 
-type ObservatoryWindow = Window & {
+type TObservatoryWindow = Window & {
     __observatory__?: { stateCookie?: ReturnType<typeof setupStateCookieRegistry> }
 }
 
@@ -131,9 +131,8 @@ export function __trackStateCookie<T>(
     meta: { kind: TStateCookieKind; file?: string; line?: number }
 ): T {
     const result = original(...args)
-    const registry = (typeof window !== 'undefined' ? (window as ObservatoryWindow).__observatory__?.stateCookie : undefined) as
-        | ReturnType<typeof setupStateCookieRegistry>
-        | undefined
+    const registry = (typeof window !== 'undefined' ? (window as TObservatoryWindow).__observatory__?.stateCookie : undefined) as
+        ReturnType<typeof setupStateCookieRegistry> | undefined
 
     if (!registry) {
         return result

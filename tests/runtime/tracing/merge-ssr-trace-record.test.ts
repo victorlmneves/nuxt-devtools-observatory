@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { TraceStore } from '@observatory/runtime/tracing/traceStore'
-import { mergeSsrTraceRecord, type MergeableSsrRecord } from '@observatory/runtime/tracing/mergeSsrTraceRecord'
+import { mergeSsrTraceRecord, type IMergeableSsrRecord } from '@observatory/runtime/tracing/mergeSsrTraceRecord'
 
-function makeRecord(overrides: Partial<MergeableSsrRecord> = {}): MergeableSsrRecord {
+function makeRecord(overrides: Partial<IMergeableSsrRecord> = {}): IMergeableSsrRecord {
     return {
         traceId: 'trace_ssr_1',
         name: 'ssr:/home',

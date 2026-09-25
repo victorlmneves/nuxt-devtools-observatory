@@ -3,7 +3,7 @@ import { setCurrentTraceId, getCurrentTraceId } from '@observatory/runtime/traci
 
 const TRACE_CONTEXT_KEY = '__observatory_trace_context__'
 
-interface Carrier {
+interface ICarrier {
     [TRACE_CONTEXT_KEY]?: { currentTraceId?: string }
 }
 
@@ -20,13 +20,13 @@ describe('setCurrentTraceId / getCurrentTraceId', () => {
     })
 
     it('returns undefined when no traceId has been set', () => {
-        const carrier: Carrier = {}
+        const carrier: ICarrier = {}
 
         expect(getCurrentTraceId(carrier)).toBeUndefined()
     })
 
     it('uses a custom carrier independently of globalThis', () => {
-        const carrier: Carrier = {}
+        const carrier: ICarrier = {}
         setCurrentTraceId('carrier-trace', carrier)
 
         expect(getCurrentTraceId(carrier)).toBe('carrier-trace')
@@ -34,8 +34,8 @@ describe('setCurrentTraceId / getCurrentTraceId', () => {
     })
 
     it('two separate carriers do not interfere with each other', () => {
-        const carrier1: Carrier = {}
-        const carrier2: Carrier = {}
+        const carrier1: ICarrier = {}
+        const carrier2: ICarrier = {}
         setCurrentTraceId('trace-1', carrier1)
         setCurrentTraceId('trace-2', carrier2)
 
@@ -44,7 +44,7 @@ describe('setCurrentTraceId / getCurrentTraceId', () => {
     })
 
     it('setting undefined clears the stored traceId', () => {
-        const carrier: Carrier = {}
+        const carrier: ICarrier = {}
         setCurrentTraceId('temp', carrier)
         setCurrentTraceId(undefined, carrier)
 
@@ -52,7 +52,7 @@ describe('setCurrentTraceId / getCurrentTraceId', () => {
     })
 
     it('initializes the context object lazily on first set', () => {
-        const carrier: Carrier = {}
+        const carrier: ICarrier = {}
 
         expect(carrier[TRACE_CONTEXT_KEY]).toBeUndefined()
 
@@ -62,7 +62,7 @@ describe('setCurrentTraceId / getCurrentTraceId', () => {
     })
 
     it('overwrites a previously stored traceId', () => {
-        const carrier: Carrier = {}
+        const carrier: ICarrier = {}
         setCurrentTraceId('first', carrier)
         setCurrentTraceId('second', carrier)
 

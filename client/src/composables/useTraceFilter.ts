@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
-import type { TraceEntry } from '@observatory/types/snapshot'
+import type { ITraceEntry } from '@observatory/types/snapshot'
 
-export function getSpanTypesFromTraces(traces: TraceEntry[]): string[] {
+export function getSpanTypesFromTraces(traces: ITraceEntry[]): string[] {
     const types = new Set<string>()
 
     for (const trace of traces) {
@@ -20,7 +20,7 @@ export function useTraceFilter() {
     const maxDuration = ref<number>(Infinity)
     const routeFilter = ref<string>('')
 
-    function matchesSearch(trace: TraceEntry, query: string): boolean {
+    function matchesSearch(trace: ITraceEntry, query: string): boolean {
         if (!query) {
             return true
         }
@@ -53,7 +53,7 @@ export function useTraceFilter() {
         return false
     }
 
-    function matchesSpanTypeFilter(trace: TraceEntry, types: Set<string>): boolean {
+    function matchesSpanTypeFilter(trace: ITraceEntry, types: Set<string>): boolean {
         if (types.size === 0) return true
 
         for (const span of trace.spans) {
@@ -65,7 +65,7 @@ export function useTraceFilter() {
         return false
     }
 
-    function matchesDurationFilter(trace: TraceEntry, min: number, max: number): boolean {
+    function matchesDurationFilter(trace: ITraceEntry, min: number, max: number): boolean {
         const hasExplicitDurationFilter = min > 0 || max < Infinity
 
         if (trace.durationMs === undefined) {
@@ -75,7 +75,7 @@ export function useTraceFilter() {
         return trace.durationMs >= min && trace.durationMs <= max
     }
 
-    function matchesRouteFilter(trace: TraceEntry, route: string): boolean {
+    function matchesRouteFilter(trace: ITraceEntry, route: string): boolean {
         if (!route) {
             return true
         }
@@ -109,7 +109,7 @@ export function useTraceFilter() {
         return false
     }
 
-    function filterTraces(traces: TraceEntry[]): TraceEntry[] {
+    function filterTraces(traces: ITraceEntry[]): ITraceEntry[] {
         return traces.filter((trace) => {
             return (
                 matchesSearch(trace, searchQuery.value) &&

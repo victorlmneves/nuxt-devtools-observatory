@@ -1,29 +1,29 @@
 import { ref } from 'vue'
 import { useDevtoolsClient, onDevtoolsClientConnected } from '@nuxt/devtools-kit/iframe-client'
-import type { ObservatorySnapshot, ObservatoryServerFunctions, ObservatoryClientFunctions } from '@observatory/types/rpc'
+import type { IObservatorySnapshot, IObservatoryServerFunctions, IObservatoryClientFunctions } from '@observatory/types/rpc'
 import type {
-    FetchEntry,
-    ProvideEntry,
-    InjectEntry,
-    ComposableEntry,
-    PiniaStoreEntry,
-    RenderEntry,
-    TransitionEntry,
-    TraceEntry,
-    PayloadInspectorSnapshot,
-    IStateCookieEntry
+    IFetchEntry,
+    IProvideEntry,
+    IInjectEntry,
+    IComposableEntry,
+    IPiniaStoreEntry,
+    IRenderEntry,
+    ITransitionEntry,
+    ITraceEntry,
+    IPayloadInspectorSnapshot,
+    IStateCookieEntry,
 } from '@observatory/types/snapshot'
 
-type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] }
+type TProvideInjectSnapshot = { provides: IProvideEntry[]; injects: IInjectEntry[] }
 
-const fetchEntries = ref<FetchEntry[]>([])
-const provideInject = ref<ProvideInjectSnapshot>({ provides: [], injects: [] })
-const composables = ref<ComposableEntry[]>([])
-const piniaStores = ref<PiniaStoreEntry[]>([])
-const renders = ref<RenderEntry[]>([])
-const transitions = ref<TransitionEntry[]>([])
-const traces = ref<TraceEntry[]>([])
-const emptyPayload: PayloadInspectorSnapshot = {
+const fetchEntries = ref<IFetchEntry[]>([])
+const provideInject = ref<TProvideInjectSnapshot>({ provides: [], injects: [] })
+const composables = ref<IComposableEntry[]>([])
+const piniaStores = ref<IPiniaStoreEntry[]>([])
+const renders = ref<IRenderEntry[]>([])
+const transitions = ref<ITransitionEntry[]>([])
+const traces = ref<ITraceEntry[]>([])
+const emptyPayload: IPayloadInspectorSnapshot = {
     capturedAt: 0,
     isHydrating: false,
     serverRendered: false,
@@ -31,14 +31,14 @@ const emptyPayload: PayloadInspectorSnapshot = {
     totalBytes: 0,
     keys: [],
 }
-const payload = ref<PayloadInspectorSnapshot>({ ...emptyPayload })
+const payload = ref<IPayloadInspectorSnapshot>({ ...emptyPayload })
 const stateCookies = ref<IStateCookieEntry[]>([])
 const connected = ref(false)
-const features = ref<ObservatorySnapshot['features']>({})
+const features = ref<IObservatorySnapshot['features']>({})
 const debugRpc = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debugRpc')
 
 let started = false
-let rpc: ObservatoryServerFunctions | null = null
+let rpc: IObservatoryServerFunctions | null = null
 let loggedFirstSnapshot = false
 let queuedMode: 'route' | 'session' | null = null
 let desiredMode: 'route' | 'session' | null = null
@@ -54,7 +54,7 @@ function cloneArray<T>(value: T[] | undefined): T[] {
     return value ? value.map((item) => ({ ...item })) : []
 }
 
-function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[] {
+function normalizeRenderEntries(value: IRenderEntry[] | undefined): IRenderEntry[] {
     return value
         ? value.map((item) => ({
               ...item,
@@ -62,20 +62,20 @@ function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[]
         : []
 }
 
-function applySnapshot(data: ObservatorySnapshot) {
-    fetchEntries.value = cloneArray(data.fetch as FetchEntry[] | undefined)
+function applySnapshot(data: IObservatorySnapshot) {
+    fetchEntries.value = cloneArray(data.fetch as IFetchEntry[] | undefined)
     provideInject.value = data.provideInject
         ? {
-              provides: cloneArray(data.provideInject.provides as ProvideInjectSnapshot['provides']),
-              injects: cloneArray(data.provideInject.injects as ProvideInjectSnapshot['injects']),
+              provides: cloneArray(data.provideInject.provides as TProvideInjectSnapshot['provides']),
+              injects: cloneArray(data.provideInject.injects as TProvideInjectSnapshot['injects']),
           }
         : { provides: [], injects: [] }
-    composables.value = cloneArray(data.composables as ComposableEntry[] | undefined)
-    piniaStores.value = cloneArray(data.piniaStores as PiniaStoreEntry[] | undefined)
-    renders.value = normalizeRenderEntries(data.renders as RenderEntry[] | undefined)
-    transitions.value = cloneArray(data.transitions as TransitionEntry[] | undefined)
-    traces.value = cloneArray(data.traces as TraceEntry[] | undefined)
-    const nextPayload = data.payload as PayloadInspectorSnapshot | undefined
+    composables.value = cloneArray(data.composables as IComposableEntry[] | undefined)
+    piniaStores.value = cloneArray(data.piniaStores as IPiniaStoreEntry[] | undefined)
+    renders.value = normalizeRenderEntries(data.renders as IRenderEntry[] | undefined)
+    transitions.value = cloneArray(data.transitions as ITransitionEntry[] | undefined)
+    traces.value = cloneArray(data.traces as ITraceEntry[] | undefined)
+    const nextPayload = data.payload as IPayloadInspectorSnapshot | undefined
     payload.value = nextPayload
         ? {
               capturedAt: nextPayload.capturedAt ?? 0,
@@ -149,7 +149,7 @@ function ensureStarted() {
             return
         }
 
-        rpc = client.value.devtools.extendClientRpc<ObservatoryServerFunctions, ObservatoryClientFunctions>('observatory', {
+        rpc = client.value.devtools.extendClientRpc<IObservatoryServerFunctions, IObservatoryClientFunctions>('observatory', {
             onSnapshot(snapshot) {
                 applySnapshot(snapshot)
             },

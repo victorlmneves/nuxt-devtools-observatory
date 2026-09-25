@@ -10,7 +10,7 @@ import {
     openInEditor as openInEditorFromStore,
 } from '@observatory-client/stores/observatory'
 import { matchesComposableEntryQuery } from '@observatory-client/composables/composable-search'
-import type { ComposableEntry as RuntimeComposableEntry } from '@observatory/types/snapshot'
+import type { IComposableEntry as IRuntimeComposableEntry } from '@observatory/types/snapshot'
 
 const { composables: rawEntries, connected, features, clearComposables } = useObservatoryData()
 
@@ -101,7 +101,7 @@ const listScrollRef = ref<HTMLElement | null>(null)
 const { effective: virtualizationFlags } = useVirtualizationFlags()
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 88, overscan: 6 })
 
-const entries = computed<RuntimeComposableEntry[]>(() => rawEntries.value)
+const entries = computed<IRuntimeComposableEntry[]>(() => rawEntries.value)
 
 const counts = computed(() => ({
     mounted: entries.value.filter((e) => e.status === 'mounted').length,
@@ -134,8 +134,8 @@ const filtered = computed(() => {
     })
 
     // Partition into layout-level (pinned to top) and regular entries
-    const layoutEntries: RuntimeComposableEntry[] = []
-    const regularEntries: RuntimeComposableEntry[] = []
+    const layoutEntries: IRuntimeComposableEntry[] = []
+    const regularEntries: IRuntimeComposableEntry[] = []
 
     for (const entry of filtered) {
         if (entry.isLayoutComposable) {
@@ -194,13 +194,13 @@ const visibleEntries = computed(() => {
 
     return listVirtualItems.value
         .map((item) => filtered.value[item.index])
-        .filter((entry): entry is RuntimeComposableEntry => Boolean(entry))
+        .filter((entry): entry is IRuntimeComposableEntry => Boolean(entry))
 })
 
-const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
+const visibleEntryCards = computed<IVisibleEntryCard[]>(() => {
     return visibleEntries.value.map((entry) => {
-        const refEntries = Object.entries(entry.refs) as Array<[string, RuntimeComposableEntry['refs'][string]]>
-        const detailRefs: RefRowView[] = refEntries.map(([key, ref]) => {
+        const refEntries = Object.entries(entry.refs) as Array<[string, IRuntimeComposableEntry['refs'][string]]>
+        const detailRefs: IRefRowView[] = refEntries.map(([key, ref]) => {
             const isLong = isLongValue(ref.value)
             const expanded = isLong && isRefExpanded(entry.id, key)
             const shared = Boolean(entry.sharedKeys?.includes(key))
@@ -217,7 +217,7 @@ const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
         })
 
         const history = entry.history ?? []
-        const historyRows: HistoryRowView[] = []
+        const historyRows: IHistoryRowView[] = []
         const end = Math.max(history.length - 20, 0)
 
         for (let i = history.length - 1; i >= end; i--) {
@@ -242,7 +242,7 @@ const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
     })
 })
 
-function lifecycleRows(entry: RuntimeComposableEntry) {
+function lifecycleRows(entry: IRuntimeComposableEntry) {
     return [
         {
             label: 'onMounted',
@@ -323,15 +323,15 @@ function toggleRefExpand(entryId: string, refKey: string) {
 // Clicking a ref key prefers identity-based lookup for shared/global refs.
 // For non-shared keys, fallback to legacy key-name lookup.
 
-interface LookupTarget {
+interface ILookupTarget {
     key: string
     composableName: string
     identityGroup?: string
 }
 
-interface RefRowView {
+interface IRefRowView {
     key: string
-    ref: RuntimeComposableEntry['refs'][string]
+    ref: IRuntimeComposableEntry['refs'][string]
     isLong: boolean
     expanded: boolean
     displayValue: string
@@ -339,24 +339,24 @@ interface RefRowView {
     shared: boolean
 }
 
-interface HistoryRowView {
+interface IHistoryRowView {
     id: string
     timeLabel: string
     key: string
     value: string
 }
 
-interface VisibleEntryCard {
-    entry: RuntimeComposableEntry
+interface IVisibleEntryCard {
+    entry: IRuntimeComposableEntry
     refCount: number
-    previewRefs: RefRowView[]
-    detailRefs: RefRowView[]
-    historyRows: HistoryRowView[]
+    previewRefs: IRefRowView[]
+    detailRefs: IRefRowView[]
+    historyRows: IHistoryRowView[]
     historyHiddenCount: number
     lifecycle: ReturnType<typeof lifecycleRows>
 }
 
-const lookupTarget = ref<LookupTarget | null>(null)
+const lookupTarget = ref<ILookupTarget | null>(null)
 
 const lookupResults = computed(() => {
     if (!lookupTarget.value) {
@@ -389,9 +389,9 @@ const lookupTitle = computed(() => {
     return lookupTarget.value.key
 })
 
-function openLookup(entry: RuntimeComposableEntry, key: string) {
+function openLookup(entry: IRuntimeComposableEntry, key: string) {
     const identityGroup = entry.sharedKeyGroups?.[key]
-    const next: LookupTarget = {
+    const next: ILookupTarget = {
         key,
         composableName: entry.name,
         identityGroup,
@@ -413,13 +413,13 @@ function openLookup(entry: RuntimeComposableEntry, key: string) {
 // ── Inline editing ────────────────────────────────────────────────────────
 // Only writable refs (type === 'ref') can be edited. Computed are read-only.
 
-interface EditTarget {
+interface IEditTarget {
     id: string
     key: string
     rawValue: string
 }
 
-const editTarget = ref<EditTarget | null>(null)
+const editTarget = ref<IEditTarget | null>(null)
 const editError = ref('')
 
 function openEdit(id: string, key: string, currentValue: unknown) {

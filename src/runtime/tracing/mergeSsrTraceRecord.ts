@@ -1,21 +1,21 @@
-import type { SpanStatus, TraceStatus } from './trace'
+import type { TSpanStatus, TTraceStatus } from './trace'
 import { traceStore, type TraceStore } from './traceStore'
 
-export interface MergeableSsrSpan {
+export interface IMergeableSsrSpan {
     id: string
     name: string
     type: string
     startTime: number
     endTime?: number
     durationMs?: number
-    status: SpanStatus
+    status: TSpanStatus
     metadata?: Record<string, unknown>
 }
 
-export interface MergeableSsrRecord {
+export interface IMergeableSsrRecord {
     traceId: string
     name: string
-    spans: MergeableSsrSpan[]
+    spans: IMergeableSsrSpan[]
 }
 
 /**
@@ -24,13 +24,13 @@ export interface MergeableSsrRecord {
  * inside that trace are skipped so HTML inject + archive fetch can be applied
  * twice without doubling spans; additional span ids from a later snapshot
  * are still appended.
- * @param {MergeableSsrRecord} record - Serialized record from HTML inject or the nitro-timeline archive.
+ * @param {IMergeableSsrRecord} record - Serialized record from HTML inject or the nitro-timeline archive.
  * @param {object} [options] - Optional store and clock overrides for tests.
  * @param {TraceStore} [options.store] - Trace store to merge into. Defaults to the singleton.
  * @param {number} [options.now] - Clock reading used to anchor relative span times.
  * @returns {boolean} `true` when the record was applied (including no-op span dedupe).
  */
-export function mergeSsrTraceRecord(record: MergeableSsrRecord, options?: { store?: TraceStore; now?: number }): boolean {
+export function mergeSsrTraceRecord(record: IMergeableSsrRecord, options?: { store?: TraceStore; now?: number }): boolean {
     if (!record?.traceId || !Array.isArray(record.spans)) {
         return false
     }
@@ -41,7 +41,7 @@ export function mergeSsrTraceRecord(record: MergeableSsrRecord, options?: { stor
     const navDurationMs = record.spans[0]?.durationMs ?? 0
     const traceStartTime = existing?.startTime ?? now - navDurationMs
     const hasError = record.spans.some((span) => span.status === 'error') || existing?.status === 'error'
-    const endStatus: TraceStatus = hasError ? 'error' : 'ok'
+    const endStatus: TTraceStatus = hasError ? 'error' : 'ok'
 
     if (!existing) {
         store.createTrace({

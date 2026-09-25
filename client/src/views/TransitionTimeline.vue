@@ -5,13 +5,13 @@ import { useVirtualizationConfig } from '@observatory-client/composables/useVirt
 import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
-import type { TransitionEntry } from '@observatory/types/snapshot'
+import type { ITransitionEntry } from '@observatory/types/snapshot'
 
 const { transitions: entries, connected } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(260, 'observatory:transitions:detailWidth')
 
-type FilterMode = 'all' | 'cancelled' | 'active' | 'completed'
-const filter = ref<FilterMode>('all')
+type TFilterMode = 'all' | 'cancelled' | 'active' | 'completed'
+const filter = ref<TFilterMode>('all')
 const search = ref('')
 const selectedId = ref<string | null>(null)
 const tableScrollRef = ref<HTMLElement | null>(null)
@@ -133,10 +133,10 @@ const visibleRows = computed(() => {
             entry: filtered.value[item.index],
             geometry: timelineGeometry.value[item.index],
         }))
-        .filter((row): row is { entry: TransitionEntry; geometry: { left: number; width: number } } => Boolean(row.entry && row.geometry))
+        .filter((row): row is { entry: ITransitionEntry; geometry: { left: number; width: number } } => Boolean(row.entry && row.geometry))
 })
 
-function phaseColor(phase: TransitionEntry['phase']): string {
+function phaseColor(phase: ITransitionEntry['phase']): string {
     if (phase === 'entering' || phase === 'leaving') {
         return '#7f77dd'
     }
@@ -160,7 +160,7 @@ function phaseColor(phase: TransitionEntry['phase']): string {
     return '#888'
 }
 
-function phaseBadgeClass(phase: TransitionEntry['phase']): string {
+function phaseBadgeClass(phase: ITransitionEntry['phase']): string {
     if (phase === 'entering' || phase === 'leaving') {
         return 'badge-purple'
     }
@@ -180,7 +180,7 @@ function phaseBadgeClass(phase: TransitionEntry['phase']): string {
     return 'badge-gray'
 }
 
-function directionLabel(e: TransitionEntry): string {
+function directionLabel(e: ITransitionEntry): string {
     if (e.appear) {
         return '✦ appear'
     }
@@ -188,7 +188,7 @@ function directionLabel(e: TransitionEntry): string {
     return e.direction === 'enter' ? '→ enter' : '← leave'
 }
 
-function directionColor(e: TransitionEntry): string {
+function directionColor(e: ITransitionEntry): string {
     if (e.appear) {
         return 'var(--amber)'
     }

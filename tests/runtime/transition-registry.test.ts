@@ -491,7 +491,7 @@ describe('createTrackedTransition', () => {
 // ── Tests for fixes introduced in the bug-fix pass ────────────────────────
 
 describe('setupTransitionRegistry — sanitize() explicit field copy (fix: transition-registry)', () => {
-    it('getAll() returns entries with all expected TransitionEntry fields', () => {
+    it('getAll() returns entries with all expected ITransitionEntry fields', () => {
         const { register, getAll } = setupTransitionRegistry()
 
         register({

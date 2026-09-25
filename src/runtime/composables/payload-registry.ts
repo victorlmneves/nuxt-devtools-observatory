@@ -1,6 +1,6 @@
-import type { PayloadBucket, PayloadInspectorSnapshot, PayloadKeyEntry } from '../../types/snapshot'
+import type { TPayloadBucket, IPayloadInspectorSnapshot, IPayloadKeyEntry } from '../../types/snapshot'
 
-export type { PayloadBucket, PayloadInspectorSnapshot, PayloadKeyEntry }
+export type { TPayloadBucket, IPayloadInspectorSnapshot, IPayloadKeyEntry }
 
 const MAX_PREVIEW_BYTES = 2_000
 
@@ -34,7 +34,7 @@ function previewOf(value: unknown): unknown {
     }
 }
 
-function walkRecord(record: unknown, bucket: PayloadBucket): PayloadKeyEntry[] {
+function walkRecord(record: unknown, bucket: TPayloadBucket): IPayloadKeyEntry[] {
     if (!record || typeof record !== 'object' || Array.isArray(record)) {
         return []
     }
@@ -49,13 +49,13 @@ function walkRecord(record: unknown, bucket: PayloadBucket): PayloadKeyEntry[] {
     }))
 }
 
-export function collectPayloadKeys(payload: unknown): PayloadKeyEntry[] {
+export function collectPayloadKeys(payload: unknown): IPayloadKeyEntry[] {
     if (!payload || typeof payload !== 'object') {
         return []
     }
 
     const root = payload as Record<string, unknown>
-    const keys: PayloadKeyEntry[] = [
+    const keys: IPayloadKeyEntry[] = [
         ...walkRecord(root.data, 'data'),
         ...walkRecord(root.state, 'state'),
         ...walkRecord(root.pinia, 'pinia'),
@@ -90,7 +90,7 @@ export function collectPayloadKeys(payload: unknown): PayloadKeyEntry[] {
 }
 
 export function setupPayloadRegistry(options: { getPayload: () => unknown; isHydrating?: () => boolean }) {
-    let latest: PayloadInspectorSnapshot = {
+    let latest: IPayloadInspectorSnapshot = {
         capturedAt: 0,
         isHydrating: false,
         serverRendered: false,
@@ -101,7 +101,7 @@ export function setupPayloadRegistry(options: { getPayload: () => unknown; isHyd
     const ssrKeyIds = new Set<string>()
     let hydrationCaptured = false
 
-    function capture(): PayloadInspectorSnapshot {
+    function capture(): IPayloadInspectorSnapshot {
         const payload = options.getPayload()
         const root = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
         const serverRendered = root.serverRendered === true
@@ -135,11 +135,11 @@ export function setupPayloadRegistry(options: { getPayload: () => unknown; isHyd
         return latest
     }
 
-    function getSnapshot(): PayloadInspectorSnapshot {
+    function getSnapshot(): IPayloadInspectorSnapshot {
         return latest
     }
 
-    function getAll(): PayloadKeyEntry[] {
+    function getAll(): IPayloadKeyEntry[] {
         return latest.keys
     }
 

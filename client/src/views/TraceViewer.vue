@@ -13,25 +13,25 @@ import { exportJson, importJson } from '@observatory-client/composables/useExpor
 import {
     buildRenderSummaryForTrace,
     buildCrossTraceRenderSummary,
-    type CrossTraceRenderSummaryRow,
-    type TraceRenderStatsRow,
+    type ICrossTraceRenderSummaryRow,
+    type ITraceRenderStatsRow,
 } from '@observatory-client/composables/trace-render-aggregation'
-import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { IObservatoryExportFile } from '@observatory-client/composables/useExportImport'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
-type TraceSpanRow = {
-    span: TraceSpan
+type TTraceSpanRow = {
+    span: ITraceSpan
     displayName: string
     uid: string | number | undefined
 }
 
 const { traces, connected } = useObservatoryData()
 
-const importedTraces = ref<TraceEntry[]>([])
+const importedTraces = ref<ITraceEntry[]>([])
 const isImportMode = computed(() => importedTraces.value.length > 0)
 
 const selectedTraceId = ref<string | null>(null)
-const selectedSpan = ref<TraceSpan | undefined>(undefined)
+const selectedSpan = ref<ITraceSpan | undefined>(undefined)
 const viewMode = ref<'overview' | 'flamegraph' | 'waterfall'>('overview')
 const showFilters = ref(false)
 const renderSummaryOpen = ref(true)
@@ -91,7 +91,7 @@ const selectedTrace = computed(() => {
     return filteredTraceById.value.get(selectedTraceId.value)
 })
 
-const renderSummary = computed<TraceRenderStatsRow[]>(() => buildRenderSummaryForTrace(selectedTrace.value))
+const renderSummary = computed<ITraceRenderStatsRow[]>(() => buildRenderSummaryForTrace(selectedTrace.value))
 
 const crossTraceRenderSummary = computed(() => {
     return buildCrossTraceRenderSummary(filteredTraces.value, selectedTrace.value?.id)
@@ -189,7 +189,7 @@ const visibleTraceRows = computed(() => {
 
     return traceListVirtualItems.value
         .map((item) => filteredTraces.value[item.index])
-        .filter((trace): trace is TraceEntry => Boolean(trace))
+        .filter((trace): trace is ITraceEntry => Boolean(trace))
 })
 
 const crossTraceVirtualizerOptions = computed(() => ({
@@ -235,10 +235,10 @@ const visibleCrossTraceRows = computed(() => {
 
     return crossTraceVirtualItems.value
         .map((item) => crossTraceRows.value[item.index])
-        .filter((row): row is CrossTraceRenderSummaryRow => Boolean(row))
+        .filter((row): row is ICrossTraceRenderSummaryRow => Boolean(row))
 })
 
-function elapsedFromSpans(trace: TraceEntry): number | undefined {
+function elapsedFromSpans(trace: ITraceEntry): number | undefined {
     if (!trace.spans.length) {
         return undefined
     }
@@ -257,7 +257,7 @@ function elapsedFromSpans(trace: TraceEntry): number | undefined {
     return max > 0 ? max : undefined
 }
 
-function formatDuration(durationMs?: number, trace?: TraceEntry): string {
+function formatDuration(durationMs?: number, trace?: ITraceEntry): string {
     if (durationMs !== undefined) {
         return `${Math.round(durationMs * 10) / 10}ms`
     }
@@ -277,7 +277,7 @@ function asString(val: unknown): string {
     return typeof val === 'string' ? val : ''
 }
 
-function getSpanDisplayName(span: TraceSpan): string {
+function getSpanDisplayName(span: ITraceSpan): string {
     const m = span.metadata as Record<string, unknown> | undefined
 
     if (!m) {
@@ -314,13 +314,13 @@ function getSpanDisplayName(span: TraceSpan): string {
     return span.name
 }
 
-function getSpanUid(span: TraceSpan): string | number | undefined {
+function getSpanUid(span: ITraceSpan): string | number | undefined {
     const metadata = span.metadata as Record<string, unknown> | undefined
 
     return metadata?.uid as string | number | undefined
 }
 
-const selectedTraceSpanRows = computed<TraceSpanRow[]>(() => {
+const selectedTraceSpanRows = computed<TTraceSpanRow[]>(() => {
     const trace = selectedTrace.value
 
     if (!trace) {
@@ -334,7 +334,7 @@ const selectedTraceSpanRows = computed<TraceSpanRow[]>(() => {
     }))
 })
 
-function selectTrace(trace: TraceEntry) {
+function selectTrace(trace: ITraceEntry) {
     selectedTraceId.value = trace.id
     selectedSpan.value = undefined
     highlightedUid.value = undefined
@@ -374,7 +374,7 @@ async function handleImport() {
         return
     }
 
-    const file = parsed as ObservatoryExportFile<TraceEntry>
+    const file = parsed as IObservatoryExportFile<ITraceEntry>
 
     if (
         file?.type !== 'observatory-traces' ||

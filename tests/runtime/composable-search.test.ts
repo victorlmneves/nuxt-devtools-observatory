@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { matchesComposableEntryQuery } from '@observatory-client/composables/composable-search'
-import type { ComposableEntry } from '@observatory/types/snapshot'
+import type { IComposableEntry } from '@observatory/types/snapshot'
 
-function makeEntry(overrides?: Partial<ComposableEntry>): ComposableEntry {
+function makeEntry(overrides?: Partial<IComposableEntry>): IComposableEntry {
     return {
         id: 'entry-1',
         name: 'usePreferences',

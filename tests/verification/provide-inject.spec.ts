@@ -1,9 +1,9 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type ObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { GraphData, ProvideEntry, InjectEntry } from './types/observatory.types'
+import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
+import type { IGraphData, IProvideEntry, IInjectEntry } from './types/observatory.types'
 
 test.describe('Provide/Inject Graph Correctness', () => {
-    let api: ObservatoryTestAPI
+    let api: IObservatoryTestAPI
     let page: Page
 
     test.beforeEach(async ({ page: testPage }) => {
@@ -15,10 +15,10 @@ test.describe('Provide/Inject Graph Correctness', () => {
     })
 
     test('should detect shadowed providers correctly', async () => {
-        const graphData: GraphData = await api.getProvideInjectGraph()
+        const graphData: IGraphData = await api.getProvideInjectGraph()
 
-        const shadowedProvides: ProvideEntry[] = graphData.provides.filter((provide: ProvideEntry) => provide.shadowed === true)
-        const shadowedKeys: string[] = shadowedProvides.map((provide: ProvideEntry) => provide.key)
+        const shadowedProvides: IProvideEntry[] = graphData.provides.filter((provide: IProvideEntry) => provide.shadowed === true)
+        const shadowedKeys: string[] = shadowedProvides.map((provide: IProvideEntry) => provide.key)
 
         expect(shadowedKeys).toContain('theme')
 
@@ -31,9 +31,9 @@ test.describe('Provide/Inject Graph Correctness', () => {
     })
 
     test('should detect missing providers accurately', async () => {
-        const graphData: GraphData = await api.getProvideInjectGraph()
+        const graphData: IGraphData = await api.getProvideInjectGraph()
 
-        const missingInjections: InjectEntry[] = graphData.injects.filter((inject: InjectEntry) => inject.resolved === false)
+        const missingInjections: IInjectEntry[] = graphData.injects.filter((inject: IInjectEntry) => inject.resolved === false)
         expect(missingInjections.length).toBeGreaterThan(0)
 
         const missingComponent = graphData.components.find(
@@ -43,7 +43,7 @@ test.describe('Provide/Inject Graph Correctness', () => {
     })
 
     test('should correctly identify provider scope (global/layout/component)', async () => {
-        const graphData: GraphData = await api.getProvideInjectGraph()
+        const graphData: IGraphData = await api.getProvideInjectGraph()
 
         const scopeMap: Record<string, 'global' | 'layout' | 'component'> = {
             'app.config.globalProperties': 'global',
@@ -52,7 +52,7 @@ test.describe('Provide/Inject Graph Correctness', () => {
         }
 
         for (const [providerName, expectedScope] of Object.entries(scopeMap)) {
-            const provider: ProvideEntry | undefined = graphData.provides.find((p: ProvideEntry) => p.componentName === providerName)
+            const provider: IProvideEntry | undefined = graphData.provides.find((p: IProvideEntry) => p.componentName === providerName)
             expect(provider).toBeDefined()
 
             if (provider) {
@@ -62,9 +62,11 @@ test.describe('Provide/Inject Graph Correctness', () => {
     })
 
     test('should find provider by walking instance.parent chain', async () => {
-        const graphData: GraphData = await api.getProvideInjectGraph()
+        const graphData: IGraphData = await api.getProvideInjectGraph()
 
-        const deepInject: InjectEntry | undefined = graphData.injects.find((inject: InjectEntry) => inject.componentName === 'DeepConsumer')
+        const deepInject: IInjectEntry | undefined = graphData.injects.find(
+            (inject: IInjectEntry) => inject.componentName === 'DeepConsumer'
+        )
 
         expect(deepInject).toBeDefined()
         if (deepInject) {
@@ -75,9 +77,11 @@ test.describe('Provide/Inject Graph Correctness', () => {
     })
 
     test('should support value inspection for complex objects', async () => {
-        const graphData: GraphData = await api.getProvideInjectGraph()
+        const graphData: IGraphData = await api.getProvideInjectGraph()
 
-        const complexProvider: ProvideEntry | undefined = graphData.provides.find((provide: ProvideEntry) => provide.key === 'userProfile')
+        const complexProvider: IProvideEntry | undefined = graphData.provides.find(
+            (provide: IProvideEntry) => provide.key === 'userProfile'
+        )
 
         expect(complexProvider).toBeDefined()
 
@@ -95,9 +99,9 @@ test.describe('Provide/Inject Graph Correctness', () => {
         await page.waitForTimeout(100)
 
         // Verify graph updates with new value
-        const updatedGraph: GraphData = await api.getProvideInjectGraph()
-        const updatedProvider: ProvideEntry | undefined = updatedGraph.provides.find(
-            (provide: ProvideEntry) => provide.key === 'userProfile'
+        const updatedGraph: IGraphData = await api.getProvideInjectGraph()
+        const updatedProvider: IProvideEntry | undefined = updatedGraph.provides.find(
+            (provide: IProvideEntry) => provide.key === 'userProfile'
         )
 
         expect(updatedProvider).toBeDefined()
@@ -109,15 +113,15 @@ test.describe('Provide/Inject Graph Correctness', () => {
     })
 
     test('should show consumer list for each provided key', async () => {
-        const graphData: GraphData = await api.getProvideInjectGraph()
+        const graphData: IGraphData = await api.getProvideInjectGraph()
 
-        const themeProvider: ProvideEntry | undefined = graphData.provides.find((provide: ProvideEntry) => provide.key === 'theme')
+        const themeProvider: IProvideEntry | undefined = graphData.provides.find((provide: IProvideEntry) => provide.key === 'theme')
 
         expect(themeProvider).toBeDefined()
 
         // Find all components that inject 'theme'
-        const themeConsumers: InjectEntry[] = graphData.injects.filter(
-            (inject: InjectEntry) => inject.key === 'theme' && inject.resolved === true
+        const themeConsumers: IInjectEntry[] = graphData.injects.filter(
+            (inject: IInjectEntry) => inject.key === 'theme' && inject.resolved === true
         )
 
         expect(themeConsumers.length).toBeGreaterThan(0)

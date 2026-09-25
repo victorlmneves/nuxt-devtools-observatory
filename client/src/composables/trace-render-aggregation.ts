@@ -1,13 +1,13 @@
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
-interface SpanMetadata {
+interface ISpanMetadata {
     uid?: string | number
     componentName?: string
     file?: string
     lifecycle?: string
 }
 
-export interface TraceRenderStatsRow {
+export interface ITraceRenderStatsRow {
     componentKey: string
     componentName: string
     file: string
@@ -18,7 +18,7 @@ export interface TraceRenderStatsRow {
     avgMs: number
 }
 
-export interface CrossTraceRenderSummaryRow {
+export interface ICrossTraceRenderSummaryRow {
     componentKey: string
     componentName: string
     file: string
@@ -33,15 +33,15 @@ export interface CrossTraceRenderSummaryRow {
     deltaVsBaseline?: number
 }
 
-function asMetadata(span: TraceSpan): SpanMetadata {
-    return ((span.metadata as Record<string, unknown> | undefined) ?? {}) as SpanMetadata
+function asMetadata(span: ITraceSpan): ISpanMetadata {
+    return ((span.metadata as Record<string, unknown> | undefined) ?? {}) as ISpanMetadata
 }
 
 function normalizeMs(value?: number): number {
     return Number.isFinite(value) ? (value as number) : 0
 }
 
-function getComponentIdentity(metadata: SpanMetadata, fallbackId: string): { key: string; name: string; file: string } {
+function getComponentIdentity(metadata: ISpanMetadata, fallbackId: string): { key: string; name: string; file: string } {
     const name = String(metadata.componentName ?? '').trim()
     const file = String(metadata.file ?? '').trim()
 
@@ -70,15 +70,15 @@ function getComponentIdentity(metadata: SpanMetadata, fallbackId: string): { key
 
 /**
  * Build per-trace render stats grouped by component UID.
- * @param {TraceEntry | undefined} trace - Trace to summarize.
- * @returns {TraceRenderStatsRow[]} Render metrics grouped by component uid.
+ * @param {ITraceEntry | undefined} trace - Trace to summarize.
+ * @returns {ITraceRenderStatsRow[]} Render metrics grouped by component uid.
  */
-export function buildRenderSummaryForTrace(trace?: TraceEntry): TraceRenderStatsRow[] {
+export function buildRenderSummaryForTrace(trace?: ITraceEntry): ITraceRenderStatsRow[] {
     if (!trace) {
         return []
     }
 
-    const byUid = new Map<string | number, { key: string; name: string; file: string; spans: TraceSpan[] }>()
+    const byUid = new Map<string | number, { key: string; name: string; file: string; spans: ITraceSpan[] }>()
 
     for (const span of trace.spans) {
         if (span.type !== 'render') {
@@ -101,7 +101,7 @@ export function buildRenderSummaryForTrace(trace?: TraceEntry): TraceRenderStats
         byUid.get(uid)!.spans.push(span)
     }
 
-    const rows: TraceRenderStatsRow[] = []
+    const rows: ITraceRenderStatsRow[] = []
 
     for (const [uid, { key, name, file, spans }] of byUid) {
         let mountCount = 0
@@ -141,11 +141,11 @@ export function buildRenderSummaryForTrace(trace?: TraceEntry): TraceRenderStats
 
 /**
  * Build cross-trace render aggregation and comparison against a selected trace.
- * @param {TraceEntry[]} traces - Traces included in the aggregation window.
+ * @param {ITraceEntry[]} traces - Traces included in the aggregation window.
  * @param {string | undefined} selectedTraceId - Optional selected trace for baseline comparison.
- * @returns {CrossTraceRenderSummaryRow[]} Aggregated comparison rows by component identity.
+ * @returns {ICrossTraceRenderSummaryRow[]} Aggregated comparison rows by component identity.
  */
-export function buildCrossTraceRenderSummary(traces: TraceEntry[], selectedTraceId?: string): CrossTraceRenderSummaryRow[] {
+export function buildCrossTraceRenderSummary(traces: ITraceEntry[], selectedTraceId?: string): ICrossTraceRenderSummaryRow[] {
     if (traces.length === 0) {
         return []
     }
@@ -225,7 +225,7 @@ export function buildCrossTraceRenderSummary(traces: TraceEntry[], selectedTrace
         }
     }
 
-    const rows: CrossTraceRenderSummaryRow[] = []
+    const rows: ICrossTraceRenderSummaryRow[] = []
 
     for (const [componentKey, value] of aggregate) {
         const avgRerendersPerTrace = value.tracesSeen > 0 ? value.totalRerenders / value.tracesSeen : 0

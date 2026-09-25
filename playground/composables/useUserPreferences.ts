@@ -1,5 +1,5 @@
 import { ref, watch, onUnmounted } from 'vue'
-import { useUserStore, type Theme, type Locale } from '../stores/user'
+import { useUserStore, type TTheme, type TLocale } from '../stores/user'
 
 /**
  * useUserPreferences — async-init composable wrapping the userStore.
@@ -56,11 +56,11 @@ export async function useUserPreferences() {
         }, 150)
     })
 
-    function setTheme(theme: Theme) {
+    function setTheme(theme: TTheme) {
         store.setTheme(theme)
     }
 
-    function setLocale(locale: Locale) {
+    function setLocale(locale: TLocale) {
         store.setLocale(locale)
     }
 

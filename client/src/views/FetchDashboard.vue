@@ -5,9 +5,9 @@ import { useVirtualizationConfig } from '@observatory-client/composables/useVirt
 import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
-import type { FetchEntry } from '@observatory/types/snapshot'
+import type { IFetchEntry } from '@observatory/types/snapshot'
 
-type FetchViewEntry = FetchEntry & { startOffset: number }
+type TFetchViewEntry = IFetchEntry & { startOffset: number }
 
 const { fetch, connected, features } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(280, 'observatory:fetch:detailWidth')
@@ -22,7 +22,7 @@ const currentPage = ref(1)
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 38, overscan: 6 })
 const { effective: virtualizationFlags } = useVirtualizationFlags()
 
-const entries = computed<FetchViewEntry[]>(() => {
+const entries = computed<TFetchViewEntry[]>(() => {
     const sorted = [...fetch.value].sort((a, b) => a.startTime - b.startTime)
     const minStart = sorted.length > 0 ? sorted[0].startTime : 0
 
@@ -126,7 +126,7 @@ const visibleRows = computed(() => {
         return pagedFiltered.value
     }
 
-    return virtualItems.value.map((item) => pagedFiltered.value[item.index]).filter((entry): entry is FetchViewEntry => Boolean(entry))
+    return virtualItems.value.map((item) => pagedFiltered.value[item.index]).filter((entry): entry is TFetchViewEntry => Boolean(entry))
 })
 
 watch([filter, search], () => {
@@ -215,7 +215,7 @@ const maxCompletedMs = computed(() => {
     return maxMs
 })
 
-function barWidth(entry: FetchViewEntry) {
+function barWidth(entry: TFetchViewEntry) {
     // Only consider completed entries for the max, so pending entries don't
     // collapse all bars to a dot while waiting.
     const maxMs = maxCompletedMs.value
@@ -244,12 +244,12 @@ const waterfallScale = computed(() => {
     return maxEnd
 })
 
-function wfLeft(entry: FetchViewEntry) {
+function wfLeft(entry: TFetchViewEntry) {
     const scale = waterfallScale.value
     return Math.min(98, Math.round((entry.startOffset / scale) * 100))
 }
 
-function wfWidth(entry: FetchViewEntry) {
+function wfWidth(entry: TFetchViewEntry) {
     if (entry.ms == null) {
         // Pending: render a pulsing 2% bar at its start position instead of
         // a zero-width invisible bar.

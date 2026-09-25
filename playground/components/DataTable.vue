@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 
-type SortDir = 'asc' | 'desc'
+type TSortDir = 'asc' | 'desc'
 
-interface Row {
+interface IRow {
     id: number
     name: string
     category: string
@@ -11,10 +11,10 @@ interface Row {
     stock: number
 }
 
-const props = defineProps<{ rows: Row[] }>()
+const props = defineProps<{ rows: IRow[] }>()
 
-const sortKey = ref<keyof Row>('name')
-const sortDir = ref<SortDir>('asc')
+const sortKey = ref<keyof IRow>('name')
+const sortDir = ref<TSortDir>('asc')
 
 /**
  * Every time sortKey or sortDir changes ALL rows re-sort and re-render.
@@ -36,7 +36,7 @@ const sorted = computed(() => {
     })
 })
 
-function sortBy(key: keyof Row) {
+function sortBy(key: keyof IRow) {
     if (sortKey.value === key) {
         sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
     } else {
@@ -45,7 +45,7 @@ function sortBy(key: keyof Row) {
     }
 }
 
-const columns: Array<{ key: keyof Row; label: string }> = [
+const columns: Array<{ key: keyof IRow; label: string }> = [
     { key: 'id', label: '#' },
     { key: 'name', label: 'Product' },
     { key: 'category', label: 'Category' },

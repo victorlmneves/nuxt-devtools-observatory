@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import type { PiniaStoreEntry } from './types/observatory.types'
+import type { IPiniaStoreEntry } from './types/observatory.types'
 
 test.describe('Pinia Tracker Correctness', () => {
     let page: Page
@@ -22,9 +22,9 @@ test.describe('Pinia Tracker Correctness', () => {
         })
     }
 
-    async function getPiniaStores(targetPage: Page): Promise<PiniaStoreEntry[]> {
+    async function getPiniaStores(targetPage: Page): Promise<IPiniaStoreEntry[]> {
         return targetPage.evaluate(async () => {
-            const bridge = (window as { __OBSERVATORY_TEST_BRIDGE?: { getPiniaStores: () => Promise<PiniaStoreEntry[]> } })
+            const bridge = (window as { __OBSERVATORY_TEST_BRIDGE?: { getPiniaStores: () => Promise<IPiniaStoreEntry[]> } })
                 .__OBSERVATORY_TEST_BRIDGE
 
             if (!bridge) {
@@ -46,7 +46,7 @@ test.describe('Pinia Tracker Correctness', () => {
         await page.click('[data-testid="pinia-add-item"]')
         await page.waitForTimeout(250)
 
-        const stores: PiniaStoreEntry[] = await getPiniaStores(page)
+        const stores: IPiniaStoreEntry[] = await getPiniaStores(page)
         const userStore = stores.find((store) => store.id === 'user')
         const cartStore = stores.find((store) => store.id === 'cart')
 
@@ -65,7 +65,7 @@ test.describe('Pinia Tracker Correctness', () => {
         await page.click('[data-testid="pinia-add-item"]')
         await page.waitForTimeout(150)
 
-        const stores: PiniaStoreEntry[] = await getPiniaStores(page)
+        const stores: IPiniaStoreEntry[] = await getPiniaStores(page)
         const cartStore = stores.find((store) => store.id === 'cart')
 
         expect(cartStore).toBeDefined()
@@ -80,7 +80,7 @@ test.describe('Pinia Tracker Correctness', () => {
         await page.click('[data-testid="pinia-add-item"]')
         await page.waitForTimeout(200)
 
-        const stores: PiniaStoreEntry[] = await getPiniaStores(page)
+        const stores: IPiniaStoreEntry[] = await getPiniaStores(page)
         const cartStore = stores.find((store) => store.id === 'cart')
 
         expect(cartStore).toBeDefined()

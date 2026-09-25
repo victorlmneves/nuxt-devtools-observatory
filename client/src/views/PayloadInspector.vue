@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
-import type { PayloadKeyEntry } from '@observatory/types/snapshot'
+import type { IPayloadKeyEntry } from '@observatory/types/snapshot'
 
 const { payload, connected } = useObservatoryData()
 const filter = ref<'all' | 'data' | 'state' | 'csr'>('all')
@@ -39,7 +39,7 @@ function formatBytes(bytes: number) {
     return `${(bytes / 1024).toFixed(1)}KB`
 }
 
-function previewText(entry: PayloadKeyEntry, pretty = false) {
+function previewText(entry: IPayloadKeyEntry, pretty = false) {
     if (entry.preview === undefined) {
         return '—'
     }

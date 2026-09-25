@@ -11,7 +11,7 @@ const generate = (_generate as typeof _generate & { default?: typeof _generate }
 
 const FETCH_FNS = new Set(['useFetch', 'useAsyncData', 'useLazyFetch', 'useLazyAsyncData'])
 
-type ObservableCallExpression = t.CallExpression & { __observatoryTransformed?: boolean }
+type TObservableCallExpression = t.CallExpression & { __observatoryTransformed?: boolean }
 
 function isHandlerExpression(node: t.Expression | undefined): node is t.Expression {
     return Boolean(node && (t.isIdentifier(node) || t.isArrowFunctionExpression(node) || t.isFunctionExpression(node)))
@@ -54,7 +54,7 @@ export function fetchInstrumentPlugin(): Plugin {
 
                 traverse(ast, {
                     CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
-                        if ((path.node as ObservableCallExpression).__observatoryTransformed) {
+                        if ((path.node as TObservableCallExpression).__observatoryTransformed) {
                             return
                         }
 
@@ -153,7 +153,7 @@ export function fetchInstrumentPlugin(): Plugin {
                                 t.numericLiteral(handlerIndex),
                                 keyArg ?? t.stringLiteral(key),
                                 meta,
-                            ]) as ObservableCallExpression
+                            ]) as TObservableCallExpression
                             newCall.__observatoryTransformed = true
                             path.replaceWith(newCall)
                             modified = true
@@ -164,7 +164,7 @@ export function fetchInstrumentPlugin(): Plugin {
                                 keyArg ?? t.stringLiteral(''),
                                 optsArg ?? t.objectExpression([]),
                                 meta,
-                            ]) as ObservableCallExpression
+                            ]) as TObservableCallExpression
                             newCall.__observatoryTransformed = true
                             path.replaceWith(newCall)
 

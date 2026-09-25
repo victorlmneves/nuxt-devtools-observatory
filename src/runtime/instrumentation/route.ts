@@ -3,12 +3,12 @@ import { getCurrentTraceId, setCurrentTraceId } from '../tracing/context'
 import { startSpan } from '../tracing/tracing'
 import { traceStore } from '../tracing/traceStore'
 
-export interface RouteInstrumentationOptions {
+export interface IRouteInstrumentationOptions {
     getCurrentPath: () => string
     carrier?: object
 }
 
-export function setupRouteInstrumentation(nuxtApp: NuxtApp, options: RouteInstrumentationOptions) {
+export function setupRouteInstrumentation(nuxtApp: NuxtApp, options: IRouteInstrumentationOptions) {
     let activeTraceId: string | undefined
 
     const getRoutePath = () => {

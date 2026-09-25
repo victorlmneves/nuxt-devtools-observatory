@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
-interface TraceNode extends TraceSpan {
-    children: TraceNode[]
+interface ITraceNode extends ITraceSpan {
+    children: ITraceNode[]
     level: number
 }
 
-interface Props {
-    trace: TraceEntry
+interface IProps {
+    trace: ITraceEntry
     selectedSpanId?: string
 }
 
-const props = defineProps<Props>()
+const props = defineProps<IProps>()
 const emit = defineEmits<{
-    'select-span': [span: TraceSpan]
+    'select-span': [span: ITraceSpan]
 }>()
 
 const expandedNodes = ref<Set<string>>(new Set())
@@ -27,7 +27,7 @@ function toggleExpanded(spanId: string) {
     }
 }
 
-function buildTree(spans: TraceSpan[], parentId: string | undefined = undefined, level = 0): TraceNode[] {
+function buildTree(spans: ITraceSpan[], parentId: string | undefined = undefined, level = 0): ITraceNode[] {
     return spans
         .filter((s) => s.parentSpanId === parentId)
         .map((span) => ({
@@ -63,7 +63,7 @@ const timelineDuration = computed(() => {
     return maxEndOffset > 0 ? maxEndOffset * 1.1 : 1
 })
 
-function getBarPosition(span: TraceSpan): { left: string; width: string } {
+function getBarPosition(span: ITraceSpan): { left: string; width: string } {
     const traceStart = props.trace.startTime
     const left = ((span.startTime - traceStart) / timelineDuration.value) * 100
     const width = ((span.durationMs || 0) / timelineDuration.value) * 100
@@ -74,7 +74,7 @@ function getBarPosition(span: TraceSpan): { left: string; width: string } {
     }
 }
 
-function isNarrowBar(span: TraceSpan): boolean {
+function isNarrowBar(span: ITraceSpan): boolean {
     const width = ((span.durationMs || 0) / timelineDuration.value) * 100
 
     return width < 5
@@ -104,7 +104,7 @@ function asNumber(value: unknown): number | undefined {
     return typeof value === 'number' ? value : undefined
 }
 
-function getSpanDisplayName(span: TraceSpan): string {
+function getSpanDisplayName(span: ITraceSpan): string {
     const metadata = span.metadata ?? {}
     const lifecycle = asString(metadata.lifecycle)
     const componentName = asString(metadata.componentName)
@@ -136,7 +136,7 @@ function getSpanDisplayName(span: TraceSpan): string {
     return span.name
 }
 
-function getSpanTooltip(span: TraceSpan): string {
+function getSpanTooltip(span: ITraceSpan): string {
     const metadata = span.metadata ?? {}
     const displayName = getSpanDisplayName(span)
     const status = span.status
@@ -164,8 +164,8 @@ function getSpanColorClass(type: string) {
     return colors[type] || 'bg-gray-500'
 }
 
-function renderNode(node: TraceNode): TraceNode[] {
-    const result: TraceNode[] = [node]
+function renderNode(node: ITraceNode): ITraceNode[] {
+    const result: ITraceNode[] = [node]
 
     if (expandedNodes.value.has(node.id) && node.children.length > 0) {
         for (const child of node.children) {
@@ -177,7 +177,7 @@ function renderNode(node: TraceNode): TraceNode[] {
 }
 
 const flattenedTree = computed(() => {
-    const result: Array<{ node: TraceNode; displayDepth: number }> = []
+    const result: Array<{ node: ITraceNode; displayDepth: number }> = []
 
     for (const rootNode of spanTree.value) {
         for (const node of renderNode(rootNode)) {

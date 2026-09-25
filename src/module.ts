@@ -6,10 +6,10 @@ import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { transitionTrackerPlugin } from './transforms/transition-transform'
 import { stateCookieTrackerPlugin } from './transforms/state-cookie-transform'
-import type { ObservatoryCommand, ObservatorySnapshot, ObservatoryClientFunctions, ObservatoryServerFunctions } from './types/rpc'
+import type { TObservatoryCommand, IObservatorySnapshot, IObservatoryClientFunctions, IObservatoryServerFunctions } from './types/rpc'
 import { createModuleDefaults, resolveInstrumentServer } from './env-options'
 
-export interface ModuleOptions {
+export interface IModuleOptions {
     /**
      * Instrument composables, provide/inject, fetch, and transitions on the
      * server build as well as the client build. Enable this when using SSR so
@@ -169,7 +169,7 @@ export interface ModuleOptions {
 // Feature tabs default on. instrumentServer is resolved in setup from SSR/SPA.
 const defaults = createModuleDefaults()
 
-export default defineNuxtModule<ModuleOptions>({
+export default defineNuxtModule<IModuleOptions>({
     meta: {
         name: 'nuxt-devtools-observatory',
         configKey: 'observatory',
@@ -291,7 +291,7 @@ export default defineNuxtModule<ModuleOptions>({
         }
 
         // Last host-app snapshot received from runtime/plugin.ts through Vite HMR.
-        let latestSnapshot: ObservatorySnapshot = {
+        let latestSnapshot: IObservatorySnapshot = {
             fetch: [],
             provideInject: { provides: [], injects: [] },
             composables: [],
@@ -318,10 +318,10 @@ export default defineNuxtModule<ModuleOptions>({
             },
         }
 
-        let rpc: ReturnType<typeof extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>> | null = null
+        let rpc: ReturnType<typeof extendServerRpc<IObservatoryClientFunctions, IObservatoryServerFunctions>> | null = null
         let viteServer: { ws: { send: (event: string, data: unknown) => void } } | null = null
 
-        const emitCommand = (command: ObservatoryCommand) => {
+        const emitCommand = (command: TObservatoryCommand) => {
             if (!viteServer) {
                 console.warn('[observatory][rpc][server] command dropped (vite ws not ready)', command)
 
@@ -343,7 +343,7 @@ export default defineNuxtModule<ModuleOptions>({
                 const clientDist = resolver.resolve('../client/dist')
                 server.middlewares.use(base, sirv(clientDist, { dev: true, single: true }))
 
-                server.ws.on('observatory:snapshot', (snapshot: ObservatorySnapshot) => {
+                server.ws.on('observatory:snapshot', (snapshot: IObservatorySnapshot) => {
                     latestSnapshot = snapshot
                     debugLog('received host snapshot', {
                         fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
@@ -359,7 +359,7 @@ export default defineNuxtModule<ModuleOptions>({
         })
 
         onDevToolsInitialized(() => {
-            rpc = extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>(
+            rpc = extendServerRpc<IObservatoryClientFunctions, IObservatoryServerFunctions>(
                 'observatory',
                 {
                     async getSnapshot() {
