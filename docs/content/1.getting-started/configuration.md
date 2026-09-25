@@ -14,6 +14,7 @@ export default defineNuxtConfig({
         composableTracker: true, // Enable composable tracker
         piniaTracker: true, // Enable Pinia store tracker
         payloadInspector: true, // Enable payload and hydration inspector
+        stateCookieTracker: true, // Enable useState / useCookie tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer
@@ -29,6 +30,7 @@ export default defineNuxtConfig({
         maxComposableHistory: 50, // Max composable history events per entry
         maxComposableEntries: 300, // Max composable entries to keep in memory
         maxPiniaTimeline: 100, // Max Pinia timeline events per store
+        maxStateCookieEntries: 200, // Max useState / useCookie entries to keep
         maxRenderTimeline: 100, // Max render timeline events per entry
     },
 })
@@ -43,6 +45,8 @@ export default defineNuxtConfig({
 - `fetchPageSize` controls how many useFetch rows are appended per scroll step.
 - `piniaTracker` records Pinia store state, action/mutation timelines, and hydration attribution.
 - `maxPiniaTimeline` caps timeline events kept per store.
+- `stateCookieTracker` lists live `useState` / `useCookie` keys (separate from Payload Inspector’s serialized `payload.state`).
+- `maxStateCookieEntries` caps those live entries (default 200).
 - `instrumentServer` defaults to on for SSR apps and off for SPA apps. Keep it on for Trace Viewer Nitro/server-route spans.
 - `maxTraces` caps client traces and the server request archive (default 50).
 

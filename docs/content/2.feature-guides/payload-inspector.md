@@ -8,7 +8,7 @@ The Payload Inspector shows what landed in `nuxtApp.payload` after SSR and what 
 ## What it captures
 
 - Keys from `payload.data` (`useAsyncData` / `useFetch` / `useNuxtData`)
-- Keys from `payload.state` (`useState`)
+- Keys from `payload.state` (`useState` serialized snapshot — live refs are in [State / cookies](/feature-guides/state-cookies))
 - Pinia payload state and `_errors` when present
 - Serialized byte size per key (JSON length)
 - Origin: `ssr` for keys present during hydration / `serverRendered`, `csr` for keys added afterward

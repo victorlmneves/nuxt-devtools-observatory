@@ -29,6 +29,12 @@ When changing fields, update docs and tests in the same PR.
 - `keys` lists payload entries with `bucket`, `origin` (`ssr` | `csr`), `bytes`, and a truncated `preview`.
 - Feature flag: `features.payloadInspector`.
 
+## State / cookie contracts
+
+- Snapshot field: `stateCookies` (array of `StateCookieEntry`).
+- Each entry has `kind` (`useState` | `useCookie`), `key`, `origin`, a truncated `preview`, and optional cookie option metadata.
+- Feature flag: `features.stateCookieTracker`.
+
 ## Pinia contracts
 
 - Snapshot field: `piniaStores` (array of `PiniaStoreEntry`).

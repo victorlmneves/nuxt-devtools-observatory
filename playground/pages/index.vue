@@ -79,6 +79,22 @@ async function triggerError() {
                 <button @click="shuffleItems">shuffle items (triggers many renders)</button>
             </section>
 
+            <!-- State / cookies section -->
+            <section>
+                <h2>State / cookies</h2>
+                <p style="font-size: 13px; color: #555; margin-bottom: 14px">
+                    Open the
+                    <strong>State</strong>
+                    tab, then use the
+                    <NuxtLink to="/test/state-cookie-verification">verification page</NuxtLink>
+                    to bump
+                    <code>useState</code>
+                    and
+                    <code>useCookie</code>
+                    values.
+                </p>
+            </section>
+
             <!-- Transition tracker section -->
             <section>
                 <h2>Transition Tracker</h2>
@@ -128,6 +144,10 @@ async function triggerError() {
                     <NuxtLink to="/test/fetch-verification" class="verification-link">
                         <strong>Fetch Dashboard Verification</strong>
                         <span>Test fetch timing, cache tracking, and waterfall ordering</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/state-cookie-verification" class="verification-link">
+                        <strong>State / cookies Verification</strong>
+                        <span>Test live useState and useCookie keys, previews, and cookie option metadata</span>
                     </NuxtLink>
                 </div>
             </section>

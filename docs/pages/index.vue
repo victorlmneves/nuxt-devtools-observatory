@@ -59,6 +59,12 @@ const featureCards = [
         to: '/feature-guides/payload-inspector',
     },
     {
+        title: 'State / cookies',
+        description: 'Watch live useState and useCookie keys, value previews, and cookie option metadata as they change.',
+        icon: 'i-lucide-cookie',
+        to: '/feature-guides/state-cookies',
+    },
+    {
         title: 'Render Heatmap',
         description: 'Identify hot components and noisy updates before they become performance regressions in real screens.',
         icon: 'i-lucide-flame',

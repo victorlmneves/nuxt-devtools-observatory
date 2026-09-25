@@ -12,6 +12,7 @@ Nuxt DevTools Observatory is a module that brings advanced observability and run
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Pinia Tracker** — inspect Pinia store state, action/mutation timelines, dependency edges, and hydration attribution
 - **Payload Inspector** — inspect Nuxt payload keys, serialized size, and SSR versus CSR hydration origin
+- **State / cookies** — live `useState` and `useCookie` keys, current value preview, and cookie option metadata
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 - **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, navigation events, and Nitro server-route timing in a unified Flamegraph and Waterfall view
@@ -58,6 +59,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `composableTracker` (boolean) — Enable composable tracker
 - `piniaTracker` (boolean) — Enable Pinia store tracker (set via `OBSERVATORY_PINIA_TRACKER`)
 - `payloadInspector` (boolean) — Enable payload and hydration inspector (set via `OBSERVATORY_PAYLOAD_INSPECTOR`)
+- `stateCookieTracker` (boolean) — Enable useState / useCookie tracker (set via `OBSERVATORY_STATE_COOKIE_TRACKER`)
 - `renderHeatmap` (boolean) — Enable render heatmap
 - `transitionTracker` (boolean) — Enable transition tracker (set via `OBSERVATORY_TRANSITION_TRACKER`)
 - `traceViewer` (boolean) — Enable trace viewer tab with per-route Flamegraph and Waterfall (set via `OBSERVATORY_TRACE_VIEWER`)
@@ -73,6 +75,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `maxComposableHistory` (number) — Max composable history events per entry
 - `maxComposableEntries` (number) — Max composable entries to keep in memory
 - `maxPiniaTimeline` (number) — Max Pinia timeline events per store (set via `OBSERVATORY_MAX_PINIA_TIMELINE`)
+- `maxStateCookieEntries` (number) — Max useState / useCookie entries to keep (set via `OBSERVATORY_MAX_STATE_COOKIE_ENTRIES`)
 - `maxRenderTimeline` (number) — Max render timeline events per entry
 
 Feature tabs are enabled by default in development. `instrumentServer` defaults to
@@ -90,6 +93,7 @@ export default defineNuxtConfig({
         composableTracker: true, // Enable composable tracker
         piniaTracker: true, // Enable Pinia store tracker
         payloadInspector: true, // Enable payload and hydration inspector
+        stateCookieTracker: true, // Enable useState / useCookie tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer
@@ -105,6 +109,7 @@ export default defineNuxtConfig({
         maxComposableHistory: 50, // Max composable history events per entry
         maxComposableEntries: 300, // Max composable entries to keep in memory
         maxPiniaTimeline: 100, // Max Pinia timeline events per store
+        maxStateCookieEntries: 200, // Max useState / useCookie entries to keep
         maxRenderTimeline: 100, // Max render timeline events per entry
     },
 
@@ -119,7 +124,7 @@ The DevTools client SPA is served same-origin via the Nuxt dev server at `/__obs
 ## How it works
 
 All instrumentation is **dev-only**. The module registers Vite transforms that wrap
-`useFetch`, `provide/inject`, `useX()` composable calls, and `<Transition>` at the
+`useFetch`, `provide/inject`, `useState` / `useCookie`, `useX()` composable calls, and `<Transition>` at the
 AST/module level before compilation. Pinia is instrumented at runtime through a Pinia
 plugin. In production (`import.meta.dev === false`) the transforms and plugin are
 skipped entirely — zero runtime overhead.
@@ -285,6 +290,16 @@ The panel provides:
 - **Stats** — key count, total bytes, `serverRendered`, hydrating
 - **Table** — key, bucket, origin, size, preview
 - **Inspector** — selected key preview (truncated)
+
+### State / cookies
+
+The State / cookies tab lists live `useState` and `useCookie` calls (the composable tracker skips those Nuxt helpers on purpose). Values are truncated previews; cookie rows include `maxAge` / `path` / `httpOnly` when those options were passed. HttpOnly cookies are not readable from client JS.
+
+The panel provides:
+
+- **Stats** — total entries plus `useState` / `useCookie` counts
+- **Table** — key, kind, origin (`ssr` while hydrating, otherwise `csr`), preview
+- **Inspector** — selected value preview and cookie option metadata
 
 ### Trace Viewer
 

@@ -198,7 +198,7 @@ const mockData = {
     await page.waitForTimeout(1000);
     // Inject mock data after navigation
     await page.evaluate((data) => {
-      window.dispatchEvent(new MessageEvent('message', { data }));
+      window.postMessage(data, window.location.origin);
     }, mockData);
     // Wait for UI to update
     await page.waitForTimeout(800);

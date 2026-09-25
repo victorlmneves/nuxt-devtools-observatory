@@ -12,6 +12,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `composableTracker`
 - `piniaTracker`
 - `payloadInspector`
+- `stateCookieTracker`
 - `renderHeatmap`
 - `transitionTracker`
 - `traceViewer`
@@ -39,6 +40,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `maxRenderTimeline`
 - `maxTraces` — also caps the in-memory Nitro/SSR request archive used by Trace Viewer
 - `maxPiniaTimeline`
+- `maxStateCookieEntries`
 
 ## Guidance
 
