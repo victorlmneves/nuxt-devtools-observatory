@@ -34,10 +34,13 @@ jobs:
                   node-version: 22
                   cache: pnpm
 
-            # Node 22 already includes npm 10+ (trusted publishing). Do not use
-            # `corepack enable npm` — Corepack is disabled on current GH runners.
-            - name: Check npm for trusted publishing
-              run: npm --version
+            # Trusted publishing (OIDC) needs npm 11.5+. Node 22 ships npm 10,
+            # which exchanges the OIDC token then fails `npm publish` with ENEEDAUTH.
+            # Do not use `corepack enable npm` — Corepack is disabled on GH runners.
+            - name: Setup npm 11 for trusted publishing
+              run: |
+                  npm install -g npm@11
+                  npm --version
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
