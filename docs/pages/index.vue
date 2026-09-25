@@ -120,8 +120,9 @@ const quickLinks = [
             <template #body>
                 <div class="landing-hero-copy">
                     <p>
-                        Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, Pinia stores, provide/inject chains, renders,
-                        transitions, and route traces so you can debug app behavior from the same place you inspect the rest of Nuxt.
+                        Nuxt DevTools Observatory adds targeted visibility for fetch activity, composables, Pinia stores, provide/inject
+                        chains, renders, transitions, and route traces so you can debug app behavior from the same place you inspect the
+                        rest of Nuxt.
                     </p>
                 </div>
             </template>

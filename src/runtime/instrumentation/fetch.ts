@@ -86,6 +86,10 @@ function resolvePayload(result: unknown, viaRaw: boolean): unknown {
 
 const WRAPPED_FETCH_FLAG = '__observatory_wrapped_fetch__'
 
+function isObservatoryNitroTimelineUrl(url: string) {
+    return url.includes('/__observatory/nitro-timeline')
+}
+
 function shouldRecordInDashboard(options?: Record<string, unknown>) {
     return !isNestedFetchSuppressed() && !isObservatoryTrackedFetch(options)
 }
@@ -97,6 +101,15 @@ function wrapFetchLike(original: FetchLike, fetchRegistry?: FetchRegistry): Fetc
 
     function instrumentCall(viaRaw: boolean, request: unknown, options?: Record<string, unknown>) {
         const url = resolveUrl(request)
+
+        if (isObservatoryNitroTimelineUrl(url)) {
+            return viaRaw
+                ? typeof original.raw === 'function'
+                    ? original.raw(request, options)
+                    : original(request, options)
+                : original(request, options)
+        }
+
         const method = resolveMethod(request, options)
         const startedAt = performance.now()
         const source = viaRaw ? '$fetch.raw' : '$fetch'

@@ -229,13 +229,13 @@ export default defineNuxtModule<ModuleOptions>({
 
         const trackersEnabled = Boolean(
             resolved.fetchDashboard ||
-                resolved.provideInjectGraph ||
-                resolved.composableTracker ||
-                resolved.piniaTracker ||
-                resolved.payloadInspector ||
-                resolved.renderHeatmap ||
-                resolved.transitionTracker ||
-                resolved.traceViewer
+            resolved.provideInjectGraph ||
+            resolved.composableTracker ||
+            resolved.piniaTracker ||
+            resolved.payloadInspector ||
+            resolved.renderHeatmap ||
+            resolved.transitionTracker ||
+            resolved.traceViewer
         )
 
         // ── Runtime plugins ───────────────────────────────────────────────────
@@ -247,6 +247,11 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Nitro plugin for SSR fetch capture / trace injection ──────────────
         if (resolved.fetchDashboard || (resolved.traceViewer && resolved.instrumentServer)) {
+            nuxt.options.nitro = nuxt.options.nitro ?? {}
+            nuxt.options.nitro.env = {
+                ...(nuxt.options.nitro.env ?? {}),
+                OBSERVATORY_MAX_TRACES: String(resolved.maxTraces ?? 50),
+            }
             addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
         }
 

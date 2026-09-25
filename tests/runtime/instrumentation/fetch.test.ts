@@ -286,4 +286,15 @@ describe('setupFetchInstrumentation', () => {
             expect(getSpans()).toHaveLength(1)
         })
     })
+
+    it('does not create a span for the nitro timeline archive endpoint', async () => {
+        const fetchImpl = vi.fn().mockResolvedValue([])
+        const nuxtApp = makeNuxtApp(fetchImpl)
+        setupFetchInstrumentation(nuxtApp)
+
+        await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/__observatory/nitro-timeline')
+
+        expect(fetchImpl).toHaveBeenCalled()
+        expect(getSpans()).toHaveLength(0)
+    })
 })

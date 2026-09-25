@@ -1,11 +1,11 @@
 /**
- * Per-request SSR trace collector.
+ * Per-request SSR / Nitro trace collector.
  *
- * Each incoming SSR page request gets its own record keyed by a unique
- * requestId (stored on H3 `event.context`). Spans are accumulated during the
- * request lifecycle and drained once the HTML is rendered (via the
- * `render:html` Nitro hook), so they can be injected into the page as inline
- * JSON for the client plugin to pick up.
+ * Each incoming request gets its own record keyed by a unique requestId
+ * (stored on H3 `event.context`). Spans are accumulated during the request
+ * lifecycle. Document HTML requests inject a snapshot via `render:html`;
+ * every request is archived when `drainSsrRecord` runs so API routes still
+ * reach the Trace Viewer.
  */
 
 export interface SsrSpan {
@@ -26,7 +26,17 @@ export interface SsrTraceRecord {
     spans: SsrSpan[]
 }
 
-const pending = new Map<string, SsrTraceRecord>()
+interface PendingSsrRecord extends SsrTraceRecord {
+    method: string
+    route: string
+    isDocument: boolean
+}
+
+const pending = new Map<string, PendingSsrRecord>()
+const archive: SsrTraceRecord[] = []
+
+const DEFAULT_ARCHIVE_CAP = 50
+let archiveCap = DEFAULT_ARCHIVE_CAP
 
 let _counter = 0
 
@@ -34,6 +44,92 @@ function newId(prefix: string): string {
     _counter = (_counter + 1) % 999_999
 
     return `${prefix}_ssr_${Date.now()}_${_counter}`
+}
+
+function cloneSpan(span: SsrSpan): SsrSpan {
+    return {
+        id: span.id,
+        name: span.name,
+        type: span.type,
+        startTime: span.startTime,
+        endTime: span.endTime,
+        durationMs: span.durationMs,
+        status: span.status,
+        metadata: span.metadata ? { ...span.metadata } : undefined,
+    }
+}
+
+function toPublicRecord(record: PendingSsrRecord): SsrTraceRecord {
+    return {
+        traceId: record.traceId,
+        name: record.name,
+        spans: record.spans.map(cloneSpan),
+    }
+}
+
+function finalizeRecordName(record: PendingSsrRecord): void {
+    if (record.isDocument) {
+        record.name = `ssr:${record.route}`
+
+        return
+    }
+
+    record.name = `nitro:${record.method} ${record.route}`
+}
+
+function closeNavigationSpan(record: PendingSsrRecord, durationMs: number): void {
+    const navSpan = record.spans[0]
+
+    if (!navSpan) {
+        return
+    }
+
+    navSpan.endTime = durationMs
+    navSpan.durationMs = durationMs
+
+    if (navSpan.status === 'active') {
+        navSpan.status = 'ok'
+    }
+}
+
+function pushArchive(record: SsrTraceRecord): void {
+    archive.push(record)
+
+    while (archive.length > archiveCap) {
+        archive.shift()
+    }
+}
+
+/**
+ * Cap the completed-request archive. Reuses the same bound as client
+ * `maxTraces` (default 50). Oldest records are dropped first.
+ * @param {number} max - Maximum archived records to retain.
+ */
+export function setSsrArchiveCap(max: number): void {
+    archiveCap = Math.max(1, max)
+
+    while (archive.length > archiveCap) {
+        archive.shift()
+    }
+}
+
+/**
+ * Return clones of archived Nitro/SSR records (no request bodies, cookies, or headers).
+ * @returns {SsrTraceRecord[]} Archived records, oldest first.
+ */
+export function getArchivedSsrRecords(): SsrTraceRecord[] {
+    return archive.map((record) => ({
+        traceId: record.traceId,
+        name: record.name,
+        spans: record.spans.map(cloneSpan),
+    }))
+}
+
+/**
+ * Drop all archived records. Used by unit tests.
+ */
+export function clearSsrArchive(): void {
+    archive.length = 0
 }
 
 /**
@@ -46,9 +142,12 @@ function newId(prefix: string): string {
  * @returns {SsrTraceRecord} The newly created `SsrTraceRecord` keyed by `requestId`.
  */
 export function createSsrRecord(requestId: string, route: string, method: string): SsrTraceRecord {
-    const record: SsrTraceRecord = {
+    const record: PendingSsrRecord = {
         traceId: newId('trace'),
         name: `ssr:${route}`,
+        method,
+        route,
+        isDocument: false,
         spans: [
             {
                 id: newId('span'),
@@ -68,6 +167,39 @@ export function createSsrRecord(requestId: string, route: string, method: string
     pending.set(requestId, record)
 
     return record
+}
+
+/**
+ * Mark the pending record as a document HTML response so its trace keeps the
+ * `ssr:<path>` name instead of `nitro:<method> <path>`.
+ * @param {string} requestId - The request identifier returned by `createSsrRecord`.
+ */
+export function markSsrRecordDocument(requestId: string): void {
+    const record = pending.get(requestId)
+
+    if (!record) {
+        return
+    }
+
+    record.isDocument = true
+}
+
+/**
+ * Mark the navigation span as `error` (Nitro `error` hook).
+ * @param {string} requestId - The request identifier returned by `createSsrRecord`.
+ */
+export function markSsrRecordError(requestId: string): void {
+    const record = pending.get(requestId)
+
+    if (!record) {
+        return
+    }
+
+    const navSpan = record.spans[0]
+
+    if (navSpan) {
+        navSpan.status = 'error'
+    }
 }
 
 /**
@@ -165,10 +297,30 @@ export function addSsrPhaseSpan(
 }
 
 /**
+ * Clone the pending record with the navigation span closed, without removing
+ * it from the pending map. Used to inject HTML JSON before `afterResponse`
+ * drains and archives the full record.
+ * @param {string} requestId - The request identifier returned by `createSsrRecord`.
+ * @param {number} durationMs - Duration used to close the navigation span in the snapshot.
+ * @returns {SsrTraceRecord | undefined} A cloned record, or `undefined` if unknown.
+ */
+export function snapshotSsrRecord(requestId: string, durationMs: number): SsrTraceRecord | undefined {
+    const record = pending.get(requestId)
+
+    if (!record) {
+        return undefined
+    }
+
+    closeNavigationSpan(record, durationMs)
+    finalizeRecordName(record)
+
+    return toPublicRecord(record)
+}
+
+/**
  * Finalize and remove the record for `requestId`. The pre-populated
- * navigation span is closed with `durationMs`. Returns `undefined` if the
- * requestId is unknown (e.g. non-page requests that never called
- * `createSsrRecord`).
+ * navigation span is closed with `durationMs`. A clone is archived (capped).
+ * Returns `undefined` if the requestId is unknown.
  * @param {string} requestId - The request identifier returned by `createSsrRecord`.
  * @param {number} durationMs - Total SSR request duration in milliseconds, used to close the navigation span.
  * @returns {SsrTraceRecord | undefined} The completed `SsrTraceRecord`, or `undefined` if no record exists for `requestId`.
@@ -182,13 +334,11 @@ export function drainSsrRecord(requestId: string, durationMs: number): SsrTraceR
         return undefined
     }
 
-    const navSpan = record.spans[0]
+    closeNavigationSpan(record, durationMs)
+    finalizeRecordName(record)
 
-    if (navSpan) {
-        navSpan.endTime = durationMs
-        navSpan.durationMs = durationMs
-        navSpan.status = 'ok'
-    }
+    const publicRecord = toPublicRecord(record)
+    pushArchive(publicRecord)
 
-    return record
+    return publicRecord
 }

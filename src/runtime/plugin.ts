@@ -13,6 +13,7 @@ import { setupRouteInstrumentation } from './instrumentation/route'
 import { setupErrorInstrumentation } from './instrumentation/error'
 import { injectTestBridge } from './test-bridge'
 import { traceStore } from './tracing/traceStore'
+import { mergeSsrTraceRecord } from './tracing/mergeSsrTraceRecord'
 import { getSnapshotRevision } from './snapshot-revision'
 import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
 
@@ -132,63 +133,37 @@ export default defineNuxtPlugin(() => {
             return
         }
 
-        let record: {
-            traceId: string
-            name: string
-            spans: Array<{
-                id: string
-                name: string
-                type: string
-                startTime: number
-                endTime?: number
-                durationMs?: number
-                status: 'ok' | 'error' | 'active'
-                metadata?: Record<string, unknown>
-            }>
+        try {
+            mergeSsrTraceRecord(JSON.parse(el.textContent ?? ''))
+        } catch {
+            // Ignore malformed inject payloads.
+        }
+    }
+
+    async function mergeNitroTimelineArchive() {
+        if (!import.meta.client) {
+            return
+        }
+
+        const fetcher = (globalThis as { $fetch?: (url: string) => Promise<unknown> }).$fetch
+
+        if (typeof fetcher !== 'function') {
+            return
         }
 
         try {
-            record = JSON.parse(el.textContent ?? '')
+            const records = await fetcher('/__observatory/nitro-timeline')
+
+            if (!Array.isArray(records)) {
+                return
+            }
+
+            for (const record of records) {
+                mergeSsrTraceRecord(record)
+            }
         } catch {
-            return
+            // Endpoint is dev-only and absent when instrumentServer is off.
         }
-
-        if (!record?.traceId || !Array.isArray(record.spans)) {
-            return
-        }
-
-        // Anchor the SSR trace just before now so it appears at the top of the
-        // trace list (most recent). Span times are relative to request start
-        // (startTime: 0 = request began), so we compute an absolute base by
-        // subtracting the navigation span duration from performance.now().
-        const navDurationMs = record.spans[0]?.durationMs ?? 0
-        const traceStartTime = performance.now() - navDurationMs
-
-        traceStore.createTrace({
-            id: record.traceId,
-            name: record.name,
-            startTime: traceStartTime,
-            metadata: { origin: 'ssr' },
-        })
-
-        for (const span of record.spans) {
-            traceStore.addSpan({
-                id: span.id,
-                traceId: record.traceId,
-                name: span.name,
-                type: span.type,
-                startTime: traceStartTime + span.startTime,
-                endTime: span.endTime !== undefined ? traceStartTime + span.endTime : undefined,
-                status: span.status,
-                metadata: { ...(span.metadata ?? {}), origin: 'ssr' },
-            })
-        }
-
-        traceStore.endTrace(record.traceId, {
-            endTime: traceStartTime + navDurationMs,
-            status: 'ok',
-            metadata: { origin: 'ssr' },
-        })
     }
 
     // Expose registries globally so Vite transform shims can reach them.
@@ -202,6 +177,7 @@ export default defineNuxtPlugin(() => {
             // Pick up SSR spans injected into the HTML by the Nitro plugin and
             // merge them into the client traceStore as a standalone SSR trace.
             mergeSsrSpans()
+            void mergeNitroTimelineArchive()
         } else if (config.fetchDashboard) {
             setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1])
         }
@@ -343,6 +319,10 @@ export default defineNuxtPlugin(() => {
     nuxtApp.hook('page:finish', () => {
         const payload = registries.payload as { capture?: () => void } | undefined
         payload?.capture?.()
+
+        if (config.traceViewer) {
+            void mergeNitroTimelineArchive()
+        }
 
         broadcastAll('page:finish')
     })

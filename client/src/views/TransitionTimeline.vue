@@ -266,7 +266,7 @@ function directionColor(e: TransitionEntry): string {
                         >
                             <td>
                                 <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
-                                <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm"> group</span>
+                                <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm">group</span>
                             </td>
                             <td>
                                 <span class="transition-timeline__direction mono" :style="{ color: directionColor(row.entry) }">

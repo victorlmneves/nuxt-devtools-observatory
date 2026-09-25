@@ -1,9 +1,17 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { getSsrRequestContext } from '../../src/runtime/nitro/ssr-request-context'
+import { clearSsrArchive, getArchivedSsrRecords, setSsrArchiveCap } from '../../src/runtime/nitro/ssr-trace-store'
 
 let requestHook: (event: Record<string, unknown>) => void
 let afterResponseHook: (event: Record<string, unknown>) => void
+let beforeResponseHook: (event: Record<string, unknown>) => void
 let renderHtmlHook: (html: { bodyAppend: string[] }, ctx: { event: Record<string, unknown> }) => void
+let errorHook: (...args: unknown[]) => void
+let timelineHandler: ((event: Record<string, unknown>) => unknown) | undefined
+const middlewareLayer = {
+    route: 'auth',
+    handler: (event: Record<string, unknown>) => event,
+}
 
 const setResponseHeader = vi.fn()
 const getRequestURL = vi.fn().mockReturnValue(new URL('http://localhost/dashboard'))
@@ -21,14 +29,36 @@ beforeAll(async () => {
             hook(name: string, handler: unknown) {
                 if (name === 'request') requestHook = handler as typeof requestHook
                 if (name === 'afterResponse') afterResponseHook = handler as typeof afterResponseHook
+                if (name === 'beforeResponse') beforeResponseHook = handler as typeof beforeResponseHook
                 if (name === 'render:html') renderHtmlHook = handler as typeof renderHtmlHook
+                if (name === 'error') errorHook = handler as typeof errorHook
             },
+        },
+        router: {
+            get(path: string, handler: (event: unknown) => unknown) {
+                if (path === '/__observatory/nitro-timeline') {
+                    timelineHandler = handler as typeof timelineHandler
+                }
+            },
+        },
+        h3App: {
+            stack: [middlewareLayer],
         },
     })
 })
 
-function makeEvent(): { context: Record<string, unknown>; node?: { req?: { method?: string } } } {
-    return { context: {} }
+beforeEach(() => {
+    clearSsrArchive()
+    setSsrArchiveCap(50)
+    getRequestURL.mockReturnValue(new URL('http://localhost/dashboard'))
+})
+
+function makeEvent(extra: Record<string, unknown> = {}): {
+    context: Record<string, unknown>
+    node?: { req?: { method?: string }; res?: { statusCode?: number; getHeader?: (name: string) => string | undefined } }
+    method?: string
+} {
+    return { context: { ...extra } }
 }
 
 describe('fetch-capture nitro plugin', () => {
@@ -106,6 +136,7 @@ describe('fetch-capture nitro plugin', () => {
         const parsed = JSON.parse(match![1])
 
         expect(typeof parsed.traceId).toBe('string')
+        expect(parsed.name).toBe('ssr:/dashboard')
         expect(Array.isArray(parsed.spans)).toBe(true)
         expect(parsed.spans.length).toBeGreaterThan(0)
 
@@ -122,5 +153,90 @@ describe('fetch-capture nitro plugin', () => {
         renderHtmlHook(html, { event: event as unknown as Record<string, unknown> })
 
         expect(html.bodyAppend).toHaveLength(0)
+    })
+
+    it('archives document traces as ssr:<path> after afterResponse', () => {
+        const event = makeEvent()
+
+        requestHook(event as unknown as Record<string, unknown>)
+        renderHtmlHook({ bodyAppend: [] }, { event: event as unknown as Record<string, unknown> })
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        expect(getArchivedSsrRecords()[0]?.name).toBe('ssr:/dashboard')
+    })
+
+    it('archives an API-style request after afterResponse without render:html', () => {
+        getRequestURL.mockReturnValue(new URL('http://localhost/api/hello'))
+        const event = makeEvent()
+
+        requestHook(event as unknown as Record<string, unknown>)
+        beforeResponseHook(event as unknown as Record<string, unknown>)
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        const archived = getArchivedSsrRecords()
+        expect(archived).toHaveLength(1)
+        expect(archived[0].name).toBe('nitro:GET /api/hello')
+
+        const names = archived[0].spans.map((span) => span.name)
+        expect(names).toContain('nitro:handler')
+        expect(names).toContain('ssr:afterResponse')
+    })
+
+    it('records cache hit metadata as nitro:cached', () => {
+        const event = makeEvent({ cache: { status: 'hit' } })
+
+        requestHook(event as unknown as Record<string, unknown>)
+        beforeResponseHook(event as unknown as Record<string, unknown>)
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        const cached = getArchivedSsrRecords()[0].spans.find((span) => span.name === 'nitro:cached')
+
+        expect(cached).toBeDefined()
+        expect(cached?.metadata?.cache).toBe('hit')
+        expect(cached?.type).toBe('server')
+    })
+
+    it('records cache miss metadata when context.cache.hit is false', () => {
+        const event = makeEvent({ cache: { hit: false } })
+
+        requestHook(event as unknown as Record<string, unknown>)
+        beforeResponseHook(event as unknown as Record<string, unknown>)
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        expect(getArchivedSsrRecords()[0].spans.find((span) => span.name === 'nitro:cached')?.metadata?.cache).toBe('miss')
+    })
+
+    it('marks the navigation span error from the error hook', () => {
+        const event = makeEvent()
+
+        requestHook(event as unknown as Record<string, unknown>)
+        errorHook(new Error('boom'), { event })
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        const record = getArchivedSsrRecords()[0]
+        expect(record.spans[0]?.status).toBe('error')
+        expect(record.spans.some((span) => span.name === 'nitro:error')).toBe(true)
+    })
+
+    it('times wrapped middleware as nitro:middleware:<name>', async () => {
+        const event = makeEvent()
+
+        requestHook(event as unknown as Record<string, unknown>)
+        await middlewareLayer.handler(event as unknown as Record<string, unknown>)
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        const names = getArchivedSsrRecords()[0].spans.map((span) => span.name)
+        expect(names).toContain('nitro:middleware:auth')
+    })
+
+    it('returns archived records from the dev timeline endpoint', () => {
+        const event = makeEvent()
+
+        requestHook(event as unknown as Record<string, unknown>)
+        afterResponseHook(event as unknown as Record<string, unknown>)
+
+        const payload = timelineHandler?.({ method: 'GET', context: {} })
+        expect(Array.isArray(payload)).toBe(true)
+        expect((payload as { name: string }[]).some((record) => record.name.startsWith('nitro:'))).toBe(true)
     })
 })

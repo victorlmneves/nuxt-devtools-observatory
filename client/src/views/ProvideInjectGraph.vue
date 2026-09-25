@@ -626,8 +626,9 @@ const edges = computed<Edge[]>(() => {
                             <pre
                                 v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
                                 class="value-box"
-                                >{{ formatValueDetail(entry.raw) }}</pre
                             >
+                                {{ formatValueDetail(entry.raw) }}
+                            </pre>
                         </div>
                     </div>
                 </div>

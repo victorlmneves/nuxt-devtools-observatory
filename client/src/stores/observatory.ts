@@ -55,8 +55,8 @@ function cloneArray<T>(value: T[] | undefined): T[] {
 function normalizeRenderEntries(value: RenderEntry[] | undefined): RenderEntry[] {
     return value
         ? value.map((item) => ({
-            ...item,
-        }))
+              ...item,
+          }))
         : []
 }
 
@@ -64,9 +64,9 @@ function applySnapshot(data: ObservatorySnapshot) {
     fetchEntries.value = cloneArray(data.fetch as FetchEntry[] | undefined)
     provideInject.value = data.provideInject
         ? {
-            provides: cloneArray(data.provideInject.provides as ProvideInjectSnapshot['provides']),
-            injects: cloneArray(data.provideInject.injects as ProvideInjectSnapshot['injects']),
-        }
+              provides: cloneArray(data.provideInject.provides as ProvideInjectSnapshot['provides']),
+              injects: cloneArray(data.provideInject.injects as ProvideInjectSnapshot['injects']),
+          }
         : { provides: [], injects: [] }
     composables.value = cloneArray(data.composables as ComposableEntry[] | undefined)
     piniaStores.value = cloneArray(data.piniaStores as PiniaStoreEntry[] | undefined)
@@ -76,13 +76,13 @@ function applySnapshot(data: ObservatorySnapshot) {
     const nextPayload = data.payload as PayloadInspectorSnapshot | undefined
     payload.value = nextPayload
         ? {
-            capturedAt: nextPayload.capturedAt ?? 0,
-            isHydrating: !!nextPayload.isHydrating,
-            serverRendered: !!nextPayload.serverRendered,
-            keyCount: nextPayload.keyCount ?? nextPayload.keys?.length ?? 0,
-            totalBytes: nextPayload.totalBytes ?? 0,
-            keys: cloneArray(nextPayload.keys),
-        }
+              capturedAt: nextPayload.capturedAt ?? 0,
+              isHydrating: !!nextPayload.isHydrating,
+              serverRendered: !!nextPayload.serverRendered,
+              keyCount: nextPayload.keyCount ?? nextPayload.keys?.length ?? 0,
+              totalBytes: nextPayload.totalBytes ?? 0,
+              keys: cloneArray(nextPayload.keys),
+          }
         : { ...emptyPayload, keys: [] }
     features.value = data.features || {}
 
@@ -264,9 +264,9 @@ export function useObservatoryData() {
                     applySnapshot(snapshot)
                 }
             })
-            .catch(() => { })
+            .catch(() => {})
 
-        rpc?.requestSnapshot().catch(() => { })
+        rpc?.requestSnapshot().catch(() => {})
     }
 
     return {

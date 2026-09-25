@@ -627,9 +627,7 @@ describe('makeEntry — describeElement paths', () => {
 
         const cpi = {
             $: { uid: 51, type: { __name: 'TextComp', __file: 'Text.vue', name: 'TextComp' } },
-            $el: {
-                /* text node — no tagName */
-            },
+            $el: {/* text node — no tagName */},
             $parent: null,
         } as unknown as ComponentPublicInstance
 
