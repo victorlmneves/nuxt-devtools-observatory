@@ -297,4 +297,24 @@ describe('setupFetchInstrumentation', () => {
         expect(fetchImpl).toHaveBeenCalled()
         expect(getSpans()).toHaveLength(0)
     })
+
+    it('invokes onSuccessfulFetch after a resolved client fetch', async () => {
+        const onSuccessfulFetch = vi.fn()
+        const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({ ok: true }))
+        setupFetchInstrumentation(nuxtApp, undefined, { onSuccessfulFetch })
+
+        await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/users')
+
+        expect(onSuccessfulFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not invoke onSuccessfulFetch for the nitro timeline endpoint', async () => {
+        const onSuccessfulFetch = vi.fn()
+        const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue([]))
+        setupFetchInstrumentation(nuxtApp, undefined, { onSuccessfulFetch })
+
+        await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/__observatory/nitro-timeline')
+
+        expect(onSuccessfulFetch).not.toHaveBeenCalled()
+    })
 })

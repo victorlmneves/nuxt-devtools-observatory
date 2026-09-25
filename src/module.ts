@@ -199,7 +199,7 @@ export default defineNuxtModule<ModuleOptions>({
             aliases['nuxt-devtools-observatory/runtime/async-data-instrumentation'] = resolver.resolve(
                 './runtime/instrumentation/asyncData'
             )
-            ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
+                ; (config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
         // ── Vite transforms ───────────────────────────────────────────────────
@@ -247,9 +247,12 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Nitro plugin for SSR fetch capture / trace injection ──────────────
         if (resolved.fetchDashboard || (resolved.traceViewer && resolved.instrumentServer)) {
-            nuxt.options.nitro = nuxt.options.nitro ?? {}
-            nuxt.options.nitro.env = {
-                ...(nuxt.options.nitro.env ?? {}),
+            const nitroOptions = nuxt.options as typeof nuxt.options & {
+                nitro?: { env?: Record<string, string | undefined> }
+            }
+            nitroOptions.nitro = nitroOptions.nitro ?? {}
+            nitroOptions.nitro.env = {
+                ...(nitroOptions.nitro.env ?? {}),
                 OBSERVATORY_MAX_TRACES: String(resolved.maxTraces ?? 50),
             }
             addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))

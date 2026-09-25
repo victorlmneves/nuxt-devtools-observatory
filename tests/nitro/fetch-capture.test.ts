@@ -10,7 +10,7 @@ let errorHook: (...args: unknown[]) => void
 let timelineHandler: ((event: Record<string, unknown>) => unknown) | undefined
 const middlewareLayer = {
     route: 'auth',
-    handler: (event: Record<string, unknown>) => event,
+    handler: (event: unknown) => event,
 }
 
 const setResponseHeader = vi.fn()

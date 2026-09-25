@@ -166,6 +166,23 @@ export default defineNuxtPlugin(() => {
         }
     }
 
+    let timelineRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+    function scheduleNitroTimelineRefresh() {
+        if (!import.meta.client) {
+            return
+        }
+
+        if (timelineRefreshTimer !== null) {
+            clearTimeout(timelineRefreshTimer)
+        }
+
+        timelineRefreshTimer = setTimeout(() => {
+            timelineRefreshTimer = null
+            void mergeNitroTimelineArchive()
+        }, 250)
+    }
+
     // Expose registries globally so Vite transform shims can reach them.
     // This must happen synchronously — before any component setup() runs —
     // so that shims injected by the Vite transforms find the registry already
@@ -173,7 +190,9 @@ export default defineNuxtPlugin(() => {
     if (import.meta.client) {
         if (config.traceViewer) {
             setupComponentInstrumentation(nuxtApp)
-            setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1])
+            setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1], {
+                onSuccessfulFetch: scheduleNitroTimelineRefresh,
+            })
             // Pick up SSR spans injected into the HTML by the Nitro plugin and
             // merge them into the client traceStore as a standalone SSR trace.
             mergeSsrSpans()

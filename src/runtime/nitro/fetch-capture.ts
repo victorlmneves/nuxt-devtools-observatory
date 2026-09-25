@@ -14,18 +14,30 @@ import {
 
 export const NITRO_TIMELINE_PATH = '/__observatory/nitro-timeline'
 
-interface ObservatoryContext {
+interface IObservatoryContext {
     __observatoryRequestId?: string
     __ssrFetchStart?: number
     cache?: unknown
     matchedRoute?: { path?: string }
 }
 
+interface IObservatoryNode {
+    req?: { method?: string }
+    res?: {
+        statusCode?: number
+        getHeader?: (name: string) => string | number | string[] | undefined
+    }
+}
+
 // Nitro plugins receive plain H3Event objects; extend the context inline.
-type ObservatoryEvent = H3Event & { context: H3Event['context'] & ObservatoryContext }
+type TObservatoryEvent = Omit<H3Event, 'node' | 'context'> & {
+    context: H3Event['context'] & IObservatoryContext
+    method?: string
+    node?: IObservatoryNode
+}
 
 // Nitro's render:html HTML context (subset of NitroRenderHTMLContext).
-interface NitroRenderHTMLContext {
+interface INitroRenderHTMLContext {
     island?: boolean
     html: string
     head: string[]
@@ -34,12 +46,14 @@ interface NitroRenderHTMLContext {
     bodyAppend: string[]
 }
 
-interface H3StackLayer {
+type TH3StackHandler = ((event: unknown) => unknown) & { __observatoryWrapped?: boolean; name?: string }
+
+interface IH3StackLayer {
     route?: string
-    handler?: ((event: unknown) => unknown) & { __observatoryWrapped?: boolean; name?: string }
+    handler?: TH3StackHandler
 }
 
-interface NitroAppLike {
+interface INitroAppLike {
     hooks: {
         // Use a broad signature so we can register all three hook names without
         // TypeScript requiring a union-overloaded interface.
@@ -50,7 +64,7 @@ interface NitroAppLike {
         use?: (path: string, handler: (event: unknown) => unknown) => void
     }
     h3App?: {
-        stack?: H3StackLayer[]
+        stack?: IH3StackLayer[]
         use?: (path: string, handler: (event: unknown) => unknown) => void
     }
 }
@@ -77,7 +91,7 @@ function relativeMs(start: number, at = performance.now()): number {
     return Math.max(at - start, 0)
 }
 
-function readStatusCode(event: ObservatoryEvent): number | undefined {
+function readStatusCode(event: TObservatoryEvent): number | undefined {
     const nodeStatus = event.node?.res?.statusCode
 
     if (typeof nodeStatus === 'number') {
@@ -93,7 +107,7 @@ function readStatusCode(event: ObservatoryEvent): number | undefined {
     return undefined
 }
 
-function readMatchedRoute(event: ObservatoryEvent): string | undefined {
+function readMatchedRoute(event: TObservatoryEvent): string | undefined {
     const matched = event.context.matchedRoute?.path
 
     if (typeof matched === 'string' && matched.length > 0) {
@@ -105,7 +119,7 @@ function readMatchedRoute(event: ObservatoryEvent): string | undefined {
     return typeof path === 'string' ? path : undefined
 }
 
-function readCacheStatus(event: ObservatoryEvent): 'hit' | 'miss' | undefined {
+function readCacheStatus(event: TObservatoryEvent): 'hit' | 'miss' | undefined {
     const cache = event.context.cache
 
     if (cache && typeof cache === 'object') {
@@ -131,27 +145,27 @@ function readCacheStatus(event: ObservatoryEvent): 'hit' | 'miss' | undefined {
     return undefined
 }
 
-function resolveEventFromHookArgs(args: unknown[]): ObservatoryEvent | undefined {
+function resolveEventFromHookArgs(args: unknown[]): TObservatoryEvent | undefined {
     const first = args[0]
 
     if (first && typeof first === 'object' && 'context' in first) {
-        return first as ObservatoryEvent
+        return first as TObservatoryEvent
     }
 
     const second = args[1]
 
     if (second && typeof second === 'object' && 'event' in second) {
-        return (second as { event?: ObservatoryEvent }).event
+        return (second as { event?: TObservatoryEvent }).event
     }
 
     if (second && typeof second === 'object' && 'context' in second) {
-        return second as ObservatoryEvent
+        return second as TObservatoryEvent
     }
 
     return undefined
 }
 
-function wrapH3Middleware(nitroApp: NitroAppLike): boolean {
+function wrapH3Middleware(nitroApp: INitroAppLike): boolean {
     const stack = nitroApp.h3App?.stack
 
     if (!Array.isArray(stack) || stack.length === 0) {
@@ -171,11 +185,11 @@ function wrapH3Middleware(nitroApp: NitroAppLike): boolean {
             typeof layer.route === 'string' && layer.route.length > 0
                 ? layer.route
                 : original.name && original.name !== 'handler'
-                  ? original.name
-                  : 'anonymous'
+                    ? original.name
+                    : 'anonymous'
 
         const wrappedHandler = ((event: unknown) => {
-            const observatoryEvent = event as ObservatoryEvent
+            const observatoryEvent = event as TObservatoryEvent
             const requestId = observatoryEvent?.context?.__observatoryRequestId
             const start = observatoryEvent?.context?.__ssrFetchStart
             const t0 = performance.now()
@@ -211,7 +225,7 @@ function wrapH3Middleware(nitroApp: NitroAppLike): boolean {
                 finish()
                 throw error
             }
-        }) as H3StackLayer['handler']
+        }) as TH3StackHandler
 
         if (wrappedHandler) {
             wrappedHandler.__observatoryWrapped = true
@@ -224,13 +238,13 @@ function wrapH3Middleware(nitroApp: NitroAppLike): boolean {
     return wrapped > 0
 }
 
-function registerTimelineEndpoint(nitroApp: NitroAppLike): void {
+function registerTimelineEndpoint(nitroApp: INitroAppLike): void {
     if (!import.meta.dev) {
         return
     }
 
     const handler = (event: unknown) => {
-        const observatoryEvent = event as ObservatoryEvent
+        const observatoryEvent = event as TObservatoryEvent
         const method = String(observatoryEvent.method ?? observatoryEvent.node?.req?.method ?? 'GET').toUpperCase()
 
         if (method !== 'GET') {
@@ -274,7 +288,7 @@ function addFallbackMiddlewareSpan(requestId: string, start: number): void {
 
 // Nitro plugin: captures SSR request timing and injects a trace record into
 // the rendered HTML so the client Observatory plugin can pick it up.
-export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
+export default function fetchCapturePlugin(nitroApp: INitroAppLike) {
     applyArchiveCapFromEnv()
     middlewareWrapped = wrapH3Middleware(nitroApp)
     registerTimelineEndpoint(nitroApp)
@@ -286,7 +300,7 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
             middlewareWrapped = wrapH3Middleware(nitroApp)
         }
 
-        const event = args[0] as ObservatoryEvent
+        const event = args[0] as TObservatoryEvent
 
         let route = '/'
         try {
@@ -318,7 +332,7 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
     // Close the handler span and label cached handlers when context is present.
     nitroApp.hooks.hook('beforeResponse', (...args: unknown[]) => {
         const hookStart = performance.now()
-        const event = args[0] as ObservatoryEvent
+        const event = args[0] as TObservatoryEvent
         const requestId = event?.context?.__observatoryRequestId
         const start = event?.context?.__ssrFetchStart
 
@@ -404,7 +418,7 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
     // Drain leftover records (document and API) so they are archived once.
     nitroApp.hooks.hook('afterResponse', (...args: unknown[]) => {
         const hookStart = performance.now()
-        const event = args[0] as ObservatoryEvent
+        const event = args[0] as TObservatoryEvent
         const start = event.context.__ssrFetchStart
 
         if (start !== undefined) {
@@ -440,8 +454,8 @@ export default function fetchCapturePlugin(nitroApp: NitroAppLike) {
     // on afterResponse.
     nitroApp.hooks.hook('render:html', (...args: unknown[]) => {
         const hookStart = performance.now()
-        const html = args[0] as NitroRenderHTMLContext
-        const ctx = args[1] as { event: ObservatoryEvent }
+        const html = args[0] as INitroRenderHTMLContext
+        const ctx = args[1] as { event: TObservatoryEvent }
         const event = ctx?.event
 
         if (!event) {
