@@ -1,3 +1,11 @@
+# [0.7.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.6.1...v0.7.0) (2026-09-25)
+
+
+### Features
+
+* enhance observatory plugin and fetch instrumentation ([682012f](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/682012f10564981c76f0caf3d6f1003c096db52d))
+* enhance Trace Viewer and SSR trace handling ([f25309b](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/f25309b874f2f5387d364c5d1b93464dd3949ba7))
+
 ## [0.6.1](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.6.0...v0.6.1) (2026-09-25)
 
 
