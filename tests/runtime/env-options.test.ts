@@ -6,6 +6,7 @@ const FLAG_KEYS = [
     'OBSERVATORY_PROVIDE_INJECT_GRAPH',
     'OBSERVATORY_COMPOSABLE_TRACKER',
     'OBSERVATORY_PINIA_TRACKER',
+    'OBSERVATORY_PAYLOAD_INSPECTOR',
     'OBSERVATORY_RENDER_HEATMAP',
     'OBSERVATORY_TRANSITION_TRACKER',
     'OBSERVATORY_TRACE_VIEWER',
@@ -62,6 +63,7 @@ describe('createModuleDefaults', () => {
         expect(defaults.provideInjectGraph).toBe(true)
         expect(defaults.composableTracker).toBe(true)
         expect(defaults.piniaTracker).toBe(false)
+        expect(defaults.payloadInspector).toBe(true)
         expect(defaults.renderHeatmap).toBe(true)
         expect(defaults.transitionTracker).toBe(true)
         expect(defaults.traceViewer).toBe(true)

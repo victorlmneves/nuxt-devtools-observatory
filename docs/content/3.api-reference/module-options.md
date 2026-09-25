@@ -11,6 +11,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `provideInjectGraph`
 - `composableTracker`
 - `piniaTracker`
+- `payloadInspector`
 - `renderHeatmap`
 - `transitionTracker`
 - `traceViewer`

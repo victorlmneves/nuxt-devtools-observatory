@@ -49,6 +49,7 @@ export function createModuleDefaults() {
         provideInjectGraph: readEnvFlag('OBSERVATORY_PROVIDE_INJECT_GRAPH', true),
         composableTracker: readEnvFlag('OBSERVATORY_COMPOSABLE_TRACKER', true),
         piniaTracker: readEnvFlag('OBSERVATORY_PINIA_TRACKER', false),
+        payloadInspector: readEnvFlag('OBSERVATORY_PAYLOAD_INSPECTOR', true),
         renderHeatmap: readEnvFlag('OBSERVATORY_RENDER_HEATMAP', true),
         transitionTracker: readEnvFlag('OBSERVATORY_TRANSITION_TRACKER', true),
         traceViewer: readEnvFlag('OBSERVATORY_TRACE_VIEWER', true),

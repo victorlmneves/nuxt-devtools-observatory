@@ -23,6 +23,12 @@ RPC types are defined in `src/types/rpc.ts` and snapshot-related fields in `src/
 Treat snapshot fields as an internal-but-documented contract for this module version line.
 When changing fields, update docs and tests in the same PR.
 
+## Payload inspector contracts
+
+- Snapshot field: `payload` (`PayloadInspectorSnapshot`).
+- `keys` lists payload entries with `bucket`, `origin` (`ssr` | `csr`), `bytes`, and a truncated `preview`.
+- Feature flag: `features.payloadInspector`.
+
 ## Pinia contracts
 
 - Snapshot field: `piniaStores` (array of `PiniaStoreEntry`).

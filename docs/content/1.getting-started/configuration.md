@@ -13,6 +13,7 @@ export default defineNuxtConfig({
         provideInjectGraph: true, // Enable provide/inject graph
         composableTracker: true, // Enable composable tracker
         piniaTracker: true, // Enable Pinia store tracker
+        payloadInspector: true, // Enable payload and hydration inspector
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer

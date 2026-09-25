@@ -11,6 +11,7 @@ Nuxt DevTools Observatory is a module that brings advanced observability and run
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Pinia Tracker** — inspect Pinia store state, action/mutation timelines, dependency edges, and hydration attribution
+- **Payload Inspector** — inspect Nuxt payload keys, serialized size, and SSR versus CSR hydration origin
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
 - **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, and navigation events in a unified Flamegraph and Waterfall view
@@ -56,6 +57,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `provideInjectGraph` (boolean) — Enable provide/inject graph
 - `composableTracker` (boolean) — Enable composable tracker
 - `piniaTracker` (boolean) — Enable Pinia store tracker (set via `OBSERVATORY_PINIA_TRACKER`)
+- `payloadInspector` (boolean) — Enable payload and hydration inspector (set via `OBSERVATORY_PAYLOAD_INSPECTOR`)
 - `renderHeatmap` (boolean) — Enable render heatmap
 - `transitionTracker` (boolean) — Enable transition tracker (set via `OBSERVATORY_TRANSITION_TRACKER`)
 - `traceViewer` (boolean) — Enable trace viewer tab with per-route Flamegraph and Waterfall (set via `OBSERVATORY_TRACE_VIEWER`)
@@ -87,6 +89,7 @@ export default defineNuxtConfig({
         provideInjectGraph: true, // Enable provide/inject graph
         composableTracker: true, // Enable composable tracker
         piniaTracker: true, // Enable Pinia store tracker
+        payloadInspector: true, // Enable payload and hydration inspector
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer
@@ -109,7 +112,7 @@ export default defineNuxtConfig({
 })
 ```
 
-Open the Nuxt DevTools panel — seven Observatory tabs will appear when all features are enabled.
+Open the Nuxt DevTools panel — Observatory tabs will appear for each enabled feature.
 
 The DevTools client SPA is served same-origin via the Nuxt dev server at `/__observatory/`.
 
@@ -272,6 +275,16 @@ The panel provides:
 - **Inspector** — current store state, selected event diff, and before/after snapshots
 - **Dependency graph** — which components and composables interacted with each store
 - **Hydration timeline** — attribution for initial state source(s)
+
+### Payload Inspector
+
+The Payload Inspector lists keys from the Nuxt payload (`data`, `state`, Pinia, errors, and other root fields), estimates serialized size, and marks whether each key was present during SSR hydration or added on the client.
+
+The panel provides:
+
+- **Stats** — key count, total bytes, `serverRendered`, hydrating
+- **Table** — key, bucket, origin, size, preview
+- **Inspector** — selected key preview (truncated)
 
 ### Trace Viewer
 
