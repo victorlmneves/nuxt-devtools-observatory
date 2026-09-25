@@ -1,0 +1,20 @@
+---
+description: Where Observatory tests live and how to write them
+globs: tests/**/*.{ts,vue}
+alwaysApply: false
+---
+
+# Tests
+
+| Kind | Path | Runner |
+| --- | --- | --- |
+| Registry / runtime | `tests/runtime/` | Vitest + `happy-dom` |
+| Vite transforms | `tests/transforms/` | Vitest |
+| Nitro / SSR | `tests/nitro/` | Vitest |
+| Panel correctness | `tests/verification/*.spec.ts` | Playwright via `pnpm verify` |
+
+- Import runtime with `@observatory/runtime/...` and snapshot types with `@observatory/types/snapshot`.
+- Reset `window.__observatory__` in `beforeEach` / `afterEach`.
+- Registries must be asserted through `getSnapshot()`, not private maps.
+- Verification specs talk to the playground via `tests/verification/helpers/observatory-bridge.ts` and types in `tests/verification/types/observatory.types.ts`.
+- Do not add Playwright coverage for a change that a unit test can prove.
