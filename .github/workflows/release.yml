@@ -34,10 +34,10 @@ jobs:
                   node-version: 22
                   cache: pnpm
 
-            - name: Setup npm for trusted publishing
-              run: |
-                  corepack enable npm
-                  npm --version
+            # Node 22 already includes npm 10+ (trusted publishing). Do not use
+            # `corepack enable npm` — Corepack is disabled on current GH runners.
+            - name: Check npm for trusted publishing
+              run: npm --version
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
