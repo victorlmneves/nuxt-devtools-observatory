@@ -74,7 +74,7 @@ const featureCards = [
     {
         title: 'Trace Viewer',
         description:
-            'Inspect per-route spans with overview, flamegraph, waterfall, and cross-trace render comparison for fast regression triage.',
+            'Inspect per-route and Nitro server-route spans with overview, flamegraph, waterfall, and cross-trace render comparison.',
         icon: 'i-lucide-gantt-chart-square',
         to: '/feature-guides/trace-viewer',
     },
