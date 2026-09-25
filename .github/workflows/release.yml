@@ -39,7 +39,7 @@ jobs:
             # Do not use `corepack enable npm` — Corepack is disabled on GH runners.
             - name: Setup npm for trusted publishing
               run: |
-                  npm install -g npm@12.1.0
+                  npm install -g npm@12.1.0 --ignore-scripts
                   npm --version
 
             - name: Install dependencies
