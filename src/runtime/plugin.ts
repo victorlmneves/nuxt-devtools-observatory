@@ -21,55 +21,155 @@ interface ObservatoryWindow extends Window {
     __observatory__?: Record<string, unknown>
 }
 
-export default defineNuxtPlugin(() => {
-    if (!import.meta.dev) {
+type ObservatoryPublicConfig = {
+    heatmapThresholdCount: number
+    heatmapThresholdTime: number
+    fetchPageSize?: number
+    debugRpc?: boolean
+    composableNavigationMode?: 'route' | 'session'
+    fetchDashboard?: boolean
+    provideInjectGraph?: boolean
+    composableTracker?: boolean
+    piniaTracker?: boolean
+    payloadInspector?: boolean
+    renderHeatmap?: boolean
+    transitionTracker?: boolean
+    traceViewer?: boolean
+    heatmapHideInternals?: boolean
+    maxPiniaTimeline?: number
+    maxTraces?: number
+}
+
+type NuxtAppInstance = ReturnType<typeof useNuxtApp>
+
+type ObservatoryPluginContext = {
+    nuxtApp: NuxtAppInstance
+    config: ObservatoryPublicConfig
+    registries: Record<string, unknown>
+    debugLog: (...args: unknown[]) => void
+    composableNavigationMode: 'route' | 'session'
+    heartbeatId: number | null
+    lastSnapshotRevision: number
+}
+
+const SNAPSHOT_KEY_ALIASES: Record<string, string> = {
+    composable: 'composables',
+    pinia: 'piniaStores',
+    render: 'renders',
+    transition: 'transitions',
+}
+
+let timelineRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+function mergeSsrSpans() {
+    if (!import.meta.client) {
         return
     }
 
-    const nuxtApp = useNuxtApp()
+    const el = document.getElementById('__observatory_ssr_spans__')
 
-    const config = useRuntimeConfig().public.observatory as {
-        heatmapThresholdCount: number
-        heatmapThresholdTime: number
-        fetchPageSize?: number
-        debugRpc?: boolean
-        composableNavigationMode?: 'route' | 'session'
-        fetchDashboard?: boolean
-        provideInjectGraph?: boolean
-        composableTracker?: boolean
-        piniaTracker?: boolean
-        payloadInspector?: boolean
-        renderHeatmap?: boolean
-        transitionTracker?: boolean
-        traceViewer?: boolean
-        heatmapHideInternals?: boolean
-        maxPiniaTimeline?: number
-        maxTraces?: number
+    if (!el) {
+        return
     }
 
-    const debugRpc = config.debugRpc === true
-    const debugLog = (...args: unknown[]) => {
+    try {
+        mergeSsrTraceRecord(JSON.parse(el.textContent ?? ''))
+    } catch {
+        // Ignore malformed inject payloads.
+    }
+}
+
+async function mergeNitroTimelineArchive() {
+    if (!import.meta.client) {
+        return
+    }
+
+    const fetcher = (globalThis as { $fetch?: (url: string) => Promise<unknown> }).$fetch
+
+    if (typeof fetcher !== 'function') {
+        return
+    }
+
+    try {
+        const records = await fetcher('/__observatory/nitro-timeline')
+
+        if (!Array.isArray(records)) {
+            return
+        }
+
+        for (const record of records) {
+            mergeSsrTraceRecord(record)
+        }
+    } catch {
+        // Endpoint is dev-only and absent when instrumentServer is off.
+    }
+}
+
+function safeParse<T>(val: unknown, fallback: T): T {
+    if (typeof val === 'string') {
+        try {
+            return JSON.parse(val) as T
+        } catch {
+            return fallback
+        }
+    }
+
+    if (val && typeof val === 'object') {
+        return val as T
+    }
+
+    return fallback
+}
+
+function scheduleNitroTimelineRefresh() {
+    if (!import.meta.client) {
+        return
+    }
+
+    if (timelineRefreshTimer !== null) {
+        clearTimeout(timelineRefreshTimer)
+    }
+
+    timelineRefreshTimer = setTimeout(() => {
+        timelineRefreshTimer = null
+        void mergeNitroTimelineArchive()
+    }, 250)
+}
+
+function createDebugLog(debugRpc: boolean) {
+    return (...args: unknown[]) => {
         if (debugRpc) {
             // eslint-disable-next-line no-console
             console.info('[observatory][rpc][host]', ...args)
         }
     }
+}
 
-    let composableNavigationMode: 'route' | 'session' = config.composableNavigationMode === 'session' ? 'session' : 'route'
-    let heartbeatId: number | null = null
-    let lastSnapshotRevision = -1
+function isSsrHydrating(nuxtApp: NuxtAppInstance) {
+    return (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true
+}
+
+function callIfFunction(target: unknown, method: string, ...args: unknown[]) {
+    const fn = (target as Record<string, unknown> | undefined)?.[method]
+
+    if (typeof fn === 'function') {
+        ;(fn as (...fnArgs: unknown[]) => void).apply(target, args)
+    }
+}
+
+function createObservatoryContext(nuxtApp: NuxtAppInstance, config: ObservatoryPublicConfig): ObservatoryPluginContext {
+    const registries: Record<string, unknown> = {}
 
     if (typeof config.maxTraces === 'number') {
         traceStore.setMaxTraces(config.maxTraces)
     }
 
-    // Enable Vue performance API for render heatmap if enabled
     if (config.renderHeatmap) {
         nuxtApp.vueApp.config.performance = true
+        registries.render = setupRenderRegistry(nuxtApp, {
+            isHydrating: () => isSsrHydrating(nuxtApp),
+        })
     }
-
-    // Only initialize registries for enabled features
-    const registries: Record<string, unknown> = {}
 
     if (config.fetchDashboard) {
         registries.fetch = setupFetchRegistry()
@@ -96,8 +196,6 @@ export default defineNuxtPlugin(() => {
             piniaRegistry.attachPinia((nuxtApp as { $pinia?: unknown }).$pinia)
         }
 
-        // Pinia may inject $pinia after this plugin runs. Retry on Vue app
-        // creation and again after mount so stores are not silently skipped.
         nuxtApp.hook('app:created', attachWhenPiniaReady)
         nuxtApp.hook('app:mounted', attachWhenPiniaReady)
     }
@@ -105,13 +203,7 @@ export default defineNuxtPlugin(() => {
     if (config.payloadInspector) {
         registries.payload = setupPayloadRegistry({
             getPayload: () => nuxtApp.payload,
-            isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
-        })
-    }
-
-    if (config.renderHeatmap) {
-        registries.render = setupRenderRegistry(nuxtApp, {
-            isHydrating: () => (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true,
+            isHydrating: () => isSsrHydrating(nuxtApp),
         })
     }
 
@@ -119,418 +211,314 @@ export default defineNuxtPlugin(() => {
         registries.transition = setupTransitionRegistry()
     }
 
-    // Read the SSR trace injected by the Nitro plugin and merge its spans into
-    // the client traceStore so the Trace Viewer shows an `ssr:` prefixed trace
-    // for the initial page load alongside the subsequent client navigations.
-    function mergeSsrSpans() {
-        if (!import.meta.client) {
-            return
-        }
+    return {
+        nuxtApp,
+        config,
+        registries,
+        debugLog: createDebugLog(config.debugRpc === true),
+        composableNavigationMode: config.composableNavigationMode === 'session' ? 'session' : 'route',
+        heartbeatId: null,
+        lastSnapshotRevision: -1,
+    }
+}
 
-        const el = document.getElementById('__observatory_ssr_spans__')
-
-        if (!el) {
-            return
-        }
-
-        try {
-            mergeSsrTraceRecord(JSON.parse(el.textContent ?? ''))
-        } catch {
-            // Ignore malformed inject payloads.
-        }
+function serializeTraces(traceViewerEnabled: boolean) {
+    if (!traceViewerEnabled) {
+        return []
     }
 
-    async function mergeNitroTimelineArchive() {
-        if (!import.meta.client) {
-            return
-        }
+    return traceStore.getAllTraces().map((trace) => ({
+        id: trace.id,
+        name: trace.name,
+        startTime: trace.startTime,
+        endTime: trace.endTime,
+        durationMs: trace.durationMs,
+        status: trace.status,
+        metadata: trace.metadata,
+        spans: trace.spans.map((span) => ({
+            id: span.id,
+            traceId: span.traceId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            type: span.type,
+            startTime: span.startTime,
+            endTime: span.endTime,
+            durationMs: span.durationMs,
+            status: span.status,
+            metadata: span.metadata,
+        })),
+    }))
+}
 
-        const fetcher = (globalThis as { $fetch?: (url: string) => Promise<unknown> }).$fetch
+function buildSnapshot(ctx: ObservatoryPluginContext): ObservatorySnapshot {
+    const trackerDefs = [
+        { key: 'fetch', fallback: [] },
+        { key: 'provideInject', fallback: { provides: [], injects: [] } },
+        { key: 'composable', fallback: [] },
+        { key: 'pinia', fallback: [] },
+        {
+            key: 'payload',
+            fallback: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
+        },
+        { key: 'render', fallback: {} },
+        { key: 'transition', fallback: {} },
+    ] as const
 
-        if (typeof fetcher !== 'function') {
-            return
-        }
+    const snapshot: Record<string, unknown> = {}
 
-        try {
-            const records = await fetcher('/__observatory/nitro-timeline')
+    for (const { key, fallback } of trackerDefs) {
+        const reg = ctx.registries[key] as unknown
+        const hasGetSnapshot = Boolean(reg) && typeof (reg as { getSnapshot?: () => unknown }).getSnapshot === 'function'
+        const snapshotKey = SNAPSHOT_KEY_ALIASES[key] ?? key
 
-            if (!Array.isArray(records)) {
-                return
-            }
-
-            for (const record of records) {
-                mergeSsrTraceRecord(record)
-            }
-        } catch {
-            // Endpoint is dev-only and absent when instrumentServer is off.
-        }
+        snapshot[snapshotKey] = hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
     }
 
-    let timelineRefreshTimer: ReturnType<typeof setTimeout> | null = null
-
-    function scheduleNitroTimelineRefresh() {
-        if (!import.meta.client) {
-            return
-        }
-
-        if (timelineRefreshTimer !== null) {
-            clearTimeout(timelineRefreshTimer)
-        }
-
-        timelineRefreshTimer = setTimeout(() => {
-            timelineRefreshTimer = null
-            void mergeNitroTimelineArchive()
-        }, 250)
+    snapshot.traces = serializeTraces(!!ctx.config.traceViewer)
+    snapshot.features = {
+        fetchDashboard: !!ctx.registries.fetch,
+        provideInjectGraph: !!ctx.registries.provideInject,
+        composableTracker: !!ctx.registries.composable,
+        piniaTracker: !!ctx.registries.pinia,
+        payloadInspector: !!ctx.registries.payload,
+        composableNavigationMode: ctx.composableNavigationMode,
+        fetchPageSize: typeof ctx.config.fetchPageSize === 'number' ? ctx.config.fetchPageSize : 20,
+        heatmapThresholdCount: typeof ctx.config.heatmapThresholdCount === 'number' ? ctx.config.heatmapThresholdCount : 3,
+        heatmapThresholdTime: typeof ctx.config.heatmapThresholdTime === 'number' ? ctx.config.heatmapThresholdTime : 16,
+        renderHeatmap: !!ctx.registries.render,
+        transitionTracker: !!ctx.registries.transition,
+        traceViewer: !!ctx.config.traceViewer,
     }
 
-    // Expose registries globally so Vite transform shims can reach them.
-    // This must happen synchronously — before any component setup() runs —
-    // so that shims injected by the Vite transforms find the registry already
-    // in place rather than silently no-opping on the first render.
-    if (import.meta.client) {
-        if (config.traceViewer) {
-            setupComponentInstrumentation(nuxtApp)
-            setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1], {
-                onSuccessfulFetch: scheduleNitroTimelineRefresh,
-            })
-            // Pick up SSR spans injected into the HTML by the Nitro plugin and
-            // merge them into the client traceStore as a standalone SSR trace.
-            mergeSsrSpans()
-            void mergeNitroTimelineArchive()
-        } else if (config.fetchDashboard) {
-            setupFetchInstrumentation(nuxtApp, registries.fetch as Parameters<typeof setupFetchInstrumentation>[1])
+    return snapshot as ObservatorySnapshot
+}
+
+function broadcastAll(ctx: ObservatoryPluginContext, reason = 'unknown') {
+    if (!import.meta.client || !import.meta.hot) {
+        return
+    }
+
+    const snapshot = buildSnapshot(ctx)
+
+    ctx.debugLog('push snapshot', {
+        reason,
+        fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
+        composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
+        piniaStores: Array.isArray(snapshot.piniaStores) ? snapshot.piniaStores.length : 0,
+        renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
+        transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
+        traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
+    })
+
+    ctx.lastSnapshotRevision = getSnapshotRevision()
+    import.meta.hot.send('observatory:snapshot', snapshot)
+}
+
+function handleObservatoryCommand(ctx: ObservatoryPluginContext, rawPayload: unknown) {
+    if (!rawPayload || typeof rawPayload !== 'object') {
+        return
+    }
+
+    const payload = rawPayload as ObservatoryCommand
+    const composableRegistry = ctx.registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
+    const piniaRegistry = ctx.registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
+
+    if (payload.cmd === 'request-snapshot') {
+        ctx.debugLog('received command: request-snapshot')
+        broadcastAll(ctx, 'command:request-snapshot')
+
+        return
+    }
+
+    if (payload.cmd === 'clear-composables') {
+        ctx.debugLog('received command: clear-composables')
+
+        if (ctx.composableNavigationMode === 'session') {
+            composableRegistry?.clearNonLayout()
+        } else {
+            composableRegistry?.clear()
         }
 
-        // Always clear any previous registry to avoid cross-project state
-        delete (window as ObservatoryWindow).__observatory__
-        ;(window as ObservatoryWindow).__observatory__ = registries
-        injectTestBridge()
+        broadcastAll(ctx, 'command:clear-composables')
 
-        const composableRegistry = registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
-        const piniaRegistry = registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
+        return
+    }
 
-        if (composableRegistry && composableRegistry.onComposableChange) {
-            composableRegistry.onComposableChange(() => {
-                broadcastAll('composable:onChange')
-            })
+    if (payload.cmd === 'set-mode') {
+        ctx.debugLog('received command: set-mode', payload.mode)
+
+        if (payload.mode === 'route' || payload.mode === 'session') {
+            ctx.composableNavigationMode = payload.mode
         }
 
-        if (piniaRegistry?.onChange) {
-            piniaRegistry.onChange(() => {
-                broadcastAll('pinia:onChange')
-            })
-        }
+        broadcastAll(ctx, 'command:set-mode')
 
-        // Receive commands from the server-side RPC handlers.
-        import.meta.hot?.on('observatory:command', (rawPayload: unknown) => {
-            if (!rawPayload || typeof rawPayload !== 'object') {
-                return
-            }
+        return
+    }
 
-            const payload = rawPayload as ObservatoryCommand
+    if (payload.cmd === 'edit-composable') {
+        ctx.debugLog('received command: edit-composable', { id: payload.id, key: payload.key })
+        composableRegistry?.editValue(payload.id, payload.key, payload.value)
 
-            if (payload.cmd === 'request-snapshot') {
-                debugLog('received command: request-snapshot')
-                broadcastAll('command:request-snapshot')
+        return
+    }
 
-                return
-            }
+    if (payload.cmd === 'clear-pinia') {
+        ctx.debugLog('received command: clear-pinia')
+        piniaRegistry?.clear()
+        broadcastAll(ctx, 'command:clear-pinia')
 
-            if (payload.cmd === 'clear-composables') {
-                debugLog('received command: clear-composables')
+        return
+    }
 
-                if (composableRegistry) {
-                    if (composableNavigationMode === 'session') {
-                        composableRegistry.clearNonLayout()
-                    } else {
-                        composableRegistry.clear()
-                    }
-                }
+    if (payload.cmd === 'edit-pinia') {
+        ctx.debugLog('received command: edit-pinia', { storeId: payload.storeId, path: payload.path })
+        piniaRegistry?.editState(payload.storeId, payload.path, payload.value)
+        broadcastAll(ctx, 'command:edit-pinia')
+    }
+}
 
-                broadcastAll('command:clear-composables')
+function setupClientInstrumentation(ctx: ObservatoryPluginContext) {
+    const fetchRegistry = ctx.registries.fetch as Parameters<typeof setupFetchInstrumentation>[1]
 
-                return
-            }
-
-            if (payload.cmd === 'set-mode') {
-                debugLog('received command: set-mode', payload.mode)
-
-                if (payload.mode === 'route' || payload.mode === 'session') {
-                    composableNavigationMode = payload.mode
-                }
-
-                broadcastAll('command:set-mode')
-
-                return
-            }
-
-            if (payload.cmd === 'edit-composable') {
-                debugLog('received command: edit-composable', { id: payload.id, key: payload.key })
-
-                composableRegistry?.editValue(payload.id, payload.key, payload.value)
-
-                return
-            }
-
-            if (payload.cmd === 'clear-pinia') {
-                debugLog('received command: clear-pinia')
-                piniaRegistry?.clear()
-                broadcastAll('command:clear-pinia')
-
-                return
-            }
-
-            if (payload.cmd === 'edit-pinia') {
-                debugLog('received command: edit-pinia', { storeId: payload.storeId, path: payload.path })
-                piniaRegistry?.editState(payload.storeId, payload.path, payload.value)
-                broadcastAll('command:edit-pinia')
-            }
+    if (ctx.config.traceViewer) {
+        setupComponentInstrumentation(ctx.nuxtApp)
+        setupFetchInstrumentation(ctx.nuxtApp, fetchRegistry, {
+            onSuccessfulFetch: scheduleNitroTimelineRefresh,
         })
+        mergeSsrSpans()
+        void mergeNitroTimelineArchive()
 
-        nuxtApp.hook('app:beforeUnmount', () => {
-            import.meta.hot?.off('observatory:command')
-
-            const pinia = registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
-            pinia?.teardown?.()
-
-            if (heartbeatId !== null) {
-                window.clearInterval(heartbeatId)
-                heartbeatId = null
-            }
-        })
+        return
     }
 
-    // Broadcast all registry data when devtools tab connects
-    nuxtApp.hook('app:mounted', () => {
-        const payload = registries.payload as { capture?: () => void } | undefined
-        payload?.capture?.()
+    if (ctx.config.fetchDashboard) {
+        setupFetchInstrumentation(ctx.nuxtApp, fetchRegistry)
+    }
+}
 
-        broadcastAll('app:mounted')
+function resetTrackersOnNavigation(ctx: ObservatoryPluginContext) {
+    callIfFunction(ctx.registries.render, 'reset')
+    callIfFunction(ctx.registries.provideInject, 'clear')
 
-        nextTick(() => {
-            broadcastAll('app:mounted:nextTick')
+    if (ctx.composableNavigationMode === 'route') {
+        callIfFunction(ctx.registries.composable, 'clearNonLayout')
+    }
+
+    callIfFunction(ctx.registries.transition, 'clear')
+}
+
+function setupRouterHooks(ctx: ObservatoryPluginContext) {
+    const router = useRouter()
+
+    if (ctx.config.traceViewer) {
+        setupRouteInstrumentation(ctx.nuxtApp, {
+            getCurrentPath: () => router.currentRoute.value.path ?? '/',
         })
+        setupErrorInstrumentation(ctx.nuxtApp)
+    }
 
-        setTimeout(() => {
-            broadcastAll('app:mounted:50ms')
-        }, 50)
+    router.beforeEach((_to, from) => {
+        if (from?.name === undefined) {
+            return
+        }
 
-        setTimeout(() => {
-            broadcastAll('app:mounted:250ms')
-        }, 250)
+        resetTrackersOnNavigation(ctx)
+    })
 
-        // Heartbeat fallback: some trackers (fetch/provide/render/transition)
-        // don't currently emit a direct callback into this plugin. Compare a
-        // generation counter instead of JSON.stringify of the full snapshot.
-        if (import.meta.client && heartbeatId === null) {
-            heartbeatId = window.setInterval(() => {
-                const revision = getSnapshotRevision()
+    router.afterEach((to) => {
+        const path = to.path ?? '/'
+        callIfFunction(ctx.registries.composable, 'setRoute', path)
+        callIfFunction(ctx.registries.render, 'setRoute', path)
+        nextTick(() => broadcastAll(ctx, 'router:afterEach'))
+    })
+}
 
-                if (revision !== lastSnapshotRevision) {
-                    lastSnapshotRevision = revision
-                    debugLog('heartbeat detected snapshot change')
-                    import.meta.hot?.send('observatory:snapshot', buildSnapshot())
-                }
-            }, 400)
+function startHeartbeat(ctx: ObservatoryPluginContext) {
+    if (ctx.heartbeatId !== null) {
+        return
+    }
+
+    ctx.heartbeatId = window.setInterval(() => {
+        const revision = getSnapshotRevision()
+
+        if (revision !== ctx.lastSnapshotRevision) {
+            ctx.lastSnapshotRevision = revision
+            ctx.debugLog('heartbeat detected snapshot change')
+            import.meta.hot?.send('observatory:snapshot', buildSnapshot(ctx))
+        }
+    }, 400)
+}
+
+function registerLifecycleHooks(ctx: ObservatoryPluginContext) {
+    ctx.nuxtApp.hook('app:mounted', () => {
+        callIfFunction(ctx.registries.payload, 'capture')
+        broadcastAll(ctx, 'app:mounted')
+        nextTick(() => broadcastAll(ctx, 'app:mounted:nextTick'))
+        setTimeout(() => broadcastAll(ctx, 'app:mounted:50ms'), 50)
+        setTimeout(() => broadcastAll(ctx, 'app:mounted:250ms'), 250)
+
+        if (import.meta.client) {
+            startHeartbeat(ctx)
         }
     })
 
-    nuxtApp.hook('page:finish', () => {
-        const payload = registries.payload as { capture?: () => void } | undefined
-        payload?.capture?.()
+    ctx.nuxtApp.hook('page:finish', () => {
+        callIfFunction(ctx.registries.payload, 'capture')
 
-        if (config.traceViewer) {
+        if (ctx.config.traceViewer) {
             void mergeNitroTimelineArchive()
         }
 
-        broadcastAll('page:finish')
+        broadcastAll(ctx, 'page:finish')
+    })
+}
+
+function setupClientHost(ctx: ObservatoryPluginContext) {
+    if (!import.meta.client) {
+        return
+    }
+
+    setupClientInstrumentation(ctx)
+
+    delete (window as ObservatoryWindow).__observatory__
+    ;(window as ObservatoryWindow).__observatory__ = ctx.registries
+    injectTestBridge()
+
+    const composableRegistry = ctx.registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
+    const piniaRegistry = ctx.registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
+
+    composableRegistry?.onComposableChange?.(() => {
+        broadcastAll(ctx, 'composable:onChange')
+    })
+    piniaRegistry?.onChange?.(() => {
+        broadcastAll(ctx, 'pinia:onChange')
     })
 
-    if (import.meta.client) {
-        const router = useRouter()
+    import.meta.hot?.on('observatory:command', (rawPayload: unknown) => {
+        handleObservatoryCommand(ctx, rawPayload)
+    })
 
-        if (config.traceViewer) {
-            setupRouteInstrumentation(nuxtApp, {
-                getCurrentPath: () => router.currentRoute.value.path ?? '/',
-            })
-            setupErrorInstrumentation(nuxtApp)
+    ctx.nuxtApp.hook('app:beforeUnmount', () => {
+        import.meta.hot?.off('observatory:command')
+        callIfFunction(ctx.registries.pinia, 'teardown')
+
+        if (ctx.heartbeatId !== null) {
+            window.clearInterval(ctx.heartbeatId)
+            ctx.heartbeatId = null
         }
+    })
 
-        // router.beforeEach fires BEFORE Vue renders anything for the new route —
-        // no new setup() has run yet, so clearing here is safe and race-free.
-        // page:start (Suspense.onPending) fires AFTER synchronous setup() runs,
-        // which causes clear() to wipe entries that were just registered.
-        router.beforeEach(
-            (_to: ReturnType<typeof useRouter>['currentRoute']['value'], from: ReturnType<typeof useRouter>['currentRoute']['value']) => {
-                if (!from || from.name === undefined) {
-                    return
-                }
+    setupRouterHooks(ctx)
+}
 
-                const render = registries.render as unknown
-
-                if (render && typeof (render as { reset?: () => void }).reset === 'function') {
-                    ;(render as { reset: () => void }).reset()
-                }
-
-                const provideInject = registries.provideInject as unknown
-
-                if (provideInject && typeof (provideInject as { clear?: () => void }).clear === 'function') {
-                    ;(provideInject as { clear: () => void }).clear()
-                }
-
-                const composable = registries.composable as unknown
-
-                if (
-                    composableNavigationMode === 'route' &&
-                    composable &&
-                    typeof (composable as { clearNonLayout?: () => void }).clearNonLayout === 'function'
-                ) {
-                    ;(composable as { clearNonLayout: () => void }).clearNonLayout()
-                }
-
-                const transition = registries.transition as unknown
-
-                if (transition && typeof (transition as { clear?: () => void }).clear === 'function') {
-                    ;(transition as { clear: () => void }).clear()
-                }
-            }
-        )
-
-        // afterEach fires after the new route is fully committed and rendered.
-        // Use nextTick so persistent component updated() hooks have flushed
-        // before we broadcast — otherwise rerenders shows 0 on navigation.
-        router.afterEach((to: ReturnType<typeof useRouter>['currentRoute']['value']) => {
-            const composable = registries.composable as unknown
-
-            if (composable && typeof (composable as { setRoute?: (path: string) => void }).setRoute === 'function') {
-                ;(composable as { setRoute: (path: string) => void }).setRoute(to.path ?? '/')
-            }
-
-            const render = registries.render as unknown
-
-            if (render && typeof (render as { setRoute?: (path: string) => void }).setRoute === 'function') {
-                ;(render as { setRoute: (path: string) => void }).setRoute(to.path ?? '/')
-            }
-
-            nextTick(() => broadcastAll('router:afterEach'))
-        })
+export default defineNuxtPlugin(() => {
+    if (!import.meta.dev) {
+        return
     }
 
-    function broadcastAll(reason = 'unknown') {
-        if (!import.meta.client) {
-            return
-        }
+    const ctx = createObservatoryContext(useNuxtApp(), useRuntimeConfig().public.observatory as ObservatoryPublicConfig)
 
-        if (!import.meta.hot) {
-            return
-        }
-
-        const snapshot = buildSnapshot()
-
-        debugLog('push snapshot', {
-            reason,
-            fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
-            composables: Array.isArray(snapshot.composables) ? snapshot.composables.length : 0,
-            piniaStores: Array.isArray(snapshot.piniaStores) ? snapshot.piniaStores.length : 0,
-            renders: Array.isArray(snapshot.renders) ? snapshot.renders.length : 0,
-            transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
-            traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
-        })
-
-        lastSnapshotRevision = getSnapshotRevision()
-        import.meta.hot.send('observatory:snapshot', snapshot)
-    }
-
-    function buildSnapshot(): ObservatorySnapshot {
-        // Always return a consistent object with all tracker keys present.
-        function safeParse<T>(val: unknown, fallback: T): T {
-            if (typeof val === 'string') {
-                try {
-                    return JSON.parse(val) as T
-                } catch {
-                    return fallback
-                }
-            }
-
-            if (val && typeof val === 'object') {
-                return val as T
-            }
-
-            return fallback
-        }
-
-        // Define the expected tracker keys and their fallbacks
-        const trackerDefs = [
-            { key: 'fetch', fallback: [] },
-            { key: 'provideInject', fallback: { provides: [], injects: [] } },
-            { key: 'composable', fallback: [] },
-            { key: 'pinia', fallback: [] },
-            {
-                key: 'payload',
-                fallback: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
-            },
-            { key: 'render', fallback: {} },
-            { key: 'transition', fallback: {} },
-        ] as const
-
-        const snapshot: Record<string, unknown> = {}
-
-        for (const { key, fallback } of trackerDefs) {
-            const reg = registries[key] as unknown
-            const hasGetSnapshot = reg && typeof (reg as { getSnapshot?: () => unknown }).getSnapshot === 'function'
-            const snapshotKey =
-                key === 'composable'
-                    ? 'composables'
-                    : key === 'pinia'
-                      ? 'piniaStores'
-                      : key === 'render'
-                        ? 'renders'
-                        : key === 'transition'
-                          ? 'transitions'
-                          : key
-
-            snapshot[snapshotKey] = hasGetSnapshot ? safeParse((reg as { getSnapshot: () => unknown }).getSnapshot(), fallback) : fallback
-        }
-
-        snapshot.traces = config.traceViewer
-            ? traceStore.getAllTraces().map((trace) => ({
-                  id: trace.id,
-                  name: trace.name,
-                  startTime: trace.startTime,
-                  endTime: trace.endTime,
-                  durationMs: trace.durationMs,
-                  status: trace.status,
-                  metadata: trace.metadata,
-                  spans: trace.spans.map((span) => ({
-                      id: span.id,
-                      traceId: span.traceId,
-                      parentSpanId: span.parentSpanId,
-                      name: span.name,
-                      type: span.type,
-                      startTime: span.startTime,
-                      endTime: span.endTime,
-                      durationMs: span.durationMs,
-                      status: span.status,
-                      metadata: span.metadata,
-                  })),
-              }))
-            : []
-
-        snapshot.features = {
-            fetchDashboard: !!registries.fetch,
-            provideInjectGraph: !!registries.provideInject,
-            composableTracker: !!registries.composable,
-            piniaTracker: !!registries.pinia,
-            payloadInspector: !!registries.payload,
-            composableNavigationMode,
-            fetchPageSize: typeof config.fetchPageSize === 'number' ? config.fetchPageSize : 20,
-            heatmapThresholdCount: typeof config.heatmapThresholdCount === 'number' ? config.heatmapThresholdCount : 3,
-            heatmapThresholdTime: typeof config.heatmapThresholdTime === 'number' ? config.heatmapThresholdTime : 16,
-            renderHeatmap: !!registries.render,
-            transitionTracker: !!registries.transition,
-            traceViewer: !!config.traceViewer,
-        }
-
-        return snapshot as ObservatorySnapshot
-    }
+    registerLifecycleHooks(ctx)
+    setupClientHost(ctx)
 })

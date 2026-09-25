@@ -22,18 +22,36 @@ interface IFetchErrorShape {
     status?: number
 }
 
+function stringifyFetchInput(value: unknown): string {
+    if (value === undefined || value === null) {
+        return ''
+    }
+
+    if (typeof value === 'string') {
+        return value
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+        return value.toString()
+    }
+
+    if (value instanceof URL) {
+        return value.href
+    }
+
+    return ''
+}
+
 function resolveUrl(input: unknown): string {
     if (typeof input === 'string') {
         return input
     }
 
     if (input && typeof input === 'object' && 'url' in (input as Record<string, unknown>)) {
-        const maybeUrl = (input as { url?: unknown }).url
-
-        return typeof maybeUrl === 'string' ? maybeUrl : String(maybeUrl ?? '')
+        return stringifyFetchInput((input as { url?: unknown }).url)
     }
 
-    return String(input ?? '')
+    return stringifyFetchInput(input)
 }
 
 function resolveMethod(input: unknown, options?: Record<string, unknown>): string {
@@ -86,6 +104,14 @@ function resolvePayload(result: unknown, viaRaw: boolean): unknown {
 
 const WRAPPED_FETCH_FLAG = '__observatory_wrapped_fetch__'
 
+let fetchEntryCounter = 0
+
+function nextFetchEntryId(source: string): string {
+    fetchEntryCounter = (fetchEntryCounter + 1) % 999_999
+
+    return `${source}::${Date.now()}::${fetchEntryCounter}`
+}
+
 function isObservatoryNitroTimelineUrl(url: string) {
     return url.includes('/__observatory/nitro-timeline')
 }
@@ -98,6 +124,14 @@ type FetchInstrumentationOptions = {
     onSuccessfulFetch?: () => void
 }
 
+function invokeOriginalFetch(original: TFetchLike, viaRaw: boolean, request: unknown, options?: Record<string, unknown>) {
+    if (viaRaw && typeof original.raw === 'function') {
+        return original.raw(request, options)
+    }
+
+    return original(request, options)
+}
+
 function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, instrumentation?: FetchInstrumentationOptions): TFetchLike {
     if ((original as TFetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG]) {
         return original
@@ -107,17 +141,13 @@ function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, ins
         const url = resolveUrl(request)
 
         if (isObservatoryNitroTimelineUrl(url)) {
-            return viaRaw
-                ? typeof original.raw === 'function'
-                    ? original.raw(request, options)
-                    : original(request, options)
-                : original(request, options)
+            return invokeOriginalFetch(original, viaRaw, request, options)
         }
 
         const method = resolveMethod(request, options)
         const startedAt = performance.now()
         const source = viaRaw ? '$fetch.raw' : '$fetch'
-        const entryId = `${source}::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
+        const entryId = nextFetchEntryId(source)
         const recordDashboard = shouldRecordInDashboard(options)
 
         const span = startSpan({
@@ -145,11 +175,7 @@ function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, ins
             })
         }
 
-        const invoked = viaRaw
-            ? typeof original.raw === 'function'
-                ? original.raw(request, options)
-                : original(request, options)
-            : original(request, options)
+        const invoked = invokeOriginalFetch(original, viaRaw, request, options)
 
         return Promise.resolve(invoked)
             .then((result) => {

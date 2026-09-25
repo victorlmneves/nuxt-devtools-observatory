@@ -142,6 +142,22 @@ describe('setupFetchInstrumentation', () => {
 
             expect(getSpans()[0].metadata?.url).toBe('')
         })
+
+        it('uses href from a URL instance', async () => {
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp)
+            await callWith(new URL('https://example.test/api/url'), nuxtApp)
+
+            expect(getSpans()[0].metadata?.url).toBe('https://example.test/api/url')
+        })
+
+        it('does not stringify a plain object as [object Object]', async () => {
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp)
+            await callWith({ href: '/no-url-field' }, nuxtApp)
+
+            expect(getSpans()[0].metadata?.url).toBe('')
+        })
     })
 
     describe('method resolution (resolveMethod)', () => {
@@ -220,6 +236,18 @@ describe('setupFetchInstrumentation', () => {
             expect(entries[0].source).toBe('$fetch')
             expect(entries[0].status).toBe('ok')
             expect(entries[0].payload).toEqual({ id: 1 })
+        })
+
+        it('assigns unique dashboard ids to successive $fetch calls', async () => {
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/a')
+            await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/b')
+
+            const [first, second] = registry.getAll()
+            expect(first.id).not.toBe(second.id)
         })
 
         it('wraps $fetch.raw onto the same dashboard', async () => {

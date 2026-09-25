@@ -119,6 +119,24 @@ function readMatchedRoute(event: TObservatoryEvent): string | undefined {
     return typeof path === 'string' ? path : undefined
 }
 
+function normalizeCacheHeader(header: string | number | string[] | undefined): string | undefined {
+    if (typeof header === 'string') {
+        return header.toLowerCase()
+    }
+
+    if (typeof header === 'number') {
+        return String(header).toLowerCase()
+    }
+
+    if (!Array.isArray(header) || header.length === 0) {
+        return undefined
+    }
+
+    const first = header[0]
+
+    return typeof first === 'string' ? first.toLowerCase() : undefined
+}
+
 function readCacheStatus(event: TObservatoryEvent): 'hit' | 'miss' | undefined {
     const cache = event.context.cache
 
@@ -135,8 +153,7 @@ function readCacheStatus(event: TObservatoryEvent): 'hit' | 'miss' | undefined {
     }
 
     const header = event.node?.res?.getHeader?.('x-nitro-cache')
-    const normalized =
-        typeof header === 'string' ? header.toLowerCase() : Array.isArray(header) ? String(header[0]).toLowerCase() : undefined
+    const normalized = normalizeCacheHeader(header)
 
     if (normalized === 'hit' || normalized === 'miss') {
         return normalized
@@ -165,6 +182,18 @@ function resolveEventFromHookArgs(args: unknown[]): TObservatoryEvent | undefine
     return undefined
 }
 
+function resolveMiddlewareLayerName(layer: IH3StackLayer, original: TH3StackHandler): string {
+    if (typeof layer.route === 'string' && layer.route.length > 0) {
+        return layer.route
+    }
+
+    if (original.name && original.name !== 'handler') {
+        return original.name
+    }
+
+    return 'anonymous'
+}
+
 function wrapH3Middleware(nitroApp: INitroAppLike): boolean {
     const stack = nitroApp.h3App?.stack
 
@@ -181,12 +210,7 @@ function wrapH3Middleware(nitroApp: INitroAppLike): boolean {
             continue
         }
 
-        const layerName =
-            typeof layer.route === 'string' && layer.route.length > 0
-                ? layer.route
-                : original.name && original.name !== 'handler'
-                    ? original.name
-                    : 'anonymous'
+        const layerName = resolveMiddlewareLayerName(layer, original)
 
         const wrappedHandler = ((event: unknown) => {
             const observatoryEvent = event as TObservatoryEvent
@@ -494,7 +518,7 @@ export default function fetchCapturePlugin(nitroApp: INitroAppLike) {
 
         // Inject as a JSON script block. The closing </script> tag is escaped
         // to prevent the parser from treating it as the end of a real script.
-        const json = JSON.stringify(record).replace(/<\/script>/gi, '<\\/script>')
+        const json = JSON.stringify(record).replace(/<\/script>/gi, String.raw`<\/script>`)
         html.bodyAppend.push(`<script id="__observatory_ssr_spans__" type="application/json">${json}</script>`)
     })
 }
