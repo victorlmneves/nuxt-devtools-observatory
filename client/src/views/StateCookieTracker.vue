@@ -8,10 +8,10 @@ const filter = ref<'all' | TStateCookieKind>('all')
 const search = ref('')
 const selectedId = ref<string | null>(null)
 
-const selected = computed(() => stateCookies.value.find((entry) => entry.id === selectedId.value) ?? null)
+const selected = computed(() => stateCookies.value.find((entry: IStateCookieEntry) => entry.id === selectedId.value) ?? null)
 
 const filtered = computed(() => {
-    return stateCookies.value.filter((entry) => {
+    return stateCookies.value.filter((entry: IStateCookieEntry) => {
         if (filter.value !== 'all' && entry.kind !== filter.value) {
             return false
         }
@@ -25,6 +25,9 @@ const filtered = computed(() => {
         return true
     })
 })
+
+const useStateCount = computed(() => stateCookies.value.filter((entry: IStateCookieEntry) => entry.kind === 'useState').length)
+const useCookieCount = computed(() => stateCookies.value.filter((entry: IStateCookieEntry) => entry.kind === 'useCookie').length)
 
 function previewText(entry: IStateCookieEntry, pretty = false) {
     if (entry.preview === undefined) {
@@ -70,11 +73,11 @@ function onRowKeydown(event: KeyboardEvent, id: string) {
             </div>
             <div class="stat-card">
                 <div class="stat-label">useState</div>
-                <div class="stat-val">{{ stateCookies.filter((entry) => entry.kind === 'useState').length }}</div>
+                <div class="stat-val">{{ useStateCount }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">useCookie</div>
-                <div class="stat-val">{{ stateCookies.filter((entry) => entry.kind === 'useCookie').length }}</div>
+                <div class="stat-val">{{ useCookieCount }}</div>
             </div>
         </div>
 
@@ -133,8 +136,9 @@ function onRowKeydown(event: KeyboardEvent, id: string) {
                 <div class="tracker-section-label">{{ selected.kind }} / {{ selected.key }}</div>
                 <pre class="state-cookie-tracker__preview">{{ previewText(selected, true) }}</pre>
                 <div v-if="selected.cookie" class="muted text-sm">
-                    cookie maxAge={{ selected.cookie.maxAge ?? '—' }} path={{ selected.cookie.path ?? '—' }}
-                    httpOnly={{ selected.cookie.httpOnly ?? '—' }}
+                    cookie maxAge={{ selected.cookie.maxAge ?? '—' }} path={{ selected.cookie.path ?? '—' }} httpOnly={{
+                        selected.cookie.httpOnly ?? '—'
+                    }}
                 </div>
             </div>
             <div v-else class="tracker-detail-empty">select a key to inspect</div>

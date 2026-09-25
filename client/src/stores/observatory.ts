@@ -11,6 +11,7 @@ import type {
     TransitionEntry,
     TraceEntry,
     PayloadInspectorSnapshot,
+    IStateCookieEntry
 } from '@observatory/types/snapshot'
 
 type ProvideInjectSnapshot = { provides: ProvideEntry[]; injects: InjectEntry[] }
@@ -130,8 +131,12 @@ function ensureStarted() {
 
     // Support mock data injection via postMessage (used by the screenshot capture script).
     if (typeof window !== 'undefined') {
-        window.addEventListener('message', (event) => {
-            if (event.data && event.data.type === 'observatory:snapshot') {
+        window.addEventListener('message', (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) {
+                return
+            }
+
+            if (event.data?.type === 'observatory:snapshot') {
                 applySnapshot(event.data.data)
             }
         })
