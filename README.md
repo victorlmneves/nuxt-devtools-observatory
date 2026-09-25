@@ -14,7 +14,7 @@ Nuxt DevTools Observatory is a module that brings advanced observability and run
 - **Payload Inspector** — inspect Nuxt payload keys, serialized size, and SSR versus CSR hydration origin
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
-- **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, and navigation events in a unified Flamegraph and Waterfall view
+- **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, navigation events, and Nitro server-route timing in a unified Flamegraph and Waterfall view
 
 ### How is this different from Nuxt DevTools?
 
@@ -303,9 +303,20 @@ after a route change.
 | `component`  | Vue mixin lifecycle hooks         | Exact `mounted` / `updated` hook cost                  |
 | `render`     | `beforeMount` → `mounted` bracket | Real DOM-patching time per component mount/update      |
 | `fetch`      | `useFetch` / `useAsyncData` shim  | Network request start, server/client origin, latency   |
-| `server`     | Nitro SSR lifecycle hooks         | Server-side phase timing (e.g. `render:html`)          |
+| `server`     | Nitro SSR / server-route hooks    | HTML render, `nitro:handler`, middleware, cache hit/miss |
 | `composable` | `__trackComposable` shim          | Setup phase of tracked `useXxx()` calls (client + SSR) |
 | `transition` | `<Transition>` wrapper            | Full enter/leave lifecycle phase                       |
+
+Document HTML traces keep the `ssr:<path>` name. API and other non-HTML Nitro
+requests appear as `nitro:<METHOD> <path>` after the client merges the
+dev-only `/__observatory/nitro-timeline` archive (deduped with the HTML inject
+by `traceId`). Named middleware layers are recorded as `nitro:middleware:<name>`
+when Nitro's h3 handler stack can be wrapped; otherwise a single
+`nitro:middleware` span is used. Cached handlers (`defineCachedEventHandler`)
+set `cache: hit|miss` on a `nitro:cached` span when `event.context.cache` (or
+the `x-nitro-cache` header) is present. Server capture requires
+`traceViewer` and `instrumentServer`. No request/response bodies, cookies, or
+headers are stored.
 
 **Render span tracking:**
 Real render time is measured by storing `performance.now()` in a `WeakMap<ComponentPublicInstance, number>` inside `beforeMount` / `beforeUpdate`, then reading it back in the corresponding `mounted` / `updated` hooks. This produces a `type: 'render'` span whose duration is the actual DOM-patching cost, separately from the `component:mounted` hook span (which only measures the hook body itself).

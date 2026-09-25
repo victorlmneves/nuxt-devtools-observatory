@@ -3,23 +3,43 @@ import { startSpan } from '../tracing/tracing'
 import type { FetchEntry } from '../composables/fetch-registry'
 import { isNestedFetchSuppressed, isObservatoryTrackedFetch } from './fetch-dedup'
 
-type FetchRegistry = {
+type TFetchRegistry = {
     register: (entry: FetchEntry) => void
     update: (id: string, patch: Partial<FetchEntry>) => void
 }
 
-type FetchLike = ((request: unknown, options?: Record<string, unknown>) => Promise<unknown>) & {
+type TFetchLike = ((request: unknown, options?: Record<string, unknown>) => Promise<unknown>) & {
     raw?: (...args: unknown[]) => Promise<unknown>
     create?: (...args: unknown[]) => unknown
     native?: unknown
 }
 
-interface FetchErrorShape {
+interface IFetchErrorShape {
     response?: {
         status?: number
     }
     statusCode?: number
     status?: number
+}
+
+function stringifyFetchInput(value: unknown): string {
+    if (value === undefined || value === null) {
+        return ''
+    }
+
+    if (typeof value === 'string') {
+        return value
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+        return value.toString()
+    }
+
+    if (value instanceof URL) {
+        return value.href
+    }
+
+    return ''
 }
 
 function resolveUrl(input: unknown): string {
@@ -28,12 +48,10 @@ function resolveUrl(input: unknown): string {
     }
 
     if (input && typeof input === 'object' && 'url' in (input as Record<string, unknown>)) {
-        const maybeUrl = (input as { url?: unknown }).url
-
-        return typeof maybeUrl === 'string' ? maybeUrl : String(maybeUrl ?? '')
+        return stringifyFetchInput((input as { url?: unknown }).url)
     }
 
-    return String(input ?? '')
+    return stringifyFetchInput(input)
 }
 
 function resolveMethod(input: unknown, options?: Record<string, unknown>): string {
@@ -55,7 +73,7 @@ function resolveMethod(input: unknown, options?: Record<string, unknown>): strin
 }
 
 function resolveErrorStatus(error: unknown): number | undefined {
-    const target = error as FetchErrorShape | undefined
+    const target = error as IFetchErrorShape | undefined
 
     return target?.response?.status ?? target?.statusCode ?? target?.status
 }
@@ -86,21 +104,50 @@ function resolvePayload(result: unknown, viaRaw: boolean): unknown {
 
 const WRAPPED_FETCH_FLAG = '__observatory_wrapped_fetch__'
 
+let fetchEntryCounter = 0
+
+function nextFetchEntryId(source: string): string {
+    fetchEntryCounter = (fetchEntryCounter + 1) % 999_999
+
+    return `${source}::${Date.now()}::${fetchEntryCounter}`
+}
+
+function isObservatoryNitroTimelineUrl(url: string) {
+    return url.includes('/__observatory/nitro-timeline')
+}
+
 function shouldRecordInDashboard(options?: Record<string, unknown>) {
     return !isNestedFetchSuppressed() && !isObservatoryTrackedFetch(options)
 }
 
-function wrapFetchLike(original: FetchLike, fetchRegistry?: FetchRegistry): FetchLike {
-    if ((original as FetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG]) {
+type FetchInstrumentationOptions = {
+    onSuccessfulFetch?: () => void
+}
+
+function invokeOriginalFetch(original: TFetchLike, viaRaw: boolean, request: unknown, options?: Record<string, unknown>) {
+    if (viaRaw && typeof original.raw === 'function') {
+        return original.raw(request, options)
+    }
+
+    return original(request, options)
+}
+
+function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, instrumentation?: FetchInstrumentationOptions): TFetchLike {
+    if ((original as TFetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG]) {
         return original
     }
 
     function instrumentCall(viaRaw: boolean, request: unknown, options?: Record<string, unknown>) {
         const url = resolveUrl(request)
+
+        if (isObservatoryNitroTimelineUrl(url)) {
+            return invokeOriginalFetch(original, viaRaw, request, options)
+        }
+
         const method = resolveMethod(request, options)
         const startedAt = performance.now()
         const source = viaRaw ? '$fetch.raw' : '$fetch'
-        const entryId = `${source}::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
+        const entryId = nextFetchEntryId(source)
         const recordDashboard = shouldRecordInDashboard(options)
 
         const span = startSpan({
@@ -128,11 +175,7 @@ function wrapFetchLike(original: FetchLike, fetchRegistry?: FetchRegistry): Fetc
             })
         }
 
-        const invoked = viaRaw
-            ? typeof original.raw === 'function'
-                ? original.raw(request, options)
-                : original(request, options)
-            : original(request, options)
+        const invoked = invokeOriginalFetch(original, viaRaw, request, options)
 
         return Promise.resolve(invoked)
             .then((result) => {
@@ -160,6 +203,8 @@ function wrapFetchLike(original: FetchLike, fetchRegistry?: FetchRegistry): Fetc
                         size: estimateSize(payload),
                     })
                 }
+
+                instrumentation?.onSuccessfulFetch?.()
 
                 return result
             })
@@ -193,51 +238,51 @@ function wrapFetchLike(original: FetchLike, fetchRegistry?: FetchRegistry): Fetc
             })
     }
 
-    const wrapped: FetchLike = ((request: unknown, options?: Record<string, unknown>) => {
+    const wrapped: TFetchLike = ((request: unknown, options?: Record<string, unknown>) => {
         return instrumentCall(false, request, options)
-    }) as FetchLike
+    }) as TFetchLike
 
     Object.assign(wrapped, original)
 
     if (typeof original.raw === 'function') {
         wrapped.raw = ((request: unknown, options?: Record<string, unknown>) => {
             return instrumentCall(true, request, options)
-        }) as FetchLike['raw']
+        }) as TFetchLike['raw']
     }
 
     if (typeof original.create === 'function') {
         wrapped.create = ((...args: unknown[]) => {
-            const created = original.create!(...args) as FetchLike
+            const created = original.create!(...args) as TFetchLike
 
-            return wrapFetchLike(created, fetchRegistry)
-        }) as FetchLike['create']
+            return wrapFetchLike(created, fetchRegistry, instrumentation)
+        }) as TFetchLike['create']
     }
 
-    ;(wrapped as FetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG] = true
+    ;(wrapped as TFetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG] = true
 
     return wrapped
 }
 
-export function setupFetchInstrumentation(nuxtApp: NuxtApp, fetchRegistry?: FetchRegistry) {
-    const original = nuxtApp.$fetch as FetchLike | undefined
+export function setupFetchInstrumentation(nuxtApp: NuxtApp, fetchRegistry?: TFetchRegistry, instrumentation?: FetchInstrumentationOptions) {
+    const original = nuxtApp.$fetch as TFetchLike | undefined
 
     if (!original) {
         return
     }
 
-    if ((original as FetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG]) {
+    if ((original as TFetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG]) {
         return
     }
 
-    const wrapped = wrapFetchLike(original, fetchRegistry)
+    const wrapped = wrapFetchLike(original, fetchRegistry, instrumentation)
 
     nuxtApp.$fetch = wrapped as NuxtApp['$fetch']
 
-    const globalTarget = globalThis as unknown as { $fetch?: FetchLike }
+    const globalTarget = globalThis as unknown as { $fetch?: TFetchLike }
 
     if (globalTarget.$fetch === original || typeof globalTarget.$fetch !== 'function') {
         globalTarget.$fetch = wrapped
     } else {
-        globalTarget.$fetch = wrapFetchLike(globalTarget.$fetch, fetchRegistry)
+        globalTarget.$fetch = wrapFetchLike(globalTarget.$fetch, fetchRegistry, instrumentation)
     }
 }

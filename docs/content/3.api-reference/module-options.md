@@ -18,7 +18,7 @@ description: Configuration for Observatory instrumentation and limits.
 
 ## Runtime behavior
 
-- `instrumentServer`
+- `instrumentServer` — required for SSR composable capture and Nitro server-route spans in Trace Viewer
 - `composableNavigationMode` (`route` | `session`)
 - `debugRpc`
 
@@ -37,7 +37,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `maxComposableHistory`
 - `maxComposableEntries`
 - `maxRenderTimeline`
-- `maxTraces`
+- `maxTraces` — also caps the in-memory Nitro/SSR request archive used by Trace Viewer
 - `maxPiniaTimeline`
 
 ## Guidance

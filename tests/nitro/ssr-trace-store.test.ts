@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest'
-import { createSsrRecord, addSsrFetchSpan, addSsrPhaseSpan, drainSsrRecord } from '@observatory/runtime/nitro/ssr-trace-store'
+import { describe, it, expect, beforeEach } from 'vitest'
+import {
+    createSsrRecord,
+    addSsrFetchSpan,
+    addSsrPhaseSpan,
+    drainSsrRecord,
+    getArchivedSsrRecords,
+    clearSsrArchive,
+    setSsrArchiveCap,
+    markSsrRecordDocument,
+    markSsrRecordError,
+    snapshotSsrRecord,
+} from '@observatory/runtime/nitro/ssr-trace-store'
 
 // Each test uses a unique requestId so module-level `pending` Map state does
 // not bleed between tests even if a record is never drained.
@@ -7,6 +18,11 @@ let idCounter = 0
 function uniqueId() {
     return `test-req-${++idCounter}`
 }
+
+beforeEach(() => {
+    clearSsrArchive()
+    setSsrArchiveCap(50)
+})
 
 describe('createSsrRecord', () => {
     it('returns a record with the correct name based on route', () => {
@@ -197,5 +213,62 @@ describe('drainSsrRecord', () => {
         const record = drainSsrRecord(id, 100)
 
         expect(record?.spans).toHaveLength(3)
+    })
+})
+
+describe('archive', () => {
+    it('keeps API-style records after drain even though pending is cleared', () => {
+        const id = uniqueId()
+        createSsrRecord(id, '/api/hello', 'GET')
+        const drained = drainSsrRecord(id, 40)
+
+        expect(drained?.name).toBe('nitro:GET /api/hello')
+        expect(drainSsrRecord(id, 40)).toBeUndefined()
+        expect(getArchivedSsrRecords().map((record) => record.traceId)).toContain(drained?.traceId)
+    })
+
+    it('evicts the oldest record when the archive exceeds the cap', () => {
+        setSsrArchiveCap(2)
+        const traces: string[] = []
+
+        for (const suffix of ['a', 'b', 'c']) {
+            const requestId = uniqueId()
+            const record = createSsrRecord(requestId, `/${suffix}`, 'GET')
+            traces.push(record.traceId)
+            drainSsrRecord(requestId, 10)
+        }
+
+        const archived = getArchivedSsrRecords().map((record) => record.traceId)
+
+        expect(archived).toHaveLength(2)
+        expect(archived).toEqual(traces.slice(1))
+    })
+
+    it('keeps ssr:<path> name for document records', () => {
+        const id = uniqueId()
+        createSsrRecord(id, '/home', 'GET')
+        markSsrRecordDocument(id)
+        const drained = drainSsrRecord(id, 12)
+
+        expect(drained?.name).toBe('ssr:/home')
+    })
+
+    it('preserves navigation error status when draining', () => {
+        const id = uniqueId()
+        createSsrRecord(id, '/boom', 'GET')
+        markSsrRecordError(id)
+        const drained = drainSsrRecord(id, 8)
+
+        expect(drained?.spans[0]?.status).toBe('error')
+    })
+
+    it('snapshotSsrRecord does not remove the pending record', () => {
+        const id = uniqueId()
+        createSsrRecord(id, '/page', 'GET')
+        markSsrRecordDocument(id)
+        const snap = snapshotSsrRecord(id, 20)
+
+        expect(snap?.spans[0]?.status).toBe('ok')
+        expect(drainSsrRecord(id, 25)).toBeDefined()
     })
 })
