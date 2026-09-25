@@ -12,7 +12,7 @@
  *   - Iframe ──birpc call──► Vite server ──import.meta.hot.send (ws.send)──► host Nuxt app
  */
 
-export interface ObservatorySnapshot {
+export interface IObservatorySnapshot {
     fetch?: unknown[]
     provideInject?: { provides: unknown[]; injects: unknown[] }
     composables?: unknown[]
@@ -43,9 +43,9 @@ export interface ObservatorySnapshot {
  * Functions exposed by the Vite/Node.js server side.
  * Called by the iframe client.
  */
-export interface ObservatoryServerFunctions {
+export interface IObservatoryServerFunctions {
     /** Returns the most recently received snapshot from the host Nuxt app. */
-    getSnapshot(): Promise<ObservatorySnapshot | null>
+    getSnapshot(): Promise<IObservatorySnapshot | null>
     /** Asks the host app to push a fresh snapshot immediately. */
     requestSnapshot(): Promise<void>
     /** Tells the host app to clear composable entries (respects navigation mode). */
@@ -64,19 +64,19 @@ export interface ObservatoryServerFunctions {
  * Functions exposed by the iframe client.
  * Called by the server via `rpc.broadcast.onSnapshot.asEvent(snapshot)`.
  */
-export interface ObservatoryClientFunctions {
+export interface IObservatoryClientFunctions {
     /**
      * Pushed from the server whenever the host Nuxt app sends a fresh snapshot.
      * The iframe applies this to its reactive stores without polling.
      */
-    onSnapshot(snapshot: ObservatorySnapshot): void
+    onSnapshot(snapshot: IObservatorySnapshot): void
 }
 
 /**
  * Command sent from the server to the host Nuxt app via Vite's WebSocket
  * (`server.ws.send`), received by `import.meta.hot.on('observatory:command', ...)`.
  */
-export type ObservatoryCommand =
+export type TObservatoryCommand =
     | { cmd: 'request-snapshot' }
     | { cmd: 'clear-composables' }
     | { cmd: 'set-mode'; mode: 'route' | 'session' }

@@ -1,19 +1,19 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-export type Theme = 'light' | 'dark' | 'system'
-export type Locale = 'en' | 'fr' | 'de' | 'ja'
+export type TTheme = 'light' | 'dark' | 'system'
+export type TLocale = 'en' | 'fr' | 'de' | 'ja'
 
-export interface UserPreferences {
-    theme: Theme
-    locale: Locale
+export interface IUserPreferences {
+    theme: TTheme
+    locale: TLocale
     notifications: boolean
     compactView: boolean
     currency: string
 }
 
 export const useUserStore = defineStore('user', () => {
-    const preferences = ref<UserPreferences>({
+    const preferences = ref<IUserPreferences>({
         theme: 'light',
         locale: 'en',
         notifications: true,
@@ -28,11 +28,11 @@ export const useUserStore = defineStore('user', () => {
         new Intl.DisplayNames([preferences.value.locale], { type: 'language' }).of(preferences.value.locale)
     )
 
-    function setTheme(theme: Theme) {
+    function setTheme(theme: TTheme) {
         preferences.value.theme = theme
     }
 
-    function setLocale(locale: Locale) {
+    function setLocale(locale: TLocale) {
         preferences.value.locale = locale
     }
 

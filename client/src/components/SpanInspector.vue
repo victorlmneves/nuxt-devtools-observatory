@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
-interface Props {
-    trace: TraceEntry
-    span?: TraceSpan
+interface IProps {
+    trace: ITraceEntry
+    span?: ITraceSpan
 }
 
-const props = defineProps<Props>()
+const props = defineProps<IProps>()
 
 const emit = defineEmits<{
-    'select-span': [span: TraceSpan]
+    'select-span': [span: ITraceSpan]
 }>()
 
 const parentSpan = computed(() => {
@@ -59,7 +59,7 @@ function formatRelativeTime(timestamp: number) {
     return `+${(relative / 1000).toFixed(3)}s`
 }
 
-function getDisplayEndTime(span: TraceSpan) {
+function getDisplayEndTime(span: ITraceSpan) {
     if (span.endTime !== undefined) {
         return span.endTime
     }

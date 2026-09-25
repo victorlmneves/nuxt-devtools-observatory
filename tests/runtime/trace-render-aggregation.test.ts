@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildRenderSummaryForTrace, buildCrossTraceRenderSummary } from '@observatory-client/composables/trace-render-aggregation'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
 function renderSpan(
     id: string,
@@ -10,7 +10,7 @@ function renderSpan(
     file: string,
     lifecycle: 'render:mount' | 'render:update',
     durationMs: number
-): TraceSpan {
+): ITraceSpan {
     return {
         id,
         traceId,
@@ -28,7 +28,7 @@ function renderSpan(
     }
 }
 
-function makeTrace(id: string, spans: TraceSpan[]): TraceEntry {
+function makeTrace(id: string, spans: ITraceSpan[]): ITraceEntry {
     return {
         id,
         name: `trace:${id}`,

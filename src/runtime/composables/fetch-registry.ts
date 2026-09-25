@@ -2,7 +2,7 @@ import { readonly, getCurrentInstance } from 'vue'
 import { beginNestedFetchSuppress, endNestedFetchSuppress, markObservatoryTrackedFetch } from '../instrumentation/fetch-dedup'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 
-export interface FetchEntry {
+export interface IFetchEntry {
     id: number | string
     key: string
     url: string
@@ -21,31 +21,31 @@ export interface FetchEntry {
     source?: string
 }
 
-interface ObservatoryWindow extends Window {
+interface IObservatoryWindow extends Window {
     __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> }
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
-interface FetchResponse extends Response {
+interface IFetchResponse extends Response {
     _data?: unknown
 }
 
 // The return type of useFetch/useAsyncData — a reactive AsyncData object.
 // Typed loosely to avoid importing Nuxt internals; we only read .status and .data.
-interface FetchResult {
+interface IFetchResult {
     status?: { value?: string }
     data?: { value?: unknown }
     [key: string]: unknown
 }
 
-interface FetchOptions {
+interface IFetchOptions {
     server?: boolean
-    onResponse?: (ctx: { response: FetchResponse }) => void
-    onResponseError?: (ctx: { response: FetchResponse }) => void
+    onResponse?: (ctx: { response: IFetchResponse }) => void
+    onResponseError?: (ctx: { response: IFetchResponse }) => void
     [key: string]: unknown
 }
 
-interface FetchMeta {
+interface IFetchMeta {
     key: string
     file: string
     line: number
@@ -86,17 +86,17 @@ function truncatePayload(payload: unknown): unknown {
 }
 
 export function setupFetchRegistry() {
-    const entries = new Map<string | number, FetchEntry>()
+    const entries = new Map<string | number, IFetchEntry>()
 
     let dirty = true // start dirty so first snapshot always builds
-    let cachedSnapshot: FetchEntry[] = []
+    let cachedSnapshot: IFetchEntry[] = []
 
     function markDirty() {
         dirty = true
         bumpSnapshotRevision()
     }
 
-    function register(entry: FetchEntry) {
+    function register(entry: IFetchEntry) {
         // Evict oldest entry when cap is reached
         if (entries.size >= MAX_FETCH_ENTRIES) {
             const oldestKey = entries.keys().next().value
@@ -112,7 +112,7 @@ export function setupFetchRegistry() {
         emit('fetch:start', safeEntry)
     }
 
-    function update(id: string, patch: Partial<FetchEntry>) {
+    function update(id: string, patch: Partial<IFetchEntry>) {
         const existing = entries.get(id)
 
         if (!existing) {
@@ -126,7 +126,7 @@ export function setupFetchRegistry() {
         emit('fetch:update', updated)
     }
 
-    function getAll(): FetchEntry[] {
+    function getAll(): IFetchEntry[] {
         if (dirty) {
             cachedSnapshot = [...entries.values()]
             dirty = false
@@ -137,7 +137,7 @@ export function setupFetchRegistry() {
         // return [...entries.values()]
     }
 
-    function getSnapshot(): FetchEntry[] {
+    function getSnapshot(): IFetchEntry[] {
         if (!dirty) {
             return cachedSnapshot
         }
@@ -159,7 +159,7 @@ export function setupFetchRegistry() {
             return
         }
 
-        const channel = (window as ObservatoryWindow).__nuxt_devtools__?.channel
+        const channel = (window as IObservatoryWindow).__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -170,13 +170,13 @@ export function setupFetchRegistry() {
 export function __devFetchHandler(
     handler: (...args: unknown[]) => unknown,
     key: unknown,
-    meta: FetchMeta
+    meta: IFetchMeta
 ): (...args: unknown[]) => Promise<unknown> {
     if (!import.meta.dev || !import.meta.client) {
         return (...args: unknown[]) => Promise.resolve(handler(...args))
     }
 
-    const registry = (window as ObservatoryWindow).__observatory__?.fetch
+    const registry = (window as IObservatoryWindow).__observatory__?.fetch
 
     if (!registry) {
         return (...args: unknown[]) => Promise.resolve(handler(...args))
@@ -239,16 +239,16 @@ export function __devFetchHandler(
 }
 
 export function __devFetchCall(
-    originalFn: (url: string, opts: FetchOptions) => FetchResult,
+    originalFn: (url: string, opts: IFetchOptions) => IFetchResult,
     url: string,
-    opts: FetchOptions,
-    meta: FetchMeta
-): FetchResult {
+    opts: IFetchOptions,
+    meta: IFetchMeta
+): IFetchResult {
     if (!import.meta.dev || !import.meta.client) {
         return originalFn(url, opts)
     }
 
-    const registry = (window as ObservatoryWindow).__observatory__?.fetch
+    const registry = (window as IObservatoryWindow).__observatory__?.fetch
 
     if (!registry) {
         return originalFn(url, opts)
@@ -274,7 +274,7 @@ export function __devFetchCall(
     const id = `${meta.key}::${Date.now()}`
     const startTime = performance.now()
     const resolvedUrl = resolveUrl(url)
-    const trackedOpts = markObservatoryTrackedFetch((opts ?? {}) as Record<string, unknown>) as FetchOptions
+    const trackedOpts = markObservatoryTrackedFetch((opts ?? {}) as Record<string, unknown>) as IFetchOptions
 
     // When useFetch is called outside a component's setup() context (e.g. inside a
     // click handler), Nuxt warns and its deduplication machinery becomes unreliable:
@@ -351,7 +351,7 @@ export function __devFetchCall(
                 ;(opts.onRequest as () => void)()
             }
         },
-        onResponse({ response }: { response: FetchResponse }) {
+        onResponse({ response }: { response: IFetchResponse }) {
             responseCount++
             const endTime = performance.now()
             const ms = Math.round(endTime - lastCallStart)
@@ -389,7 +389,7 @@ export function __devFetchCall(
                 opts.onResponse({ response })
             }
         },
-        onResponseError({ response }: { response: FetchResponse }) {
+        onResponseError({ response }: { response: IFetchResponse }) {
             const endTime = performance.now()
             const ms = Math.round(endTime - lastCallStart)
 

@@ -8,7 +8,7 @@
  * reach the Trace Viewer.
  */
 
-export interface SsrSpan {
+export interface ISsrSpan {
     id: string
     name: string
     type: string
@@ -20,20 +20,20 @@ export interface SsrSpan {
     metadata?: Record<string, unknown>
 }
 
-export interface SsrTraceRecord {
+export interface ISsrTraceRecord {
     traceId: string
     name: string
-    spans: SsrSpan[]
+    spans: ISsrSpan[]
 }
 
-interface PendingSsrRecord extends SsrTraceRecord {
+interface IPendingSsrRecord extends ISsrTraceRecord {
     method: string
     route: string
     isDocument: boolean
 }
 
-const pending = new Map<string, PendingSsrRecord>()
-const archive: SsrTraceRecord[] = []
+const pending = new Map<string, IPendingSsrRecord>()
+const archive: ISsrTraceRecord[] = []
 
 const DEFAULT_ARCHIVE_CAP = 50
 let archiveCap = DEFAULT_ARCHIVE_CAP
@@ -46,7 +46,7 @@ function newId(prefix: string): string {
     return `${prefix}_ssr_${Date.now()}_${_counter}`
 }
 
-function cloneSpan(span: SsrSpan): SsrSpan {
+function cloneSpan(span: ISsrSpan): ISsrSpan {
     return {
         id: span.id,
         name: span.name,
@@ -59,7 +59,7 @@ function cloneSpan(span: SsrSpan): SsrSpan {
     }
 }
 
-function toPublicRecord(record: PendingSsrRecord): SsrTraceRecord {
+function toPublicRecord(record: IPendingSsrRecord): ISsrTraceRecord {
     return {
         traceId: record.traceId,
         name: record.name,
@@ -67,7 +67,7 @@ function toPublicRecord(record: PendingSsrRecord): SsrTraceRecord {
     }
 }
 
-function finalizeRecordName(record: PendingSsrRecord): void {
+function finalizeRecordName(record: IPendingSsrRecord): void {
     if (record.isDocument) {
         record.name = `ssr:${record.route}`
 
@@ -77,7 +77,7 @@ function finalizeRecordName(record: PendingSsrRecord): void {
     record.name = `nitro:${record.method} ${record.route}`
 }
 
-function closeNavigationSpan(record: PendingSsrRecord, durationMs: number): void {
+function closeNavigationSpan(record: IPendingSsrRecord, durationMs: number): void {
     const navSpan = record.spans[0]
 
     if (!navSpan) {
@@ -92,7 +92,7 @@ function closeNavigationSpan(record: PendingSsrRecord, durationMs: number): void
     }
 }
 
-function pushArchive(record: SsrTraceRecord): void {
+function pushArchive(record: ISsrTraceRecord): void {
     archive.push(record)
 
     while (archive.length > archiveCap) {
@@ -115,9 +115,9 @@ export function setSsrArchiveCap(max: number): void {
 
 /**
  * Return clones of archived Nitro/SSR records (no request bodies, cookies, or headers).
- * @returns {SsrTraceRecord[]} Archived records, oldest first.
+ * @returns {ISsrTraceRecord[]} Archived records, oldest first.
  */
-export function getArchivedSsrRecords(): SsrTraceRecord[] {
+export function getArchivedSsrRecords(): ISsrTraceRecord[] {
     return archive.map((record) => ({
         traceId: record.traceId,
         name: record.name,
@@ -139,10 +139,10 @@ export function clearSsrArchive(): void {
  * @param {string} requestId - Unique identifier for the HTTP request, stored in `event.context`.
  * @param {string} route - Request pathname (e.g. `/dashboard`).
  * @param {string} method - HTTP method in upper-case (e.g. `GET`).
- * @returns {SsrTraceRecord} The newly created `SsrTraceRecord` keyed by `requestId`.
+ * @returns {ISsrTraceRecord} The newly created `ISsrTraceRecord` keyed by `requestId`.
  */
-export function createSsrRecord(requestId: string, route: string, method: string): SsrTraceRecord {
-    const record: PendingSsrRecord = {
+export function createSsrRecord(requestId: string, route: string, method: string): ISsrTraceRecord {
+    const record: IPendingSsrRecord = {
         traceId: newId('trace'),
         name: `ssr:${route}`,
         method,
@@ -302,9 +302,9 @@ export function addSsrPhaseSpan(
  * drains and archives the full record.
  * @param {string} requestId - The request identifier returned by `createSsrRecord`.
  * @param {number} durationMs - Duration used to close the navigation span in the snapshot.
- * @returns {SsrTraceRecord | undefined} A cloned record, or `undefined` if unknown.
+ * @returns {ISsrTraceRecord | undefined} A cloned record, or `undefined` if unknown.
  */
-export function snapshotSsrRecord(requestId: string, durationMs: number): SsrTraceRecord | undefined {
+export function snapshotSsrRecord(requestId: string, durationMs: number): ISsrTraceRecord | undefined {
     const record = pending.get(requestId)
 
     if (!record) {
@@ -323,9 +323,9 @@ export function snapshotSsrRecord(requestId: string, durationMs: number): SsrTra
  * Returns `undefined` if the requestId is unknown.
  * @param {string} requestId - The request identifier returned by `createSsrRecord`.
  * @param {number} durationMs - Total SSR request duration in milliseconds, used to close the navigation span.
- * @returns {SsrTraceRecord | undefined} The completed `SsrTraceRecord`, or `undefined` if no record exists for `requestId`.
+ * @returns {ISsrTraceRecord | undefined} The completed `ISsrTraceRecord`, or `undefined` if no record exists for `requestId`.
  */
-export function drainSsrRecord(requestId: string, durationMs: number): SsrTraceRecord | undefined {
+export function drainSsrRecord(requestId: string, durationMs: number): ISsrTraceRecord | undefined {
     const record = pending.get(requestId)
 
     pending.delete(requestId)

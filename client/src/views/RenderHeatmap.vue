@@ -5,10 +5,10 @@ import { useVirtualizationConfig } from '@observatory-client/composables/useVirt
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
 import { exportJson, importJson } from '@observatory-client/composables/useExportImport'
-import type { ObservatoryExportFile } from '@observatory-client/composables/useExportImport'
-import type { RenderEntry, RenderEvent } from '@observatory/types/snapshot'
+import type { IObservatoryExportFile } from '@observatory-client/composables/useExportImport'
+import type { IRenderEntry, IRenderEvent } from '@observatory/types/snapshot'
 
-interface ComponentNode {
+interface IComponentNode {
     id: string
     label: string
     file: string
@@ -19,8 +19,8 @@ interface ComponentNode {
     mountCount: number
     avgMs: number
     triggers: string[]
-    timeline: RenderEvent[]
-    children: ComponentNode[]
+    timeline: IRenderEvent[]
+    children: IComponentNode[]
     parentId?: string
     parentLabel?: string
     isPersistent: boolean
@@ -28,15 +28,15 @@ interface ComponentNode {
     route: string
 }
 
-interface VisibleTreeRow {
-    node: ComponentNode
+interface IVisibleTreeRow {
+    node: IComponentNode
     primaryBadge: string | null
     metricValue: string
     metricLabel: string
     hot: boolean
 }
 
-function nodeBadges(node: ComponentNode): string[] {
+function nodeBadges(node: IComponentNode): string[] {
     const badges: string[] = []
     const normalizedElement = node.element?.toLowerCase()
 
@@ -74,7 +74,7 @@ function toneForDepth(depth: number) {
 const TreeNode = defineComponent({
     name: 'TreeNode',
     props: {
-        node: Object as () => ComponentNode,
+        node: Object as () => IComponentNode,
         mode: String,
         threshold: Number,
         selected: String,
@@ -82,15 +82,15 @@ const TreeNode = defineComponent({
     },
     emits: ['select', 'toggle'],
     setup(props, { emit }): () => VNode | null {
-        function nodeValue(node: ComponentNode) {
+        function nodeValue(node: IComponentNode) {
             return props.mode === 'count' ? node.rerenders + node.mountCount : node.avgMs
         }
 
-        function isHot(node: ComponentNode) {
+        function isHot(node: IComponentNode) {
             return nodeValue(node) >= props.threshold!
         }
 
-        function rowClass(node: ComponentNode) {
+        function rowClass(node: IComponentNode) {
             return {
                 selected: props.selected === node.id,
                 hot: isHot(node),
@@ -202,7 +202,7 @@ const TreeNode = defineComponent({
                                       threshold: props.threshold,
                                       selected: props.selected,
                                       expandedIds: props.expandedIds,
-                                      onSelect: (value: ComponentNode) => emit('select', value),
+                                      onSelect: (value: IComponentNode) => emit('select', value),
                                       onToggle: (value: string) => emit('toggle', value),
                                   })
                               )
@@ -266,13 +266,13 @@ const search = ref('')
 const activeSelectedId = ref<string | null>(null)
 const activeRootId = ref<string | null>(null)
 const expandedIds = ref<Set<string>>(new Set())
-const frozenSnapshot = ref<RenderEntry[]>([])
+const frozenSnapshot = ref<IRenderEntry[]>([])
 const expansionReady = ref(false)
 const treeFrameRef = ref<HTMLElement | null>(null)
 
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 34, overscan: 6 })
 
-function displayLabel(entry: RenderEntry) {
+function displayLabel(entry: IRenderEntry) {
     if (entry.name && entry.name !== 'unknown' && !/^Component#\d+$/.test(entry.name)) {
         return entry.name
     }
@@ -297,12 +297,12 @@ function displayLabel(entry: RenderEntry) {
     return `Component#${entry.uid}`
 }
 
-function formatTrigger(trigger: RenderEntry['triggers'][number]) {
+function formatTrigger(trigger: IRenderEntry['triggers'][number]) {
     return `${trigger.type}: ${trigger.key}`
 }
 
-function buildNodes(entries: RenderEntry[]) {
-    const byId = new Map<string, ComponentNode>()
+function buildNodes(entries: IRenderEntry[]) {
+    const byId = new Map<string, IComponentNode>()
 
     for (const entry of entries) {
         byId.set(String(entry.uid), {
@@ -325,7 +325,7 @@ function buildNodes(entries: RenderEntry[]) {
         })
     }
 
-    const roots: ComponentNode[] = []
+    const roots: IComponentNode[] = []
 
     for (const entry of entries) {
         const node = byId.get(String(entry.uid))
@@ -344,7 +344,7 @@ function buildNodes(entries: RenderEntry[]) {
         }
     }
 
-    function finalize(node: ComponentNode, path: string[] = [], depth = 0) {
+    function finalize(node: IComponentNode, path: string[] = [], depth = 0) {
         node.depth = depth
         node.path = [...path, node.label]
         node.children.forEach((child) => finalize(child, node.path, depth + 1))
@@ -355,10 +355,10 @@ function buildNodes(entries: RenderEntry[]) {
     return roots
 }
 
-function flatten(nodes: ComponentNode[]) {
-    const flat: ComponentNode[] = []
+function flatten(nodes: IComponentNode[]) {
+    const flat: IComponentNode[] = []
 
-    function walk(node: ComponentNode) {
+    function walk(node: IComponentNode) {
         flat.push(node)
         node.children.forEach(walk)
     }
@@ -368,11 +368,11 @@ function flatten(nodes: ComponentNode[]) {
     return flat
 }
 
-function buildSubtreeSizeMap(roots: ComponentNode[]) {
+function buildSubtreeSizeMap(roots: IComponentNode[]) {
     const sizes = new Map<string, number>()
 
     for (const root of roots) {
-        const stack: Array<{ node: ComponentNode; visited: boolean }> = [{ node: root, visited: false }]
+        const stack: Array<{ node: IComponentNode; visited: boolean }> = [{ node: root, visited: false }]
 
         while (stack.length) {
             const current = stack.pop()!
@@ -400,11 +400,11 @@ function buildSubtreeSizeMap(roots: ComponentNode[]) {
     return sizes
 }
 
-function buildRootLookup(roots: ComponentNode[]) {
+function buildRootLookup(roots: IComponentNode[]) {
     const lookup = new Map<string, string>()
 
     for (const root of roots) {
-        const stack: ComponentNode[] = [root]
+        const stack: IComponentNode[] = [root]
 
         while (stack.length) {
             const node = stack.pop()!
@@ -419,7 +419,7 @@ function buildRootLookup(roots: ComponentNode[]) {
     return lookup
 }
 
-function findFirstHotNode(node: ComponentNode): ComponentNode | null {
+function findFirstHotNode(node: IComponentNode): IComponentNode | null {
     if (isHot(node)) {
         return node
     }
@@ -435,7 +435,7 @@ function findFirstHotNode(node: ComponentNode): ComponentNode | null {
     return null
 }
 
-function defaultExpandedIds(root: ComponentNode | null) {
+function defaultExpandedIds(root: IComponentNode | null) {
     if (!root) {
         return new Set<string>()
     }
@@ -444,7 +444,7 @@ function defaultExpandedIds(root: ComponentNode | null) {
     // The user can collapse individual branches as needed.
     const expanded = new Set<string>()
 
-    function expandAll(node: ComponentNode) {
+    function expandAll(node: IComponentNode) {
         if (node.children.length > 0) {
             expanded.add(node.id)
             node.children.forEach(expandAll)
@@ -456,14 +456,14 @@ function defaultExpandedIds(root: ComponentNode | null) {
     return expanded
 }
 
-function searchExpandedIds(root: ComponentNode | null, term: string) {
+function searchExpandedIds(root: IComponentNode | null, term: string) {
     const expanded = defaultExpandedIds(root)
 
     if (!root || !term) {
         return expanded
     }
 
-    function visit(node: ComponentNode): boolean {
+    function visit(node: IComponentNode): boolean {
         const childMatched = node.children.some((child) => visit(child))
         const selfMatched = matchesSearch(node, term)
 
@@ -479,15 +479,15 @@ function searchExpandedIds(root: ComponentNode | null, term: string) {
     return expanded
 }
 
-function nodeValue(node: ComponentNode) {
+function nodeValue(node: IComponentNode) {
     return activeMode.value === 'count' ? node.rerenders + node.mountCount : node.avgMs
 }
 
-function isHot(node: ComponentNode) {
+function isHot(node: IComponentNode) {
     return nodeValue(node) >= activeThreshold.value
 }
 
-function matchesSearch(node: ComponentNode, searchTerm: string): boolean {
+function matchesSearch(node: IComponentNode, searchTerm: string): boolean {
     if (!searchTerm) {
         return true
     }
@@ -502,7 +502,7 @@ function matchesSearch(node: ComponentNode, searchTerm: string): boolean {
     )
 }
 
-function treeMatches(node: ComponentNode, searchTerm: string): boolean {
+function treeMatches(node: IComponentNode, searchTerm: string): boolean {
     if (!searchTerm) {
         return true
     }
@@ -510,11 +510,11 @@ function treeMatches(node: ComponentNode, searchTerm: string): boolean {
     return matchesSearch(node, searchTerm) || node.children.some((child) => treeMatches(child, searchTerm))
 }
 
-function subtreeHasHotNode(node: ComponentNode): boolean {
+function subtreeHasHotNode(node: IComponentNode): boolean {
     return isHot(node) || node.children.some((child) => subtreeHasHotNode(child))
 }
 
-function nodeMatchesRoute(node: ComponentNode): boolean {
+function nodeMatchesRoute(node: IComponentNode): boolean {
     if (!activeRoute.value) {
         return true
     }
@@ -528,11 +528,11 @@ function nodeMatchesRoute(node: ComponentNode): boolean {
     return node.timeline.some((e) => e.route === activeRoute.value)
 }
 
-function subtreeMatchesRoute(node: ComponentNode): boolean {
+function subtreeMatchesRoute(node: IComponentNode): boolean {
     return nodeMatchesRoute(node) || node.children.some((child) => subtreeMatchesRoute(child))
 }
 
-function isVisibleRoot(node: ComponentNode, searchTerm: string): boolean {
+function isVisibleRoot(node: IComponentNode, searchTerm: string): boolean {
     const matchesCurrentSearch = treeMatches(node, searchTerm)
     const matchesCurrentHeat = !activeHotOnly.value || subtreeHasHotNode(node)
     const matchesCurrentRoute = !activeRoute.value || subtreeMatchesRoute(node)
@@ -540,10 +540,10 @@ function isVisibleRoot(node: ComponentNode, searchTerm: string): boolean {
     return matchesCurrentSearch && matchesCurrentHeat && matchesCurrentRoute
 }
 
-function pruneVisibleTree(node: ComponentNode, searchTerm: string): ComponentNode | null {
+function pruneVisibleTree(node: IComponentNode, searchTerm: string): IComponentNode | null {
     const visibleChildren = node.children
         .map((child) => pruneVisibleTree(child, searchTerm))
-        .filter((child): child is ComponentNode => child !== null)
+        .filter((child): child is IComponentNode => child !== null)
 
     const matchesCurrentSearch = !searchTerm || matchesSearch(node, searchTerm) || visibleChildren.length > 0
     const matchesCurrentHeat = !activeHotOnly.value || isHot(node) || visibleChildren.length > 0
@@ -629,14 +629,14 @@ const visibleTreeRoots = computed(() => {
 // The virtualized list flattens hierarchy and breaks the wrapping visual.
 const virtualizedTreeEnabled = computed(() => false)
 
-function flattenVisibleTree(root: ComponentNode | null, expanded: Set<string>) {
+function flattenVisibleTree(root: IComponentNode | null, expanded: Set<string>) {
     if (!root) {
-        return [] as ComponentNode[]
+        return [] as IComponentNode[]
     }
 
-    const rows: ComponentNode[] = []
+    const rows: IComponentNode[] = []
 
-    function walk(node: ComponentNode) {
+    function walk(node: IComponentNode) {
         rows.push(node)
 
         if (!expanded.has(node.id)) {
@@ -696,10 +696,10 @@ const visibleTreeRows = computed(() => {
 
     return treeVirtualItems.value
         .map((item) => expandedVisibleNodes.value[item.index])
-        .filter((node): node is ComponentNode => Boolean(node))
+        .filter((node): node is IComponentNode => Boolean(node))
 })
 
-const visibleTreeRowItems = computed<VisibleTreeRow[]>(() => {
+const visibleTreeRowItems = computed<IVisibleTreeRow[]>(() => {
     const metricLabel = activeMode.value === 'count' ? 'renders' : 'avg'
 
     return visibleTreeRows.value.map((node) => {
@@ -751,10 +751,10 @@ const activeSelectedTimelineRecent = computed(() => {
     const timeline = activeSelected.value?.timeline ?? []
 
     if (!timeline.length) {
-        return [] as Array<{ key: string; event: RenderEvent }>
+        return [] as Array<{ key: string; event: IRenderEvent }>
     }
 
-    const recent: Array<{ key: string; event: RenderEvent }> = []
+    const recent: Array<{ key: string; event: IRenderEvent }> = []
     const end = Math.max(timeline.length - 30, 0)
 
     for (let i = timeline.length - 1; i >= end; i--) {
@@ -870,7 +870,7 @@ watch([activeHotOnly, activeThreshold, activeMode, filteredRoots], () => {
     expandedIds.value = new Set(pathToNodeWithinRoot(firstHot.id, topLevelRoot.id))
 })
 
-function selectNode(node: ComponentNode) {
+function selectNode(node: IComponentNode) {
     activeSelectedId.value = node.id
 
     const rootId = rootIdByNodeId.value.get(node.id)
@@ -894,7 +894,7 @@ function toggleNode(id: string) {
     expandedIds.value = next
 }
 
-function selectRoot(root: ComponentNode) {
+function selectRoot(root: IComponentNode) {
     activeRootId.value = root.id
     expandedIds.value = defaultExpandedIds(root)
     expansionReady.value = true
@@ -914,7 +914,7 @@ function toggleFreeze() {
         return
     }
 
-    frozenSnapshot.value = JSON.parse(JSON.stringify(renders.value)) as RenderEntry[]
+    frozenSnapshot.value = JSON.parse(JSON.stringify(renders.value)) as IRenderEntry[]
     frozen.value = true
 }
 
@@ -940,7 +940,7 @@ async function handleImport() {
         return
     }
 
-    const file = parsed as ObservatoryExportFile<RenderEntry>
+    const file = parsed as IObservatoryExportFile<IRenderEntry>
 
     if (
         file?.type !== 'observatory-renders' ||
@@ -970,7 +970,7 @@ function openInEditor(file: string) {
     openInEditorFromStore(file)
 }
 
-function pathLabel(node: ComponentNode) {
+function pathLabel(node: IComponentNode) {
     return node.path.join(' / ')
 }
 

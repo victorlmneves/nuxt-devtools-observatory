@@ -3,12 +3,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
 import { setupStateCookieRegistry, __trackStateCookie } from '@observatory/runtime/composables/state-cookie-registry'
 
-type ObservatoryWindow = Window & {
+type TObservatoryWindow = Window & {
     __observatory__?: { stateCookie?: ReturnType<typeof setupStateCookieRegistry> }
 }
 
 function getWindow() {
-    return window as ObservatoryWindow
+    return window as TObservatoryWindow
 }
 
 beforeEach(() => {
@@ -77,7 +77,7 @@ describe('__trackStateCookie', () => {
         const registry = setupStateCookieRegistry()
         getWindow().__observatory__ = { stateCookie: registry }
 
-        __trackStateCookie(() => ref('abc'), [ 'session', { maxAge: 120, path: '/', httpOnly: false } ], {
+        __trackStateCookie(() => ref('abc'), ['session', { maxAge: 120, path: '/', httpOnly: false }], {
             kind: 'useCookie',
         })
 

@@ -15,14 +15,14 @@ vi.mock('vue', async () => {
     }
 })
 
-type ActionCtx = {
+type TActionCtx = {
     name: string
     args: unknown[]
     after: (cb: () => void) => void
     onError: (cb: (error: unknown) => void) => void
 }
 
-type MutationCtx = {
+type TMutationCtx = {
     storeId: string
     type: 'direct' | 'patch object' | 'patch function'
     payload?: unknown
@@ -33,8 +33,8 @@ class FakeStore {
     $state: Record<string, unknown>
     $options?: { persist?: unknown }
 
-    private actionListeners: Array<(ctx: ActionCtx) => void> = []
-    private subListeners: Array<(mutation: MutationCtx, state: Record<string, unknown>) => void> = []
+    private actionListeners: Array<(ctx: TActionCtx) => void> = []
+    private subListeners: Array<(mutation: TMutationCtx, state: Record<string, unknown>) => void> = []
 
     constructor(id: string, state: Record<string, unknown>, options?: { persist?: unknown }) {
         this.$id = id
@@ -42,7 +42,7 @@ class FakeStore {
         this.$options = options
     }
 
-    $onAction(cb: (ctx: ActionCtx) => void) {
+    $onAction(cb: (ctx: TActionCtx) => void) {
         this.actionListeners.push(cb)
 
         return () => {
@@ -50,7 +50,7 @@ class FakeStore {
         }
     }
 
-    $subscribe(cb: (mutation: MutationCtx, state: Record<string, unknown>) => void) {
+    $subscribe(cb: (mutation: TMutationCtx, state: Record<string, unknown>) => void) {
         this.subListeners.push(cb)
 
         return () => {
@@ -100,7 +100,7 @@ class FakeStore {
         }
     }
 
-    emitMutation(mutation: MutationCtx) {
+    emitMutation(mutation: TMutationCtx) {
         for (const listener of this.subListeners) {
             listener(mutation, structuredClone(this.$state))
         }

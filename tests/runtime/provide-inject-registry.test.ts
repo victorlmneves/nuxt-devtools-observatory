@@ -3,12 +3,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp, defineComponent, h, provide } from 'vue'
 import { setupProvideInjectRegistry, __devProvide, __devInject } from '@observatory/runtime/composables/provide-inject-registry'
 
-type ObservatoryWindow = Window & {
+type TObservatoryWindow = Window & {
     __observatory__?: { provideInject?: ReturnType<typeof setupProvideInjectRegistry> }
 }
 
 function getWindow() {
-    return window as ObservatoryWindow
+    return window as TObservatoryWindow
 }
 
 /**
@@ -43,7 +43,7 @@ describe('setupProvideInjectRegistry', () => {
         expect(typeof reg.getAll).toBe('function')
     })
 
-    it('registerProvide() pushes a ProvideEntry', () => {
+    it('registerProvide() pushes a IProvideEntry', () => {
         const reg = setupProvideInjectRegistry()
 
         reg.registerProvide({
@@ -64,7 +64,7 @@ describe('setupProvideInjectRegistry', () => {
         expect(reg.getAll().provides[0].key).toBe('theme')
     })
 
-    it('registerInject() pushes an InjectEntry', () => {
+    it('registerInject() pushes an IInjectEntry', () => {
         const reg = setupProvideInjectRegistry()
 
         reg.registerInject({
@@ -173,7 +173,7 @@ describe('setupProvideInjectRegistry', () => {
 })
 
 describe('__devProvide', () => {
-    it('registers a ProvideEntry in the registry', () => {
+    it('registers a IProvideEntry in the registry', () => {
         const reg = setupProvideInjectRegistry()
         getWindow().__observatory__ = { provideInject: reg }
 
@@ -222,7 +222,7 @@ describe('__devProvide', () => {
 })
 
 describe('__devInject', () => {
-    it('registers an InjectEntry with resolved: false when key has no provider', () => {
+    it('registers an IInjectEntry with resolved: false when key has no provider', () => {
         const reg = setupProvideInjectRegistry()
         getWindow().__observatory__ = { provideInject: reg }
 

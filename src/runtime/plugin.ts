@@ -16,13 +16,13 @@ import { injectTestBridge } from './test-bridge'
 import { traceStore } from './tracing/traceStore'
 import { mergeSsrTraceRecord } from './tracing/mergeSsrTraceRecord'
 import { getSnapshotRevision } from './snapshot-revision'
-import type { ObservatoryCommand, ObservatorySnapshot } from '../types/rpc'
+import type { TObservatoryCommand, IObservatorySnapshot } from '../types/rpc'
 
-interface ObservatoryWindow extends Window {
+interface IObservatoryWindow extends Window {
     __observatory__?: Record<string, unknown>
 }
 
-type ObservatoryPublicConfig = {
+type TObservatoryPublicConfig = {
     heatmapThresholdCount: number
     heatmapThresholdTime: number
     fetchPageSize?: number
@@ -43,11 +43,11 @@ type ObservatoryPublicConfig = {
     maxTraces?: number
 }
 
-type NuxtAppInstance = ReturnType<typeof useNuxtApp>
+type TNuxtAppInstance = ReturnType<typeof useNuxtApp>
 
-type ObservatoryPluginContext = {
-    nuxtApp: NuxtAppInstance
-    config: ObservatoryPublicConfig
+type TObservatoryPluginContext = {
+    nuxtApp: TNuxtAppInstance
+    config: TObservatoryPublicConfig
     registries: Record<string, unknown>
     debugLog: (...args: unknown[]) => void
     composableNavigationMode: 'route' | 'session'
@@ -149,7 +149,7 @@ function createDebugLog(debugRpc: boolean) {
     }
 }
 
-function isSsrHydrating(nuxtApp: NuxtAppInstance) {
+function isSsrHydrating(nuxtApp: TNuxtAppInstance) {
     return (nuxtApp.isHydrating ?? false) && (nuxtApp.payload as { serverRendered?: boolean })?.serverRendered === true
 }
 
@@ -161,7 +161,7 @@ function callIfFunction(target: unknown, method: string, ...args: unknown[]) {
     }
 }
 
-function createObservatoryContext(nuxtApp: NuxtAppInstance, config: ObservatoryPublicConfig): ObservatoryPluginContext {
+function createObservatoryContext(nuxtApp: TNuxtAppInstance, config: TObservatoryPublicConfig): TObservatoryPluginContext {
     const registries: Record<string, unknown> = {}
 
     if (typeof config.maxTraces === 'number') {
@@ -261,7 +261,7 @@ function serializeTraces(traceViewerEnabled: boolean) {
     }))
 }
 
-function buildSnapshot(ctx: ObservatoryPluginContext): ObservatorySnapshot {
+function buildSnapshot(ctx: TObservatoryPluginContext): IObservatorySnapshot {
     const trackerDefs = [
         { key: 'fetch', fallback: [] },
         { key: 'provideInject', fallback: { provides: [], injects: [] } },
@@ -303,10 +303,10 @@ function buildSnapshot(ctx: ObservatoryPluginContext): ObservatorySnapshot {
         traceViewer: !!ctx.config.traceViewer,
     }
 
-    return snapshot as ObservatorySnapshot
+    return snapshot as IObservatorySnapshot
 }
 
-function broadcastAll(ctx: ObservatoryPluginContext, reason = 'unknown') {
+function broadcastAll(ctx: TObservatoryPluginContext, reason = 'unknown') {
     if (!import.meta.client || !import.meta.hot) {
         return
     }
@@ -328,12 +328,12 @@ function broadcastAll(ctx: ObservatoryPluginContext, reason = 'unknown') {
     import.meta.hot.send('observatory:snapshot', snapshot)
 }
 
-function handleObservatoryCommand(ctx: ObservatoryPluginContext, rawPayload: unknown) {
+function handleObservatoryCommand(ctx: TObservatoryPluginContext, rawPayload: unknown) {
     if (!rawPayload || typeof rawPayload !== 'object') {
         return
     }
 
-    const payload = rawPayload as ObservatoryCommand
+    const payload = rawPayload as TObservatoryCommand
     const composableRegistry = ctx.registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
     const piniaRegistry = ctx.registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
 
@@ -392,7 +392,7 @@ function handleObservatoryCommand(ctx: ObservatoryPluginContext, rawPayload: unk
     }
 }
 
-function setupClientInstrumentation(ctx: ObservatoryPluginContext) {
+function setupClientInstrumentation(ctx: TObservatoryPluginContext) {
     const fetchRegistry = ctx.registries.fetch as Parameters<typeof setupFetchInstrumentation>[1]
 
     if (ctx.config.traceViewer) {
@@ -411,7 +411,7 @@ function setupClientInstrumentation(ctx: ObservatoryPluginContext) {
     }
 }
 
-function resetTrackersOnNavigation(ctx: ObservatoryPluginContext) {
+function resetTrackersOnNavigation(ctx: TObservatoryPluginContext) {
     callIfFunction(ctx.registries.render, 'reset')
     callIfFunction(ctx.registries.provideInject, 'clear')
 
@@ -422,7 +422,7 @@ function resetTrackersOnNavigation(ctx: ObservatoryPluginContext) {
     callIfFunction(ctx.registries.transition, 'clear')
 }
 
-function setupRouterHooks(ctx: ObservatoryPluginContext) {
+function setupRouterHooks(ctx: TObservatoryPluginContext) {
     const router = useRouter()
 
     if (ctx.config.traceViewer) {
@@ -448,7 +448,7 @@ function setupRouterHooks(ctx: ObservatoryPluginContext) {
     })
 }
 
-function startHeartbeat(ctx: ObservatoryPluginContext) {
+function startHeartbeat(ctx: TObservatoryPluginContext) {
     if (ctx.heartbeatId !== null) {
         return
     }
@@ -464,7 +464,7 @@ function startHeartbeat(ctx: ObservatoryPluginContext) {
     }, 400)
 }
 
-function registerLifecycleHooks(ctx: ObservatoryPluginContext) {
+function registerLifecycleHooks(ctx: TObservatoryPluginContext) {
     ctx.nuxtApp.hook('app:mounted', () => {
         callIfFunction(ctx.registries.payload, 'capture')
         broadcastAll(ctx, 'app:mounted')
@@ -488,15 +488,15 @@ function registerLifecycleHooks(ctx: ObservatoryPluginContext) {
     })
 }
 
-function setupClientHost(ctx: ObservatoryPluginContext) {
+function setupClientHost(ctx: TObservatoryPluginContext) {
     if (!import.meta.client) {
         return
     }
 
     setupClientInstrumentation(ctx)
 
-    delete (window as ObservatoryWindow).__observatory__
-    ;(window as ObservatoryWindow).__observatory__ = ctx.registries
+    delete (window as IObservatoryWindow).__observatory__
+    ;(window as IObservatoryWindow).__observatory__ = ctx.registries
     injectTestBridge()
 
     const composableRegistry = ctx.registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
@@ -535,7 +535,7 @@ export default defineNuxtPlugin(() => {
         return
     }
 
-    const ctx = createObservatoryContext(useNuxtApp(), useRuntimeConfig().public.observatory as ObservatoryPublicConfig)
+    const ctx = createObservatoryContext(useNuxtApp(), useRuntimeConfig().public.observatory as TObservatoryPublicConfig)
 
     registerLifecycleHooks(ctx)
     setupClientHost(ctx)

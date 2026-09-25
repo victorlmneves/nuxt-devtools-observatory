@@ -3,7 +3,7 @@ title: Module Options
 description: Configuration for Observatory instrumentation and limits.
 ---
 
-`ModuleOptions` is defined in `src/module.ts`.
+`IModuleOptions` is defined in `src/module.ts`.
 
 ## Feature toggles
 

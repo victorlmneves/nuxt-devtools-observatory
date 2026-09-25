@@ -9,7 +9,7 @@ import {
     markSsrRecordError,
     setSsrArchiveCap,
     snapshotSsrRecord,
-    type SsrTraceRecord,
+    type ISsrTraceRecord,
 } from './ssr-trace-store'
 
 export const NITRO_TIMELINE_PATH = '/__observatory/nitro-timeline'
@@ -510,7 +510,7 @@ export default function fetchCapturePlugin(nitroApp: INitroAppLike) {
         }
 
         const durationMs = start !== undefined ? Math.max(performance.now() - start, 0) : 0
-        const record: SsrTraceRecord | undefined = snapshotSsrRecord(requestId, durationMs)
+        const record: ISsrTraceRecord | undefined = snapshotSsrRecord(requestId, durationMs)
 
         if (!record) {
             return

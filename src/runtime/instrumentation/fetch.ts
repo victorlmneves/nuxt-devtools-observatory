@@ -1,11 +1,11 @@
 import type { NuxtApp } from '#app'
 import { startSpan } from '../tracing/tracing'
-import type { FetchEntry } from '../composables/fetch-registry'
+import type { IFetchEntry } from '../composables/fetch-registry'
 import { isNestedFetchSuppressed, isObservatoryTrackedFetch } from './fetch-dedup'
 
 type TFetchRegistry = {
-    register: (entry: FetchEntry) => void
-    update: (id: string, patch: Partial<FetchEntry>) => void
+    register: (entry: IFetchEntry) => void
+    update: (id: string, patch: Partial<IFetchEntry>) => void
 }
 
 type TFetchLike = ((request: unknown, options?: Record<string, unknown>) => Promise<unknown>) & {
@@ -120,7 +120,7 @@ function shouldRecordInDashboard(options?: Record<string, unknown>) {
     return !isNestedFetchSuppressed() && !isObservatoryTrackedFetch(options)
 }
 
-type FetchInstrumentationOptions = {
+type TFetchInstrumentationOptions = {
     onSuccessfulFetch?: () => void
 }
 
@@ -132,7 +132,7 @@ function invokeOriginalFetch(original: TFetchLike, viaRaw: boolean, request: unk
     return original(request, options)
 }
 
-function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, instrumentation?: FetchInstrumentationOptions): TFetchLike {
+function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, instrumentation?: TFetchInstrumentationOptions): TFetchLike {
     if ((original as TFetchLike & { [WRAPPED_FETCH_FLAG]?: boolean })[WRAPPED_FETCH_FLAG]) {
         return original
     }
@@ -263,7 +263,11 @@ function wrapFetchLike(original: TFetchLike, fetchRegistry?: TFetchRegistry, ins
     return wrapped
 }
 
-export function setupFetchInstrumentation(nuxtApp: NuxtApp, fetchRegistry?: TFetchRegistry, instrumentation?: FetchInstrumentationOptions) {
+export function setupFetchInstrumentation(
+    nuxtApp: NuxtApp,
+    fetchRegistry?: TFetchRegistry,
+    instrumentation?: TFetchInstrumentationOptions
+) {
     const original = nuxtApp.$fetch as TFetchLike | undefined
 
     if (!original) {

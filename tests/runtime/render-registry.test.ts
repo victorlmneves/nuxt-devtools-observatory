@@ -318,7 +318,7 @@ describe('setupRenderRegistry', () => {
 
 // ── Tests for fixes introduced in the bug-fix pass ────────────────────────
 
-describe('RenderEntry interface — children field removed (fix: render-registry)', () => {
+describe('IRenderEntry interface — children field removed (fix: render-registry)', () => {
     it('getAll() entries do not have a children property', () => {
         const app = createApp({ render: () => h('div') })
         const { getAll } = setupRenderRegistry({ vueApp: app })

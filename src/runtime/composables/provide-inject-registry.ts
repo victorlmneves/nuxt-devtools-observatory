@@ -1,7 +1,7 @@
 import { isRef, isReactive, unref, getCurrentInstance, provide, inject } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 
-export interface ProvideEntry {
+export interface IProvideEntry {
     key: string
     componentName: string
     componentFile: string
@@ -24,7 +24,7 @@ export interface ProvideEntry {
     isShadowing: boolean
 }
 
-export interface InjectEntry {
+export interface IInjectEntry {
     key: string
     componentName: string
     componentFile: string
@@ -37,7 +37,7 @@ export interface InjectEntry {
     line: number
 }
 
-type InternalProvideEntry = ProvideEntry & {
+type TInternalProvideEntry = IProvideEntry & {
     /** Live source for reactive values, used to refresh snapshots on read. */
     __valueSource?: unknown
 }
@@ -48,9 +48,9 @@ type InternalProvideEntry = ProvideEntry & {
  * @returns {object} The provide/inject registry with `registerProvide`, `registerInject`, `getAll`, and `clear` members.
  */
 export function setupProvideInjectRegistry(): {
-    registerProvide: (entry: ProvideEntry) => void
-    registerInject: (entry: InjectEntry) => void
-    getAll: () => { provides: ProvideEntry[]; injects: InjectEntry[] }
+    registerProvide: (entry: IProvideEntry) => void
+    registerInject: (entry: IInjectEntry) => void
+    getAll: () => { provides: IProvideEntry[]; injects: IInjectEntry[] }
     getSnapshot: () => string
     clear: () => void
 } {
@@ -65,20 +65,20 @@ export function setupProvideInjectRegistry(): {
 
     // Plain Maps keyed by `${key}:${componentUid}` — O(1) dedup, no Vue reactive overhead.
     // Nothing in the runtime watches these collections, so wrapping them in ref() was wasteful.
-    const provides = new Map<string, InternalProvideEntry>()
-    const injects = new Map<string, InjectEntry>()
+    const provides = new Map<string, TInternalProvideEntry>()
+    const injects = new Map<string, IInjectEntry>()
 
-    function registerProvide(entry: ProvideEntry) {
+    function registerProvide(entry: IProvideEntry) {
         // O(1) upsert — replaces an existing entry for the same key + component so
         // re-renders don't accumulate duplicate rows in the graph.
-        const internal = entry as InternalProvideEntry
+        const internal = entry as TInternalProvideEntry
         provides.set(`${entry.key}:${entry.componentUid}`, internal)
         hasLiveProvides = hasLiveProvides || internal.__valueSource !== undefined
         markDirty()
         emit('provide:register', sanitizeProvide(internal))
     }
 
-    function registerInject(entry: InjectEntry) {
+    function registerInject(entry: IInjectEntry) {
         injects.set(`${entry.key}:${entry.componentUid}`, entry)
         markDirty()
         emit('inject:register', entry)
@@ -92,7 +92,7 @@ export function setupProvideInjectRegistry(): {
         emit('provide:clear', {})
     }
 
-    function sanitizeProvide(entry: InternalProvideEntry): ProvideEntry {
+    function sanitizeProvide(entry: TInternalProvideEntry): IProvideEntry {
         return {
             key: entry.key,
             componentName: entry.componentName,
@@ -109,7 +109,7 @@ export function setupProvideInjectRegistry(): {
         }
     }
 
-    function sanitizeInject(entry: InjectEntry): InjectEntry {
+    function sanitizeInject(entry: IInjectEntry): IInjectEntry {
         return {
             key: entry.key,
             componentName: entry.componentName,
@@ -184,7 +184,7 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
 
     // Determine scope: global (no parent component or app root), layout, or component
     const file = meta.file.toLowerCase()
-    let scope: ProvideEntry['scope'] = 'component'
+    let scope: IProvideEntry['scope'] = 'component'
     if (!instance?.parent || instance?.parent?.type === instance?.appContext?.app?._component) {
         scope = 'global'
     } else if (file.includes('layout') || file.includes('layouts')) {
@@ -209,7 +209,7 @@ export function __devProvide(key: string | symbol, value: unknown, meta: { file:
         scope,
         isShadowing,
         ...(reactiveValue ? { __valueSource: value } : {}),
-    } as ProvideEntry)
+    } as IProvideEntry)
 }
 
 export function __devInject<T>(key: string | symbol, defaultValue: T | undefined, meta: { file: string; line: number }): T | undefined {

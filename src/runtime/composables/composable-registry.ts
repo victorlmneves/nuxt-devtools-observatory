@@ -3,13 +3,13 @@ import { getSsrRequestContext } from '../nitro/ssr-request-context'
 import { addSsrPhaseSpan } from '../nitro/ssr-trace-store'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 
-export interface RefChangeEvent {
+export interface IRefChangeEvent {
     t: number // performance.now() timestamp
     key: string // which ref/reactive key changed
     value: unknown // serialised snapshot of the new value
 }
 
-export interface ComposableEntry {
+export interface IComposableEntry {
     id: string
     name: string
     componentFile: string
@@ -19,7 +19,7 @@ export interface ComposableEntry {
     leakReason?: string
     refs: Record<string, { type: 'ref' | 'computed' | 'reactive'; value: unknown }>
     /** Capped at MAX_HISTORY_PER_ENTRY events, newest last */
-    history: RefChangeEvent[]
+    history: IRefChangeEvent[]
     /**
      * Keys whose underlying ref/reactive object is shared across multiple
      * instances of this composable — indicates module-level (global) state.
@@ -48,19 +48,19 @@ export interface ComposableEntry {
     isLayoutComposable?: boolean
 }
 
-interface RuntimeEffect {
+interface IRuntimeEffect {
     active: boolean
     stop?: () => void
 }
 
-interface TrackedInstance {
+interface ITrackedInstance {
     uid?: number
-    scope?: { effects?: RuntimeEffect[] }
+    scope?: { effects?: IRuntimeEffect[] }
     bm?: unknown[]
     um?: unknown[]
 }
 
-interface SsrObservatoryEvent {
+interface ISsrObservatoryEvent {
     context?: {
         __observatoryRequestId?: string
         __ssrFetchStart?: number
@@ -76,7 +76,7 @@ export function __recordSsrComposableSpan(
     meta: { file: string; line: number },
     startTime: number,
     endTime: number,
-    opts: { error?: unknown; event?: SsrObservatoryEvent } = {}
+    opts: { error?: unknown; event?: ISsrObservatoryEvent } = {}
 ) {
     const eventContext = opts.event?.context ?? getSsrRequestContext()
     const requestId = eventContext?.__observatoryRequestId
@@ -114,22 +114,22 @@ export function __recordSsrComposableSpan(
  * - `getAll`: Retrieves all composable entries.
  * - `getSnapshot`: Returns a cached pre-serialized JSON string, rebuilt only when dirty.
  * @returns {{
- *   register: (entry: ComposableEntry) => void,
+ *   register: (entry: IComposableEntry) => void,
  *   registerLiveRefs: (id: string, refs: Record<string, import('vue').Ref<unknown>>) => void,
  *   registerRawRefs: (id: string, refs: Record<string, unknown>) => void,
  *   onComposableChange: (cb: () => void) => void,
  *   clear: () => void,
  *   setRoute: (path: string) => void,
  *   getRoute: () => string,
- *   update: (id: string, patch: Partial<ComposableEntry>) => void,
- *   getAll: () => ComposableEntry[],
+ *   update: (id: string, patch: Partial<IComposableEntry>) => void,
+ *   getAll: () => IComposableEntry[],
  *   getSnapshot: () => string,
  *   editValue: (id: string, key: string, value: unknown) => void
  * }} An object with `register`, `update`, `getAll`, `getSnapshot`, and related methods.
  */
 export function setupComposableRegistry() {
     // FIX #1: plain Map — no Vue reactivity overhead on every .get()/.set()/.has()
-    const entries = new Map<string, ComposableEntry>()
+    const entries = new Map<string, IComposableEntry>()
 
     // Stores live Ref/computed objects keyed by entry id so getAll() can
     // re-read current values on every snapshot rather than serving the
@@ -137,7 +137,7 @@ export function setupComposableRegistry() {
     const liveRefs = new Map<string, Record<string, import('vue').Ref<unknown>>>()
     // Stop functions for watchEffect instances tracking each composable's live refs
     const liveRefWatchers = new Map<string, () => void>()
-    // Per-entry change history: id → array of RefChangeEvent (capped at MAX_HISTORY)
+    // Per-entry change history: id → array of IRefChangeEvent (capped at MAX_HISTORY)
     // Allow configuration via .env or Nuxt runtime config
     const MAX_HISTORY =
         typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_COMPOSABLE_HISTORY
@@ -149,7 +149,7 @@ export function setupComposableRegistry() {
         typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES
             ? Number(process.env.OBSERVATORY_MAX_COMPOSABLE_ENTRIES)
             : 300
-    const entryHistory = new Map<string, RefChangeEvent[]>()
+    const entryHistory = new Map<string, IRefChangeEvent[]>()
     // Previous serialised values per ref, used to detect which key actually changed
     const prevValues = new Map<string, Record<string, string>>()
     // Raw (unwrapped) objects per entry — used to detect shared/global state by
@@ -285,7 +285,7 @@ export function setupComposableRegistry() {
         return currentRoute
     }
 
-    function register(entry: ComposableEntry) {
+    function register(entry: IComposableEntry) {
         // Enforce cap: prefer evicting unmounted entries first since they are
         // historical records the user has already seen. Only evict a mounted
         // entry if every entry is currently mounted (very unusual).
@@ -418,7 +418,7 @@ export function setupComposableRegistry() {
         _onChange = cb
     }
 
-    function update(id: string, patch: Partial<ComposableEntry>) {
+    function update(id: string, patch: Partial<IComposableEntry>) {
         const existing = entries.get(id)
 
         if (!existing) {
@@ -451,7 +451,7 @@ export function setupComposableRegistry() {
         return val
     }
 
-    function sanitize(entry: ComposableEntry): ComposableEntry {
+    function sanitize(entry: IComposableEntry): IComposableEntry {
         // Re-read live ref values on every snapshot so the devtools panel
         // reflects the current reactive state rather than setup-time values.
         // live is null/undefined after unmount (liveRefs.delete was called),
@@ -503,7 +503,7 @@ export function setupComposableRegistry() {
         }
     }
 
-    function getAll(): ComposableEntry[] {
+    function getAll(): IComposableEntry[] {
         return [...entries.values()].map(sanitize)
     }
 
@@ -672,7 +672,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         return callFn()
     }
 
-    const instance = getCurrentInstance() as TrackedInstance | null
+    const instance = getCurrentInstance() as ITrackedInstance | null
 
     // For component instances, generate a unique ID per call (multiple composables
     // of the same type can be active in the same component at the same time).
@@ -742,7 +742,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     // Snapshot reactive return values for the initial entry,
     // AND keep live references so getAll() can re-read current values.
     // Supports: ref, computed (readonly ref), and reactive() objects.
-    const refs: ComposableEntry['refs'] = {}
+    const refs: IComposableEntry['refs'] = {}
     const liveRefMap: Record<string, import('vue').Ref<unknown>> = {}
     // Raw unwrapped objects for identity comparison (global vs local detection)
     const rawRefMap: Record<string, unknown> = {}
@@ -785,7 +785,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     const normalizedFile = callerComponentFile?.replace(/\\/g, '/') ?? ''
     const isLayoutComponent = normalizedFile.includes('/layouts/')
 
-    const entry: ComposableEntry = {
+    const entry: IComposableEntry = {
         id,
         name,
         componentFile: meta.file,

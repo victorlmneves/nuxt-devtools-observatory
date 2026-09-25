@@ -216,7 +216,7 @@ Accurate duration is measured by bracketing each `beforeMount`/`mounted` and
 Component bounding boxes are captured via `$el.getBoundingClientRect()` for the DOM
 overlay mode.
 
-Each `RenderEntry` carries a `timeline: RenderEvent[]` (capped at 100 events, newest
+Each `IRenderEntry` carries a `timeline: IRenderEvent[]` (capped at 100 events, newest
 last). Every mount and update cycle appends an event recording:
 
 - `kind` — `mount` or `update`
@@ -307,7 +307,7 @@ The panel provides:
 
 The Trace Viewer automatically collects per-route traces that span the full lifecycle of
 each page visit. Every significant event is recorded as a typed span and grouped into a
-single `TraceEntry` per navigation, so you can see everything that happened — in order —
+single `ITraceEntry` per navigation, so you can see everything that happened — in order —
 after a route change.
 
 **Span types collected:**
@@ -337,7 +337,7 @@ headers are stored.
 Real render time is measured by storing `performance.now()` in a `WeakMap<ComponentPublicInstance, number>` inside `beforeMount` / `beforeUpdate`, then reading it back in the corresponding `mounted` / `updated` hooks. This produces a `type: 'render'` span whose duration is the actual DOM-patching cost, separately from the `component:mounted` hook span (which only measures the hook body itself).
 
 **Trace anchoring:**
-Each `TraceEntry` is anchored to the `startTime` of its first span, so bar positions in the timeline are always relative to the first event in the trace rather than the time the trace object was created.
+Each `ITraceEntry` is anchored to the `startTime` of its first span, so bar positions in the timeline are always relative to the first event in the trace rather than the time the trace object was created.
 
 The panel provides:
 
@@ -465,8 +465,8 @@ src/
     │   ├── fetch.ts                    ← $fetch wrap + fetch span recording
     │   └── asyncData.ts                ← useAsyncData-specific span handling
     ├── tracing/
-    │   ├── trace.ts                    ← Span + Trace types (server-side internal)
-    │   ├── traceStore.ts               ← In-memory Map<string, Trace> store
+    │   ├── trace.ts                    ← ISpan + ITrace types (server-side internal)
+    │   ├── traceStore.ts               ← In-memory Map<string, ITrace> store
     │   ├── tracing.ts                  ← Span open/close helpers
     │   └── context.ts                  ← Current-trace context (per async task)
     └── nitro/

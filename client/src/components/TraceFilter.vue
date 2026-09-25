@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEntry } from '@observatory/types/snapshot'
+import type { ITraceEntry } from '@observatory/types/snapshot'
 import { getSpanTypesFromTraces } from '@observatory-client/composables/useTraceFilter'
 
-interface Props {
-    traces: TraceEntry[]
+interface IProps {
+    traces: ITraceEntry[]
     searchQuery: string
     selectedSpanTypes: Set<string>
     minDuration: number
@@ -13,7 +13,7 @@ interface Props {
     hasActiveFilters: boolean
 }
 
-const props = defineProps<Props>()
+const props = defineProps<IProps>()
 
 const emit = defineEmits<{
     'update:search': [value: string]

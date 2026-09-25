@@ -1,16 +1,16 @@
 <script setup lang="ts">
-interface ComponentNode {
+interface IComponentNode {
     id: string
     label: string
     file: string
     renders: number
     avgMs: number
     triggers: string[]
-    children: ComponentNode[]
+    children: IComponentNode[]
 }
 
 const props = defineProps<{
-    node: ComponentNode
+    node: IComponentNode
     mode: string
     threshold: number
     hotOnly: boolean
@@ -19,14 +19,14 @@ const props = defineProps<{
 
 const emit = defineEmits(['select'])
 
-function getVal(n: ComponentNode) {
+function getVal(n: IComponentNode) {
     return props.mode === 'count' ? n.renders : n.avgMs
 }
 
-function getMax(n: ComponentNode): number {
+function getMax(n: IComponentNode): number {
     let max = 1
 
-    function walk(ns: ComponentNode[]) {
+    function walk(ns: IComponentNode[]) {
         ns.forEach((n) => {
             const v = getVal(n)
 
@@ -61,7 +61,7 @@ function heatColor(val: number, max: number) {
     }
 }
 
-function isHotNode(n: ComponentNode) {
+function isHotNode(n: IComponentNode) {
     let value: number
 
     if (props.mode === 'count') {
@@ -77,7 +77,7 @@ function isHotNode(n: ComponentNode) {
     }
 }
 
-function shouldShow(n: ComponentNode): boolean {
+function shouldShow(n: IComponentNode): boolean {
     if (!props.hotOnly) {
         return true
     } else {
@@ -93,7 +93,7 @@ function shouldShow(n: ComponentNode): boolean {
     }
 }
 
-function handleSelect(n: ComponentNode) {
+function handleSelect(n: IComponentNode) {
     emit('select', n)
 }
 </script>

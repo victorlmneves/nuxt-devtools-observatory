@@ -2,9 +2,9 @@
 import { ref, computed, watch } from 'vue'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
-import type { InjectEntry, ProvideEntry } from '@observatory/types/snapshot'
+import type { IInjectEntry, IProvideEntry } from '@observatory/types/snapshot'
 
-interface TreeNodeData {
+interface ITreeNodeData {
     id: string
     label: string
     componentName: string
@@ -23,17 +23,17 @@ interface TreeNodeData {
         consumerNames: string[]
     }>
     injects: Array<{ key: string; from: string | null; fromName: string | null; ok: boolean }>
-    children: TreeNodeData[]
+    children: ITreeNodeData[]
 }
 
-interface LayoutNode {
-    data: TreeNodeData
+interface ILayoutNode {
+    data: ITreeNodeData
     parentId: string | null
     x: number
     y: number
 }
 
-interface Edge {
+interface IEdge {
     id: string
     x1: number
     y1: number
@@ -49,7 +49,7 @@ const H_GAP = 18
 const { provideInject, connected } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(280, 'observatory:provide:detailWidth')
 
-function nodeColor(node: TreeNodeData): string {
+function nodeColor(node: ITreeNodeData): string {
     if (node.injects.some((entry) => !entry.ok)) {
         return 'var(--red)'
     }
@@ -65,7 +65,7 @@ function nodeColor(node: TreeNodeData): string {
     return 'var(--text3)'
 }
 
-function matchesFilter(node: TreeNodeData, filter: string): boolean {
+function matchesFilter(node: ITreeNodeData, filter: string): boolean {
     if (filter === 'all') {
         return true
     }
@@ -81,7 +81,7 @@ function matchesFilter(node: TreeNodeData, filter: string): boolean {
     return node.provides.some((entry) => entry.key === filter) || node.injects.some((entry) => entry.key === filter)
 }
 
-function matchesSearch(node: TreeNodeData, query: string): boolean {
+function matchesSearch(node: ITreeNodeData, query: string): boolean {
     if (!query) {
         return true
     }
@@ -99,14 +99,14 @@ function matchesSearch(node: TreeNodeData, query: string): boolean {
 /**
  * Build a leaf-count lookup for each node in visible trees.
  * Uses iterative post-order traversal to keep deep trees stack-safe.
- * @param {TreeNodeData[]} roots - Visible tree roots.
+ * @param {ITreeNodeData[]} roots - Visible tree roots.
  * @returns {Map<string, number>} Map of node id to subtree leaf count.
  */
-function buildLeafCountMap(roots: TreeNodeData[]): Map<string, number> {
+function buildLeafCountMap(roots: ITreeNodeData[]): Map<string, number> {
     const counts = new Map<string, number>()
 
     for (const root of roots) {
-        const stack: Array<{ node: TreeNodeData; visited: boolean }> = [{ node: root, visited: false }]
+        const stack: Array<{ node: ITreeNodeData; visited: boolean }> = [{ node: root, visited: false }]
 
         while (stack.length) {
             const current = stack.pop()!
@@ -197,15 +197,15 @@ function openInEditor(file: string) {
     openInEditorFromStore(file)
 }
 
-function componentId(entry: ProvideEntry | InjectEntry) {
+function componentId(entry: IProvideEntry | IInjectEntry) {
     return String(entry.componentUid)
 }
 
-const nodes = computed<TreeNodeData[]>(() => {
-    const nodeMap = new Map<string, TreeNodeData>()
+const nodes = computed<ITreeNodeData[]>(() => {
+    const nodeMap = new Map<string, ITreeNodeData>()
     const parentMap = new Map<string, string | null>()
 
-    function ensureNode(entry: ProvideEntry | InjectEntry) {
+    function ensureNode(entry: IProvideEntry | IInjectEntry) {
         const id = componentId(entry)
         const existing = nodeMap.get(id)
 
@@ -213,7 +213,7 @@ const nodes = computed<TreeNodeData[]>(() => {
             return existing
         }
 
-        const created: TreeNodeData = {
+        const created: ITreeNodeData = {
             id,
             label: basename(entry.componentFile),
             componentName: entry.componentName ?? basename(entry.componentFile),
@@ -230,7 +230,7 @@ const nodes = computed<TreeNodeData[]>(() => {
     }
 
     // Build a lookup: key → list of inject entries (to compute consumer lists)
-    const injectsByKey = new Map<string, InjectEntry[]>()
+    const injectsByKey = new Map<string, IInjectEntry[]>()
     for (const entry of provideInject.value.injects) {
         const list = injectsByKey.get(entry.key) ?? []
         list.push(entry)
@@ -284,7 +284,7 @@ const nodes = computed<TreeNodeData[]>(() => {
         }
     }
 
-    const roots: TreeNodeData[] = []
+    const roots: ITreeNodeData[] = []
 
     for (const [id, node] of nodeMap.entries()) {
         const parentId = parentMap.get(id)
@@ -302,7 +302,7 @@ const nodes = computed<TreeNodeData[]>(() => {
 
 const activeFilter = ref('all')
 const searchQuery = ref('')
-const selectedNode = ref<TreeNodeData | null>(null)
+const selectedNode = ref<ITreeNodeData | null>(null)
 const expandedProvideValues = ref<Set<string>>(new Set())
 
 watch(selectedNode, () => {
@@ -333,18 +333,18 @@ const allKeys = computed(() => {
     return [...keys]
 })
 
-const visibleNodes = computed<TreeNodeData[]>(() => {
+const visibleNodes = computed<ITreeNodeData[]>(() => {
     /**
      * Iterative post-order prune — avoids stack overflow on deep trees.
      * Processes nodes bottom-up so each parent can inspect its children's
      * already-computed visibility before deciding its own.
-     * @param {TreeNodeData} root - The root node of the tree to prune.
-     * @returns {TreeNodeData | null} The pruned tree node or null if the node is not visible.
+     * @param {ITreeNodeData} root - The root node of the tree to prune.
+     * @returns {ITreeNodeData | null} The pruned tree node or null if the node is not visible.
      */
-    function pruneIterative(root: TreeNodeData): TreeNodeData | null {
+    function pruneIterative(root: ITreeNodeData): ITreeNodeData | null {
         // Phase 1: collect nodes in pre-order (parent before children)
-        const order: TreeNodeData[] = []
-        const stack: TreeNodeData[] = [root]
+        const order: ITreeNodeData[] = []
+        const stack: ITreeNodeData[] = [root]
 
         while (stack.length) {
             const node = stack.pop()!
@@ -356,13 +356,13 @@ const visibleNodes = computed<TreeNodeData[]>(() => {
         }
 
         // Phase 2: process in reverse pre-order (children before parents)
-        const pruned = new Map<TreeNodeData, TreeNodeData | null>()
+        const pruned = new Map<ITreeNodeData, ITreeNodeData | null>()
 
         for (let i = order.length - 1; i >= 0; i--) {
             const node = order[i]
             const visibleChildren = node.children
                 .map((child) => pruned.get(child) ?? null)
-                .filter((child): child is TreeNodeData => child !== null)
+                .filter((child): child is ITreeNodeData => child !== null)
             const selfMatches = matchesFilter(node, activeFilter.value) && matchesSearch(node, searchQuery.value)
 
             if (!selfMatches && !visibleChildren.length) {
@@ -375,12 +375,12 @@ const visibleNodes = computed<TreeNodeData[]>(() => {
         return pruned.get(root) ?? null
     }
 
-    return nodes.value.map(pruneIterative).filter(Boolean) as TreeNodeData[]
+    return nodes.value.map(pruneIterative).filter(Boolean) as ITreeNodeData[]
 })
 
 const visibleLeafCountById = computed(() => buildLeafCountMap(visibleNodes.value))
 
-function findNodeById(roots: TreeNodeData[], id: string): TreeNodeData | null {
+function findNodeById(roots: ITreeNodeData[], id: string): ITreeNodeData | null {
     const stack = [...roots]
 
     while (stack.length) {
@@ -424,16 +424,16 @@ watch([visibleNodes, selectedNode], ([currentNodes, currentSelected]) => {
     }
 })
 
-const layout = computed<LayoutNode[]>(() => {
-    const flat: LayoutNode[] = []
+const layout = computed<ILayoutNode[]>(() => {
+    const flat: ILayoutNode[] = []
     const pad = H_GAP
     const leafCountById = visibleLeafCountById.value
-    const getLeafCount = (node: TreeNodeData) => leafCountById.get(node.id) ?? 1
+    const getLeafCount = (node: ITreeNodeData) => leafCountById.get(node.id) ?? 1
 
     // Iterative replacement for the recursive place() — avoids stack overflow
     // on deep component trees. Uses an explicit stack of pending work items.
-    interface WorkItem {
-        node: TreeNodeData
+    interface IWorkItem {
+        node: ITreeNodeData
         depth: number
         slotLeft: number
         parentId: string | null
@@ -442,7 +442,7 @@ const layout = computed<LayoutNode[]>(() => {
     let left = pad
 
     for (const root of visibleNodes.value) {
-        const stack: WorkItem[] = [{ node: root, depth: 0, slotLeft: left, parentId: null }]
+        const stack: IWorkItem[] = [{ node: root, depth: 0, slotLeft: left, parentId: null }]
 
         while (stack.length) {
             const { node, depth, slotLeft, parentId } = stack.pop()!
@@ -458,7 +458,7 @@ const layout = computed<LayoutNode[]>(() => {
 
             // Push children in reverse so leftmost child is processed first
             let childLeft = slotLeft
-            const childWork: WorkItem[] = []
+            const childWork: IWorkItem[] = []
 
             for (const child of node.children) {
                 const childLeaves = getLeafCount(child)
@@ -481,7 +481,7 @@ const layout = computed<LayoutNode[]>(() => {
 const canvasW = computed(() => layout.value.reduce((max, node) => Math.max(max, node.x + NODE_W / 2 + 20), 520))
 const canvasH = computed(() => layout.value.reduce((max, node) => Math.max(max, node.y + NODE_H / 2 + 20), 200))
 
-const edges = computed<Edge[]>(() => {
+const edges = computed<IEdge[]>(() => {
     const byId = new Map(layout.value.map((node) => [node.data.id, node]))
 
     return layout.value

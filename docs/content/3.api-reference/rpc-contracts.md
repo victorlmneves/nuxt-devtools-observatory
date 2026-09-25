@@ -7,9 +7,9 @@ RPC types are defined in `src/types/rpc.ts` and snapshot-related fields in `src/
 
 ## Core concepts
 
-- `ObservatorySnapshot`: aggregated payload sent to the client panel.
-- `ServerFunctions`: host-side handlers (snapshot and command handling).
-- `ClientFunctions`: iframe-side event receiver methods.
+- `IObservatorySnapshot`: aggregated payload sent to the client panel.
+- `IObservatoryServerFunctions`: host-side handlers (snapshot and command handling).
+- `IObservatoryClientFunctions`: iframe-side event receiver methods.
 
 ## Typical flow
 
@@ -25,19 +25,19 @@ When changing fields, update docs and tests in the same PR.
 
 ## Payload inspector contracts
 
-- Snapshot field: `payload` (`PayloadInspectorSnapshot`).
+- Snapshot field: `payload` (`IPayloadInspectorSnapshot`).
 - `keys` lists payload entries with `bucket`, `origin` (`ssr` | `csr`), `bytes`, and a truncated `preview`.
 - Feature flag: `features.payloadInspector`.
 
 ## State / cookie contracts
 
-- Snapshot field: `stateCookies` (array of `StateCookieEntry`).
+- Snapshot field: `stateCookies` (array of `IStateCookieEntry`).
 - Each entry has `kind` (`useState` | `useCookie`), `key`, `origin`, a truncated `preview`, and optional cookie option metadata.
 - Feature flag: `features.stateCookieTracker`.
 
 ## Pinia contracts
 
-- Snapshot field: `piniaStores` (array of `PiniaStoreEntry`).
+- Snapshot field: `piniaStores` (array of `IPiniaStoreEntry`).
 - Each store includes `state`, `timeline`, `dependencies`, and `hydrationTimeline`.
 - `timeline` contains both action and mutation events with `beforeState`, `afterState`, and `diff`.
 
