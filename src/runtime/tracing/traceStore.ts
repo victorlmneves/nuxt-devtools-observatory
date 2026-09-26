@@ -27,9 +27,7 @@ export interface IEndTraceInput {
 }
 
 function createId(prefix: string) {
-    const random = Math.random().toString(36).slice(2, 10)
-
-    return `${prefix}_${Date.now()}_${random}`
+    return `${prefix}_${Date.now()}_${crypto.randomUUID()}`
 }
 
 function computeDuration(startTime: number, endTime: number) {

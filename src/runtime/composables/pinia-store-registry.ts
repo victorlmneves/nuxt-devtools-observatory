@@ -378,7 +378,7 @@ export function setupPiniaStoreRegistry(options: {
         entries.set(store.$id, entry)
 
         const offAction = store.$onAction(({ name, args, after, onError }) => {
-            const actionId = `${store.$id}:action:${name}:${nowMs()}:${Math.random().toString(36).slice(2, 8)}`
+            const actionId = `${store.$id}:action:${name}:${nowMs()}:${crypto.randomUUID()}`
             const start = nowMs()
             const startSnapshot = safeSnapshot(store.$state)
             const stack = stackProvider()
@@ -474,7 +474,7 @@ export function setupPiniaStoreRegistry(options: {
                 const at = nowMs()
 
                 const event: IPiniaMutationEvent = {
-                    id: `${store.$id}:mutation:${at}:${Math.random().toString(36).slice(2, 8)}`,
+                    id: `${store.$id}:mutation:${at}:${crypto.randomUUID()}`,
                     storeId: store.$id,
                     storeName: store.$id,
                     kind: 'mutation',

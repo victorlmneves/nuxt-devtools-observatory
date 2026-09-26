@@ -11,9 +11,17 @@ import { ref } from 'vue'
 const visible = ref(true)
 const items = ref(['apple', 'banana', 'cherry'])
 
+function randomIndex(length: number): number {
+    const values = new Uint32Array(1)
+
+    crypto.getRandomValues(values)
+
+    return values[0] % length
+}
+
 function addItem() {
     const fruits = ['dragonfruit', 'elderberry', 'fig', 'grape', 'honeydew']
-    const next = fruits[Math.floor(Math.random() * fruits.length)]
+    const next = fruits[randomIndex(fruits.length)]
 
     if (!items.value.includes(next)) {
         items.value.push(next)
@@ -22,7 +30,7 @@ function addItem() {
 
 function removeRandom() {
     if (items.value.length > 1) {
-        items.value.splice(Math.floor(Math.random() * items.value.length), 1)
+        items.value.splice(randomIndex(items.value.length), 1)
     }
 }
 </script>

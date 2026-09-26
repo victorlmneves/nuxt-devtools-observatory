@@ -736,7 +736,7 @@ const knownRoutes = computed(() => {
             if (event.route) routes.add(event.route)
         }
     }
-    return [...routes].sort()
+    return [...routes].sort((left, right) => left.localeCompare(right))
 })
 
 const activeSelected = computed(() => {
@@ -994,17 +994,19 @@ function formatTimestamp(t: number): string {
             <div class="render-heatmap__threshold-group">
                 <span class="muted text-sm">threshold</span>
                 <input
+                    id="render-heatmap-threshold"
                     v-model.number="activeThreshold"
                     type="range"
                     :min="activeMode === 'count' ? 2 : 4"
                     :max="activeMode === 'count' ? 20 : 100"
                     :step="activeMode === 'count' ? 1 : 4"
                     class="render-heatmap__threshold-range"
+                    aria-label="Render threshold"
                 />
                 <span class="mono text-sm">{{ activeThreshold }}{{ activeMode === 'count' ? '+ renders' : 'ms+' }}</span>
             </div>
             <button :class="{ active: activeHotOnly }" @click="activeHotOnly = !activeHotOnly">hot only</button>
-            <select v-model="activeRoute" class="route-select mono text-sm" title="Filter by route">
+            <select id="render-heatmap-route" v-model="activeRoute" class="route-select mono text-sm" aria-label="Filter by route">
                 <option value="">all routes</option>
                 <option v-for="r in knownRoutes" :key="r" :value="r">{{ r }}</option>
             </select>
@@ -1056,9 +1058,11 @@ function formatTimestamp(t: number): string {
             <section class="render-heatmap__tree-panel">
                 <div class="render-heatmap__tree-toolbar">
                     <input
+                        id="render-heatmap-search"
                         :value="search"
                         class="render-heatmap__search-input mono"
                         placeholder="Find components..."
+                        aria-label="Find components"
                         @input="updateSearch"
                     />
                 </div>

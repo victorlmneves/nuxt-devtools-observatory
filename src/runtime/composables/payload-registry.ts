@@ -1,7 +1,5 @@
 import type { TPayloadBucket, IPayloadInspectorSnapshot, IPayloadKeyEntry } from '../../types/snapshot'
 
-export type { TPayloadBucket, IPayloadInspectorSnapshot, IPayloadKeyEntry }
-
 const MAX_PREVIEW_BYTES = 2_000
 
 function byteLength(value: unknown): number {

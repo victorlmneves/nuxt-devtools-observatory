@@ -10,48 +10,69 @@ export function getSpanTypesFromTraces(traces: ITraceEntry[]): string[] {
         }
     }
 
-    return Array.from(types).sort()
+    return Array.from(types).sort((left, right) => left.localeCompare(right))
+}
+
+function textIncludes(value: string, query: string): boolean {
+    return value.toLowerCase().includes(query)
+}
+
+function spanMetadataIncludes(metadata: Record<string, unknown> | undefined, query: string): boolean {
+    if (!metadata) {
+        return false
+    }
+
+    return Object.values(metadata).some((value) => typeof value === 'string' && textIncludes(value, query))
+}
+
+function matchesSearch(trace: ITraceEntry, query: string): boolean {
+    if (!query) {
+        return true
+    }
+
+    const lowerQuery = query.toLowerCase()
+
+    if (textIncludes(trace.name, lowerQuery)) {
+        return true
+    }
+
+    return trace.spans.some((span) => textIncludes(span.name, lowerQuery) || spanMetadataIncludes(span.metadata, lowerQuery))
+}
+
+function matchesRouteFilter(trace: ITraceEntry, route: string): boolean {
+    if (!route) {
+        return true
+    }
+
+    const lowerRoute = route.toLowerCase()
+    const traceRoute = trace.metadata?.route
+
+    if (typeof traceRoute === 'string' && textIncludes(traceRoute, lowerRoute)) {
+        return true
+    }
+
+    for (const span of trace.spans) {
+        const spanRoute = span.metadata?.route
+        const spanPath = span.metadata?.path
+
+        if (typeof spanRoute === 'string' && textIncludes(spanRoute, lowerRoute)) {
+            return true
+        }
+
+        if (typeof spanPath === 'string' && textIncludes(spanPath, lowerRoute)) {
+            return true
+        }
+    }
+
+    return false
 }
 
 export function useTraceFilter() {
     const searchQuery = ref<string>('')
     const selectedSpanTypes = ref<Set<string>>(new Set())
     const minDuration = ref<number>(0)
-    const maxDuration = ref<number>(Infinity)
+    const maxDuration = ref<number>(Number.POSITIVE_INFINITY)
     const routeFilter = ref<string>('')
-
-    function matchesSearch(trace: ITraceEntry, query: string): boolean {
-        if (!query) {
-            return true
-        }
-
-        const lowerQuery = query.toLowerCase()
-
-        // Search in trace name
-        if (trace.name.toLowerCase().includes(lowerQuery)) {
-            return true
-        }
-
-        // Search in span names
-        for (const span of trace.spans) {
-            if (span.name.toLowerCase().includes(lowerQuery)) {
-                return true
-            }
-        }
-
-        // Search in metadata (e.g., route, URL endpoint)
-        for (const span of trace.spans) {
-            if (span.metadata) {
-                for (const value of Object.values(span.metadata)) {
-                    if (typeof value === 'string' && value.toLowerCase().includes(lowerQuery)) {
-                        return true
-                    }
-                }
-            }
-        }
-
-        return false
-    }
 
     function matchesSpanTypeFilter(trace: ITraceEntry, types: Set<string>): boolean {
         if (types.size === 0) return true
@@ -66,47 +87,13 @@ export function useTraceFilter() {
     }
 
     function matchesDurationFilter(trace: ITraceEntry, min: number, max: number): boolean {
-        const hasExplicitDurationFilter = min > 0 || max < Infinity
+        const hasExplicitDurationFilter = min > 0 || max < Number.POSITIVE_INFINITY
 
         if (trace.durationMs === undefined) {
             return !hasExplicitDurationFilter
         }
 
         return trace.durationMs >= min && trace.durationMs <= max
-    }
-
-    function matchesRouteFilter(trace: ITraceEntry, route: string): boolean {
-        if (!route) {
-            return true
-        }
-
-        // Check trace metadata for route
-        if (trace.metadata?.route && typeof trace.metadata.route === 'string') {
-            if (trace.metadata.route.toLowerCase().includes(route.toLowerCase())) {
-                return true
-            }
-        }
-
-        // Check span metadata for route or path
-        for (const span of trace.spans) {
-            if (span.metadata?.route) {
-                const routeValue = String(span.metadata.route).toLowerCase()
-
-                if (routeValue.includes(route.toLowerCase())) {
-                    return true
-                }
-            }
-
-            if (span.metadata?.path) {
-                const pathValue = String(span.metadata.path).toLowerCase()
-
-                if (pathValue.includes(route.toLowerCase())) {
-                    return true
-                }
-            }
-        }
-
-        return false
     }
 
     function filterTraces(traces: ITraceEntry[]): ITraceEntry[] {
@@ -132,7 +119,7 @@ export function useTraceFilter() {
         searchQuery.value = ''
         selectedSpanTypes.value.clear()
         minDuration.value = 0
-        maxDuration.value = Infinity
+        maxDuration.value = Number.POSITIVE_INFINITY
         routeFilter.value = ''
     }
 
@@ -141,7 +128,7 @@ export function useTraceFilter() {
             searchQuery.value.length > 0 ||
             selectedSpanTypes.value.size > 0 ||
             minDuration.value > 0 ||
-            maxDuration.value < Infinity ||
+            maxDuration.value < Number.POSITIVE_INFINITY ||
             routeFilter.value.length > 0
         )
     })

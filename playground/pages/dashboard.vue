@@ -74,9 +74,11 @@ const showLeakyAudit = ref(false)
                 </p>
                 <div class="filter-row">
                     <input
+                        id="dashboard-product-filter"
                         :value="filterText"
                         placeholder="Filter products…"
                         class="filter-input"
+                        aria-label="Filter products"
                         @input="setFilter('text', ($event.target as HTMLInputElement).value)"
                     />
                     <button class="filter-btn" @click="setFilter('inCartOnly', !activeFilters.includes('inCartOnly'))">

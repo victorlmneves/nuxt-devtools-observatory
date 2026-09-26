@@ -54,8 +54,11 @@ function remountSuspense() {
     <div class="layout">
         <h2>KeepAlive / Suspense Verification</h2>
         <p class="lede">
-            Open the Observatory <strong>KeepAlive</strong> tab. Switch panes to record activate / deactivate / cache eviction
-            (<code>max=2</code>). Remount Suspense to record pending, fallback, and resolve timing.
+            Open the Observatory
+            <strong>KeepAlive</strong>
+            tab. Switch panes to record activate / deactivate / cache eviction (
+            <code>max=2</code>
+            ). Remount Suspense to record pending, fallback, and resolve timing.
         </p>
 
         <section>
@@ -79,13 +82,7 @@ function remountSuspense() {
                 <span class="muted">fallback {{ fallbackSeen }} · resolve {{ resolveSeen }}</span>
             </div>
             <ClientOnly>
-                <Suspense
-                    v-if="suspenseReady"
-                    :key="suspenseKey"
-                    :timeout="80"
-                    @fallback="fallbackSeen++"
-                    @resolve="resolveSeen++"
-                >
+                <Suspense v-if="suspenseReady" :key="suspenseKey" :timeout="80" @fallback="fallbackSeen++" @resolve="resolveSeen++">
                     <component :is="SlowAsync" />
                     <template #fallback>
                         <div data-testid="suspense-fallback" class="pane pane-fallback">Loading async panel…</div>
