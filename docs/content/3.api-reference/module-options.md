@@ -15,6 +15,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `stateCookieTracker`
 - `renderHeatmap`
 - `transitionTracker`
+- `keepAliveTracker`
 - `traceViewer`
 
 ## Runtime behavior
@@ -41,6 +42,7 @@ description: Configuration for Observatory instrumentation and limits.
 - `maxTraces` — also caps the in-memory Nitro/SSR request archive used by Trace Viewer
 - `maxPiniaTimeline`
 - `maxStateCookieEntries`
+- `maxKeepAliveEntries`
 
 ## Guidance
 

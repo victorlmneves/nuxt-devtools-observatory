@@ -13,4 +13,5 @@ Use these guides to understand what each panel captures and how to interpret it.
 - [State / cookies](/feature-guides/state-cookies)
 - [Render Heatmap](/feature-guides/render-heatmap)
 - [Transition Tracker](/feature-guides/transition-tracker)
+- [KeepAlive / Suspense](/feature-guides/keepalive-suspense)
 - [Trace Viewer](/feature-guides/trace-viewer)

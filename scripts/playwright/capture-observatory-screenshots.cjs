@@ -13,6 +13,7 @@ const screenshots = [
   { name: 'pinia-tracker', path: '/pinia', file: 'docs/screenshots/pinia-tracker.png' },
   { name: 'render-heatmap', path: '/heatmap', file: 'docs/screenshots/render-heatmap.png' },
   { name: 'transition-tracker', path: '/transitions', file: 'docs/screenshots/transition-tracker.png' },
+  { name: 'keep-alive-tracker', path: '/keepalive', file: 'docs/screenshots/keep-alive-tracker.png' },
   { name: 'trace-viewer', path: '/traces', file: 'docs/screenshots/trace-viewer.png' },
 ];
 
@@ -26,6 +27,7 @@ const mockData = {
       composableTracker: true,
       renderHeatmap: true,
       transitionTracker: true,
+      keepAliveTracker: true,
       traceViewer: true,
       composableNavigationMode: 'route',
     },
@@ -88,6 +90,18 @@ const mockData = {
       { id: 't6', transitionName: 'zoom', parentComponent: 'App', direction: 'enter', phase: 'entered', startTime: Date.now() - 6000, endTime: Date.now() - 5900, durationMs: 100, cancelled: false, appear: true },
       { id: 't7', transitionName: 'zoom', parentComponent: 'App', direction: 'leave', phase: 'leave-cancelled', startTime: Date.now() - 7000, endTime: Date.now() - 6900, durationMs: 100, cancelled: true, appear: false },
     ],
+    keepAlive: {
+      events: [
+        { id: 'ka1', kind: 'keep-alive', phase: 'activated', name: 'PaneA', parentComponent: 'Demo', startTime: Date.now() - 4000, fromCache: false, cacheSize: 1, cacheMax: 2 },
+        { id: 'ka2', kind: 'keep-alive', phase: 'deactivated', name: 'PaneA', parentComponent: 'Demo', startTime: Date.now() - 3500, cacheSize: 1, cacheMax: 2 },
+        { id: 'ka3', kind: 'keep-alive', phase: 'activated', name: 'PaneB', parentComponent: 'Demo', startTime: Date.now() - 3000, fromCache: false, cacheSize: 2, cacheMax: 2 },
+        { id: 'su1', kind: 'suspense', phase: 'resolved', name: 'Demo', parentComponent: 'Demo', startTime: Date.now() - 2000, endTime: Date.now() - 1400, durationMs: 600, fallbackMs: 80, timeoutMs: 80 },
+      ],
+      cache: [
+        { id: 'PaneA', name: 'PaneA', key: 'PaneA', status: 'cached', hits: 2, cachedAt: Date.now() - 4000, lastEventAt: Date.now() - 3500 },
+        { id: 'PaneB', name: 'PaneB', key: 'PaneB', status: 'active', hits: 1, cachedAt: Date.now() - 3000, lastEventAt: Date.now() - 3000 },
+      ],
+    },
     traces: (() => {
       // Helper: build a realistic per-route trace with multiple span types.
       const t0 = performance.now() - 3500; // shop trace started ~3.5 s ago
@@ -229,6 +243,12 @@ const mockData = {
         if (firstTreeRow) firstTreeRow.click();
       });
       await page.waitForTimeout(400);
+    } else if (tab.name === 'keep-alive-tracker') {
+      await page.evaluate(() => {
+        const firstRow = document.querySelector('.keep-alive-tracker .data-table tbody tr');
+        if (firstRow) firstRow.click();
+      });
+      await page.waitForTimeout(200);
     } else if (tab.name === 'transition-tracker') {
       await page.evaluate(() => {
         const firstRow = document.querySelector('.transition-row, .data-table tbody tr');

@@ -226,6 +226,53 @@ export interface IStateCookieEntry {
     }
 }
 
+export type TKeepAliveKind = 'keep-alive' | 'suspense'
+
+export type TKeepAlivePhase =
+    | 'activated'
+    | 'deactivated'
+    | 'evicted'
+    | 'pending'
+    | 'fallback'
+    | 'resolved'
+    | 'interrupted'
+
+export type TKeepAliveCacheStatus = 'active' | 'cached' | 'evicted'
+
+export interface IKeepAliveEntry {
+    id: string
+    kind: TKeepAliveKind
+    phase: TKeepAlivePhase
+    name: string
+    parentComponent: string
+    startTime: number
+    endTime?: number
+    durationMs?: number
+    key?: string
+    fromCache?: boolean
+    cacheSize?: number
+    cacheMax?: number
+    include?: string
+    exclude?: string
+    timeoutMs?: number
+    fallbackMs?: number
+}
+
+export interface IKeepAliveCacheEntry {
+    id: string
+    name: string
+    key: string
+    status: TKeepAliveCacheStatus
+    hits: number
+    cachedAt: number
+    lastEventAt: number
+}
+
+export interface IKeepAliveSnapshot {
+    events: IKeepAliveEntry[]
+    cache: IKeepAliveCacheEntry[]
+}
+
 export interface IPayloadInspectorSnapshot {
     capturedAt: number
     isHydrating: boolean

@@ -8,6 +8,7 @@ import { setupRenderRegistry } from './composables/render-registry'
 import { setupTransitionRegistry } from './composables/transition-registry'
 import { setupPayloadRegistry } from './composables/payload-registry'
 import { setupStateCookieRegistry } from './composables/state-cookie-registry'
+import { setupKeepAliveRegistry } from './composables/keep-alive-registry'
 import { setupComponentInstrumentation } from './instrumentation/component'
 import { setupFetchInstrumentation } from './instrumentation/fetch'
 import { setupRouteInstrumentation } from './instrumentation/route'
@@ -37,6 +38,8 @@ type TObservatoryPublicConfig = {
     maxStateCookieEntries?: number
     renderHeatmap?: boolean
     transitionTracker?: boolean
+    keepAliveTracker?: boolean
+    maxKeepAliveEntries?: number
     traceViewer?: boolean
     heatmapHideInternals?: boolean
     maxPiniaTimeline?: number
@@ -222,6 +225,12 @@ function createObservatoryContext(nuxtApp: TNuxtAppInstance, config: TObservator
         registries.transition = setupTransitionRegistry()
     }
 
+    if (config.keepAliveTracker) {
+        registries.keepAlive = setupKeepAliveRegistry({
+            maxEntries: config.maxKeepAliveEntries,
+        })
+    }
+
     return {
         nuxtApp,
         config,
@@ -272,6 +281,7 @@ function buildSnapshot(ctx: TObservatoryPluginContext): IObservatorySnapshot {
             fallback: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
         },
         { key: 'stateCookie', fallback: [] },
+        { key: 'keepAlive', fallback: { events: [], cache: [] } },
         { key: 'render', fallback: {} },
         { key: 'transition', fallback: {} },
     ] as const
@@ -300,6 +310,7 @@ function buildSnapshot(ctx: TObservatoryPluginContext): IObservatorySnapshot {
         heatmapThresholdTime: typeof ctx.config.heatmapThresholdTime === 'number' ? ctx.config.heatmapThresholdTime : 16,
         renderHeatmap: !!ctx.registries.render,
         transitionTracker: !!ctx.registries.transition,
+        keepAliveTracker: !!ctx.registries.keepAlive,
         traceViewer: !!ctx.config.traceViewer,
     }
 
@@ -322,6 +333,9 @@ function broadcastAll(ctx: TObservatoryPluginContext, reason = 'unknown') {
         transitions: Array.isArray(snapshot.transitions) ? snapshot.transitions.length : 0,
         traces: Array.isArray(snapshot.traces) ? snapshot.traces.length : 0,
         stateCookies: Array.isArray(snapshot.stateCookies) ? snapshot.stateCookies.length : 0,
+        keepAlive: Array.isArray((snapshot.keepAlive as { events?: unknown[] } | undefined)?.events)
+            ? (snapshot.keepAlive as { events: unknown[] }).events.length
+            : 0,
     })
 
     ctx.lastSnapshotRevision = getSnapshotRevision()
@@ -502,6 +516,7 @@ function setupClientHost(ctx: TObservatoryPluginContext) {
     const composableRegistry = ctx.registries.composable as ReturnType<typeof setupComposableRegistry> | undefined
     const piniaRegistry = ctx.registries.pinia as ReturnType<typeof setupPiniaStoreRegistry> | undefined
     const stateCookieRegistry = ctx.registries.stateCookie as ReturnType<typeof setupStateCookieRegistry> | undefined
+    const keepAliveRegistry = ctx.registries.keepAlive as ReturnType<typeof setupKeepAliveRegistry> | undefined
 
     composableRegistry?.onComposableChange?.(() => {
         broadcastAll(ctx, 'composable:onChange')
@@ -511,6 +526,9 @@ function setupClientHost(ctx: TObservatoryPluginContext) {
     })
     stateCookieRegistry?.onChange?.(() => {
         broadcastAll(ctx, 'stateCookie:onChange')
+    })
+    keepAliveRegistry?.onChange?.(() => {
+        broadcastAll(ctx, 'keepAlive:onChange')
     })
 
     import.meta.hot?.on('observatory:command', (rawPayload: unknown) => {

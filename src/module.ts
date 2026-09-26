@@ -136,6 +136,18 @@ export interface IModuleOptions {
     transitionTracker?: boolean
 
     /**
+     * Enable the KeepAlive / Suspense tracker tab
+     * @default true
+     */
+    keepAliveTracker?: boolean
+
+    /**
+     * Maximum number of KeepAlive / Suspense events to keep in memory
+     * @default 300
+     */
+    maxKeepAliveEntries?: number
+
+    /**
      * Enable the trace viewer tab (per-route component + fetch + composable + render spans)
      * @default true
      */
@@ -239,7 +251,7 @@ export default defineNuxtModule<IModuleOptions>({
             addVitePlugin(composableTrackerPlugin(), vitePluginScope)
         }
 
-        if (resolved.transitionTracker) {
+        if (resolved.transitionTracker || resolved.keepAliveTracker) {
             addVitePlugin(transitionTrackerPlugin(), vitePluginScope)
         }
 
@@ -257,6 +269,7 @@ export default defineNuxtModule<IModuleOptions>({
             resolved.stateCookieTracker ||
             resolved.renderHeatmap ||
             resolved.transitionTracker ||
+            resolved.keepAliveTracker ||
             resolved.traceViewer
         )
 
@@ -301,6 +314,7 @@ export default defineNuxtModule<IModuleOptions>({
             traces: [],
             payload: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
             stateCookies: [],
+            keepAlive: { events: [], cache: [] },
             features: {
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
@@ -314,6 +328,7 @@ export default defineNuxtModule<IModuleOptions>({
                 heatmapThresholdTime: resolved.heatmapThresholdTime,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
+                keepAliveTracker: !!resolved.keepAliveTracker,
                 traceViewer: !!resolved.traceViewer,
             },
         }
@@ -416,6 +431,8 @@ export default defineNuxtModule<IModuleOptions>({
             maxStateCookieEntries: resolved.maxStateCookieEntries,
             renderHeatmap: resolved.renderHeatmap,
             transitionTracker: resolved.transitionTracker,
+            keepAliveTracker: resolved.keepAliveTracker,
+            maxKeepAliveEntries: resolved.maxKeepAliveEntries,
             traceViewer: resolved.traceViewer,
             maxFetchEntries: resolved.maxFetchEntries,
             maxPayloadBytes: resolved.maxPayloadBytes,
