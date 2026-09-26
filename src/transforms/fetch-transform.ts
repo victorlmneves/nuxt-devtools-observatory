@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite'
-import _traverse from '@babel/traverse'
+import _traverse, { type NodePath } from '@babel/traverse'
 import _generate from '@babel/generator'
 import * as t from '@babel/types'
 import { parseObservatoryScript } from './parse-script'
@@ -13,8 +13,209 @@ const FETCH_FNS = new Set(['useFetch', 'useAsyncData', 'useLazyFetch', 'useLazyA
 
 type TObservableCallExpression = t.CallExpression & { __observatoryTransformed?: boolean }
 
+interface IFetchCallShape {
+    keyArg?: t.Expression
+    handlerArg?: t.Expression
+    optsArg?: t.Expression
+}
+
+interface IInstrumentedFetchCall extends IFetchCallShape {
+    originalName: string
+    key: string
+}
+
 function isHandlerExpression(node: t.Expression | undefined): node is t.Expression {
     return Boolean(node && (t.isIdentifier(node) || t.isArrowFunctionExpression(node) || t.isFunctionExpression(node)))
+}
+
+function getExpr(node: t.Node | null | undefined): t.Expression | undefined {
+    return t.isExpression(node) ? node : undefined
+}
+
+function isAsyncDataName(name: string): boolean {
+    return name === 'useAsyncData' || name === 'useLazyAsyncData'
+}
+
+function trimHyphens(value: string): string {
+    let start = 0
+    let end = value.length
+
+    while (start < end && value[start] === '-') {
+        start += 1
+    }
+
+    while (end > start && value[end - 1] === '-') {
+        end -= 1
+    }
+
+    return value.slice(start, end)
+}
+
+function slugifyFetchKey(value: string): string {
+    return trimHyphens(value.replace(/[^a-z0-9]/gi, '-'))
+}
+
+function isAlreadyWrapped(path: NodePath<t.CallExpression>): boolean {
+    const parent = path.parent
+
+    if (!t.isCallExpression(parent) || !t.isIdentifier(parent.callee)) {
+        return false
+    }
+
+    return parent.callee.name === '__devFetchCall' || parent.callee.name === 'useTracedAsyncData'
+}
+
+function shouldSkipFetchCall(path: NodePath<t.CallExpression>): boolean {
+    if ((path.node as TObservableCallExpression).__observatoryTransformed) {
+        return true
+    }
+
+    const callee = path.node.callee
+
+    if (!t.isIdentifier(callee) || !FETCH_FNS.has(callee.name)) {
+        return true
+    }
+
+    return isAlreadyWrapped(path)
+}
+
+function parseAsyncDataCall(args: t.CallExpression['arguments']): IFetchCallShape | undefined {
+    const first = getExpr(args[0])
+
+    if (args.length === 1 && isHandlerExpression(first)) {
+        return { handlerArg: first }
+    }
+
+    const second = getExpr(args[1])
+
+    if (args.length >= 2 && first && isHandlerExpression(second)) {
+        return {
+            keyArg: first,
+            handlerArg: second,
+            optsArg: getExpr(args[2]) ?? t.objectExpression([]),
+        }
+    }
+
+    return undefined
+}
+
+function parseFetchCall(originalName: string, args: t.CallExpression['arguments']): IFetchCallShape | undefined {
+    if (isAsyncDataName(originalName)) {
+        return parseAsyncDataCall(args)
+    }
+
+    return {
+        keyArg: getExpr(args[0]) ?? t.stringLiteral(''),
+        optsArg: getExpr(args[1]) ?? t.objectExpression([]),
+    }
+}
+
+function isStringKeyProperty(property: t.ObjectMethod | t.ObjectProperty | t.SpreadElement): property is t.ObjectProperty {
+    return t.isObjectProperty(property) && t.isIdentifier(property.key) && property.key.name === 'key' && t.isStringLiteral(property.value)
+}
+
+function readStringOptionKey(optsArg: t.Expression | undefined): string | undefined {
+    if (!optsArg || !t.isObjectExpression(optsArg)) {
+        return undefined
+    }
+
+    const keyProp = optsArg.properties.find(isStringKeyProperty)
+
+    if (!keyProp || !t.isStringLiteral(keyProp.value)) {
+        return undefined
+    }
+
+    return keyProp.value.value
+}
+
+function resolveObservatoryKey(originalName: string, keyArg: t.Expression | undefined, optsArg: t.Expression | undefined): string {
+    if (originalName !== 'useFetch' && originalName !== 'useLazyFetch') {
+        return originalName
+    }
+
+    if (optsArg && t.isObjectExpression(optsArg)) {
+        const explicitKey = readStringOptionKey(optsArg)
+
+        if (explicitKey) {
+            return explicitKey
+        }
+
+        if (keyArg && t.isStringLiteral(keyArg)) {
+            return slugifyFetchKey(keyArg.value)
+        }
+
+        return originalName
+    }
+
+    if (keyArg && t.isStringLiteral(keyArg)) {
+        return slugifyFetchKey(keyArg.value)
+    }
+
+    return originalName
+}
+
+function readFetchCall(path: NodePath<t.CallExpression>): IInstrumentedFetchCall | undefined {
+    if (shouldSkipFetchCall(path)) {
+        return undefined
+    }
+
+    const callee = path.node.callee
+
+    if (!t.isIdentifier(callee)) {
+        return undefined
+    }
+
+    const parsed = parseFetchCall(callee.name, path.node.arguments)
+
+    if (!parsed) {
+        return undefined
+    }
+
+    return {
+        originalName: callee.name,
+        ...parsed,
+        key: resolveObservatoryKey(callee.name, parsed.keyArg, parsed.optsArg),
+    }
+}
+
+function markTransformed(call: t.CallExpression): t.CallExpression {
+    const marked = call as TObservableCallExpression
+
+    marked.__observatoryTransformed = true
+
+    return marked
+}
+
+function buildInstrumentedCall(call: IInstrumentedFetchCall, fileId: string, line: number): t.CallExpression {
+    const meta = t.objectExpression([
+        t.objectProperty(t.identifier('key'), t.stringLiteral(call.key)),
+        t.objectProperty(t.identifier('file'), t.stringLiteral(fileId.split('/').pop() ?? fileId)),
+        t.objectProperty(t.identifier('line'), t.numericLiteral(line)),
+        t.objectProperty(t.identifier('originalFn'), t.stringLiteral(call.originalName)),
+    ])
+
+    if (isAsyncDataName(call.originalName) && call.handlerArg) {
+        const rewrittenArgs = call.keyArg ? [call.keyArg, call.handlerArg, call.optsArg ?? t.objectExpression([])] : [call.handlerArg]
+
+        return markTransformed(
+            t.callExpression(t.identifier('useTracedAsyncData'), [
+                t.identifier(call.originalName),
+                t.arrayExpression(rewrittenArgs),
+                t.numericLiteral(call.keyArg ? 1 : 0),
+                call.keyArg ?? t.stringLiteral(call.key),
+                meta,
+            ])
+        )
+    }
+
+    return markTransformed(
+        t.callExpression(t.identifier('__devFetchCall'), [
+            t.identifier(call.originalName),
+            call.keyArg ?? t.stringLiteral(''),
+            call.optsArg ?? t.objectExpression([]),
+            meta,
+        ])
+    )
 }
 
 export function fetchInstrumentPlugin(): Plugin {
@@ -53,123 +254,16 @@ export function fetchInstrumentPlugin(): Plugin {
                 let modified = false
 
                 traverse(ast, {
-                    CallExpression(path: import('@babel/traverse').NodePath<t.CallExpression>) {
-                        if ((path.node as TObservableCallExpression).__observatoryTransformed) {
+                    CallExpression(path: NodePath<t.CallExpression>) {
+                        // Unrecognised async-data shapes stay untouched. Wrapping them would pass the wrong arguments.
+                        const call = readFetchCall(path)
+
+                        if (!call) {
                             return
                         }
 
-                        const callee = path.node.callee
-
-                        if (!t.isIdentifier(callee)) {
-                            return
-                        }
-
-                        if (!FETCH_FNS.has(callee.name)) {
-                            return
-                        }
-
-                        // Skip if already wrapped
-                        if (
-                            path.parent &&
-                            t.isCallExpression(path.parent) &&
-                            t.isIdentifier(path.parent.callee) &&
-                            ['__devFetchCall', 'useTracedAsyncData'].includes(path.parent.callee.name)
-                        ) {
-                            return
-                        }
-
-                        const originalName = callee.name
-                        const args = path.node.arguments
-
-                        // Detect useAsyncData signature: (handler) or (key, handler, opts)
-                        let keyArg: t.Expression | undefined = undefined
-                        let handlerArg: t.Expression | undefined = undefined
-                        let optsArg: t.Expression | undefined = undefined
-
-                        // Helper to check if node is Expression
-                        function getExpr(node: t.Node | null | undefined): t.Expression | undefined {
-                            return t.isExpression(node) ? node : undefined
-                        }
-
-                        if (originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') {
-                            if (args.length === 1 && isHandlerExpression(getExpr(args[0]))) {
-                                // useAsyncData(handler)
-                                handlerArg = getExpr(args[0])
-                            } else if (args.length >= 2 && getExpr(args[0]) && isHandlerExpression(getExpr(args[1]))) {
-                                // useAsyncData(key, handler, opts?)
-                                keyArg = getExpr(args[0])
-                                handlerArg = getExpr(args[1])
-                                optsArg = getExpr(args[2]) ?? t.objectExpression([])
-                            } else {
-                                // Unrecognised call shape (e.g. spread args, computed key with no handler).
-                                // Falling through to __devFetchCall would pass the wrong arguments —
-                                // leave the call completely untouched rather than corrupt it silently.
-                                return
-                            }
-                        } else {
-                            // useFetch(url, opts?)
-                            keyArg = getExpr(args[0]) ?? t.stringLiteral('')
-                            optsArg = getExpr(args[1]) ?? t.objectExpression([])
-                        }
-
-                        let key = originalName
-
-                        if (originalName === 'useFetch' || originalName === 'useLazyFetch') {
-                            if (optsArg && t.isObjectExpression(optsArg)) {
-                                const keyProp = optsArg.properties.find(
-                                    (property): property is t.ObjectProperty =>
-                                        t.isObjectProperty(property) &&
-                                        t.isIdentifier(property.key) &&
-                                        property.key.name === 'key' &&
-                                        t.isStringLiteral(property.value)
-                                )
-
-                                if (keyProp && t.isStringLiteral(keyProp.value)) {
-                                    key = keyProp.value.value
-                                } else if (keyArg && t.isStringLiteral(keyArg)) {
-                                    key = keyArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
-                                }
-                            } else if (keyArg && t.isStringLiteral(keyArg)) {
-                                key = keyArg.value.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '')
-                            }
-                        }
-
-                        const loc = path.node.loc
-                        const meta = t.objectExpression([
-                            t.objectProperty(t.identifier('key'), t.stringLiteral(key)),
-                            t.objectProperty(t.identifier('file'), t.stringLiteral(id.split('/').pop() ?? id)),
-                            t.objectProperty(t.identifier('line'), t.numericLiteral(loc?.start.line ?? 0)),
-                            t.objectProperty(t.identifier('originalFn'), t.stringLiteral(originalName)),
-                        ])
-
-                        // Replace with correct signature
-                        if ((originalName === 'useAsyncData' || originalName === 'useLazyAsyncData') && handlerArg) {
-                            const rewrittenArgs = keyArg ? [keyArg, handlerArg, optsArg ?? t.objectExpression([])] : [handlerArg]
-                            const handlerIndex = keyArg ? 1 : 0
-
-                            const newCall = t.callExpression(t.identifier('useTracedAsyncData'), [
-                                t.identifier(originalName),
-                                t.arrayExpression(rewrittenArgs),
-                                t.numericLiteral(handlerIndex),
-                                keyArg ?? t.stringLiteral(key),
-                                meta,
-                            ]) as TObservableCallExpression
-                            newCall.__observatoryTransformed = true
-                            path.replaceWith(newCall)
-                            modified = true
-                        } else {
-                            // useFetch(url, opts?) and async-data fallbacks
-                            const newCall = t.callExpression(t.identifier('__devFetchCall'), [
-                                t.identifier(originalName),
-                                keyArg ?? t.stringLiteral(''),
-                                optsArg ?? t.objectExpression([]),
-                                meta,
-                            ]) as TObservableCallExpression
-                            newCall.__observatoryTransformed = true
-                            path.replaceWith(newCall)
-
-                            modified = true
-                        }
+                        path.replaceWith(buildInstrumentedCall(call, id, path.node.loc?.start.line ?? 0))
+                        modified = true
                     },
                 })
 
