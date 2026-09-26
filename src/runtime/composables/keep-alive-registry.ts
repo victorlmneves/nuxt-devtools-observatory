@@ -5,8 +5,6 @@ import type {
     IKeepAliveEntry,
     IKeepAliveSnapshot,
     TKeepAliveCacheStatus,
-    TKeepAliveKind,
-    TKeepAlivePhase,
 } from '../../types/snapshot'
 
 export type {
