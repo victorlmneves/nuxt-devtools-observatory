@@ -149,6 +149,10 @@ async function triggerError() {
                         <strong>State / cookies Verification</strong>
                         <span>Test live useState and useCookie keys, previews, and cookie option metadata</span>
                     </NuxtLink>
+                    <NuxtLink to="/test/keepalive-verification" class="verification-link">
+                        <strong>KeepAlive / Suspense Verification</strong>
+                        <span>Test cache activation, eviction at max=2, and Suspense fallback timing</span>
+                    </NuxtLink>
                 </div>
             </section>
         </main>

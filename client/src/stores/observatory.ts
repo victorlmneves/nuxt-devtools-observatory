@@ -12,6 +12,7 @@ import type {
     ITraceEntry,
     IPayloadInspectorSnapshot,
     IStateCookieEntry,
+    IKeepAliveSnapshot,
 } from '@observatory/types/snapshot'
 
 type TProvideInjectSnapshot = { provides: IProvideEntry[]; injects: IInjectEntry[] }
@@ -33,6 +34,8 @@ const emptyPayload: IPayloadInspectorSnapshot = {
 }
 const payload = ref<IPayloadInspectorSnapshot>({ ...emptyPayload })
 const stateCookies = ref<IStateCookieEntry[]>([])
+const emptyKeepAlive: IKeepAliveSnapshot = { events: [], cache: [] }
+const keepAlive = ref<IKeepAliveSnapshot>({ ...emptyKeepAlive, events: [], cache: [] })
 const connected = ref(false)
 const features = ref<IObservatorySnapshot['features']>({})
 const debugRpc = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debugRpc')
@@ -87,6 +90,13 @@ function applySnapshot(data: IObservatorySnapshot) {
           }
         : { ...emptyPayload, keys: [] }
     stateCookies.value = cloneArray(data.stateCookies as IStateCookieEntry[] | undefined)
+    const nextKeepAlive = data.keepAlive as IKeepAliveSnapshot | undefined
+    keepAlive.value = nextKeepAlive
+        ? {
+              events: cloneArray(nextKeepAlive.events),
+              cache: cloneArray(nextKeepAlive.cache),
+          }
+        : { events: [], cache: [] }
     features.value = data.features || {}
 
     // If the server snapshot disagrees with the user's requested mode,
@@ -286,6 +296,7 @@ export function useObservatoryData() {
         traces,
         payload,
         stateCookies,
+        keepAlive,
         features,
         connected,
         refresh,

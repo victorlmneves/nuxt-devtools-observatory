@@ -41,6 +41,13 @@ When changing fields, update docs and tests in the same PR.
 - Each store includes `state`, `timeline`, `dependencies`, and `hydrationTimeline`.
 - `timeline` contains both action and mutation events with `beforeState`, `afterState`, and `diff`.
 
+## KeepAlive / Suspense contracts
+
+- Snapshot field: `keepAlive` (`IKeepAliveSnapshot`).
+- `events` is an array of `IKeepAliveEntry` (`kind` `keep-alive` | `suspense`, `phase`, timings, optional cache metadata).
+- `cache` is an array of `IKeepAliveCacheEntry` (`status` `active` | `cached` | `evicted`, `hits`).
+- Feature flag: `features.keepAliveTracker`.
+
 ## Pinia commands
 
 - `clearPiniaStores`: clears tracker timelines and dependency edges for all stores.

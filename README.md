@@ -15,6 +15,7 @@ Nuxt DevTools Observatory is a module that brings advanced observability and run
 - **State / cookies** — live `useState` and `useCookie` keys, current value preview, and cookie option metadata
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
+- **KeepAlive / Suspense** — activation, cache hits and evictions, plus Suspense pending and fallback timing
 - **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, navigation events, and Nitro server-route timing in a unified Flamegraph and Waterfall view
 
 ### How is this different from Nuxt DevTools?
@@ -301,6 +302,16 @@ The panel provides:
 - **Table** — key, kind, origin (`ssr` while hydrating, otherwise `csr`), preview
 - **Inspector** — selected value preview and cookie option metadata
 
+### KeepAlive / Suspense
+
+The KeepAlive tab records `<KeepAlive>` activate / deactivate / eviction and `<Suspense>` pending / fallback / resolve. Cache rows show hits and whether a pane is active, cached, or evicted. Suspense rows include `fallbackMs` and time-to-resolve.
+
+The panel provides:
+
+- **Stats** — event counts, cached panes, pending Suspense, average fallback
+- **Table** — name, kind, phase, duration, fallback
+- **Inspector** — selected event plus the current KeepAlive cache
+
 ### Trace Viewer
 
 [![Trace Viewer](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/trace-viewer.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/trace-viewer.png)
@@ -458,7 +469,8 @@ src/
     │   ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
     │   ├── pinia-store-registry.ts     ← Pinia plugin: store state, actions, hydration
     │   ├── render-registry.ts          ← Render registry (timeline, route attribution, bbox snapshots)
-    │   └── transition-registry.ts      ← Transition lifecycle store
+    │   ├── transition-registry.ts      ← Transition lifecycle store
+    │   └── keep-alive-registry.ts      ← KeepAlive / Suspense event + cache store
     ├── instrumentation/
     │   ├── route.ts                    ← router.afterEach hook — opens/closes traces per navigation
     │   ├── component.ts                ← Vue mixin lifecycle hooks — component + render spans
@@ -500,6 +512,7 @@ client/
         ├── ValueInspector.vue          ← Inline JSON value inspector
         ├── RenderHeatmap.vue           ← Heatmap tab UI
         ├── TransitionTimeline.vue      ← Transition tracker tab UI
+        ├── KeepAliveTracker.vue        ← KeepAlive / Suspense tab UI
         └── TraceViewer.vue             ← Trace viewer tab UI (Overview + Flamegraph + Waterfall + Inspector + cross-trace comparison)
 
 playground/

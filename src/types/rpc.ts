@@ -22,6 +22,7 @@ export interface IObservatorySnapshot {
     traces?: unknown[]
     payload?: unknown
     stateCookies?: unknown[]
+    keepAlive?: unknown
     features?: {
         fetchDashboard?: boolean
         provideInjectGraph?: boolean
@@ -36,6 +37,7 @@ export interface IObservatorySnapshot {
         renderHeatmap?: boolean
         transitionTracker?: boolean
         traceViewer?: boolean
+        keepAliveTracker?: boolean
     }
 }
 

@@ -17,6 +17,7 @@ export default defineNuxtConfig({
         stateCookieTracker: true, // Enable useState / useCookie tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
+        keepAliveTracker: true, // Enable KeepAlive / Suspense tracker
         traceViewer: true, // Enable trace viewer
         composableNavigationMode: 'route', // 'route' clears entries on navigation (default), 'session' persists across navigation
         heatmapThresholdCount: 5, // Highlight components with 5+ renders
@@ -31,6 +32,7 @@ export default defineNuxtConfig({
         maxComposableEntries: 300, // Max composable entries to keep in memory
         maxPiniaTimeline: 100, // Max Pinia timeline events per store
         maxStateCookieEntries: 200, // Max useState / useCookie entries to keep
+        maxKeepAliveEntries: 300, // Max KeepAlive / Suspense events to keep
         maxRenderTimeline: 100, // Max render timeline events per entry
     },
 })
