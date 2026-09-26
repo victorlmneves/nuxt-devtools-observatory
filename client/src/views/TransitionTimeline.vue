@@ -224,7 +224,14 @@ function directionColor(e: ITransitionEntry): string {
 
         <!-- Toolbar -->
         <div class="transition-timeline__toolbar tracker-toolbar">
-            <input v-model="search" type="search" placeholder="filter by name or component…" class="transition-timeline__search" />
+            <input
+                id="transition-timeline-search"
+                v-model="search"
+                type="search"
+                placeholder="filter by name or component…"
+                class="transition-timeline__search"
+                aria-label="Filter transitions by name or component"
+            />
             <div class="transition-timeline__filters">
                 <button :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
                 <button :class="{ active: filter === 'active' }" @click="filter = 'active'">Active</button>

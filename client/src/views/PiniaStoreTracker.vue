@@ -293,7 +293,7 @@ pre {
     border-radius: 6px;
     padding: 8px;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
     font-size: 11px;
     max-height: 200px;
     overflow: auto;

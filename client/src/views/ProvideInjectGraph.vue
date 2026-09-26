@@ -522,7 +522,14 @@ const edges = computed<IEdge[]>(() => {
             <button :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = activeFilter === 'warn' ? 'all' : 'warn'">
                 warnings
             </button>
-            <input v-model="searchQuery" type="search" class="provide-graph__search" placeholder="search component or key…" />
+            <input
+                id="provide-graph-search"
+                v-model="searchQuery"
+                type="search"
+                class="provide-graph__search"
+                placeholder="search component or key…"
+                aria-label="Search components or keys"
+            />
         </div>
 
         <div class="provide-graph__split tracker-split">

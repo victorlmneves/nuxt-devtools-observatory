@@ -1,20 +1,6 @@
 import { bumpSnapshotRevision } from '../snapshot-revision'
-import { startSpan } from '../tracing/tracing'
-import type {
-    IKeepAliveCacheEntry,
-    IKeepAliveEntry,
-    IKeepAliveSnapshot,
-    TKeepAliveCacheStatus,
-} from '../../types/snapshot'
-
-export type {
-    IKeepAliveCacheEntry,
-    IKeepAliveEntry,
-    IKeepAliveSnapshot,
-    TKeepAliveCacheStatus,
-    TKeepAliveKind,
-    TKeepAlivePhase,
-} from '../../types/snapshot'
+import { startSpan, type ISpanHandle } from '../tracing/tracing'
+import type { IKeepAliveCacheEntry, IKeepAliveEntry, IKeepAliveSnapshot, TKeepAliveCacheStatus } from '../../types/snapshot'
 
 const DEFAULT_MAX_ENTRIES = 300
 
@@ -32,6 +18,114 @@ function durationBetween(startTime: number, endTime?: number) {
     }
 
     return Math.round((endTime - startTime) * 10) / 10
+}
+
+function resolveDurationMs(
+    input: TKeepAliveRecordInput,
+    now: number,
+    lastDeactivateAt: Map<string, number>,
+    durationMs: number | undefined
+): number | undefined {
+    if (input.kind !== 'keep-alive' || input.phase !== 'activated' || !input.fromCache) {
+        return durationMs
+    }
+
+    const parkedAt = lastDeactivateAt.get(cacheKey(input.name, input.key))
+
+    if (parkedAt === undefined) {
+        return durationMs
+    }
+
+    return durationBetween(parkedAt, now)
+}
+
+function livingCacheCount(cache: Map<string, IKeepAliveCacheEntry>): number {
+    return [...cache.values()].filter((item) => item.status !== 'evicted').length
+}
+
+function cacheSizeFor(
+    input: TKeepAliveRecordInput,
+    cache: Map<string, IKeepAliveCacheEntry>,
+    fallback: number | undefined
+): number | undefined {
+    if (input.kind !== 'keep-alive') {
+        return fallback
+    }
+
+    return livingCacheCount(cache)
+}
+
+function storeEvent(events: IKeepAliveEntry[], entry: IKeepAliveEntry, isUpdate: boolean) {
+    if (!isUpdate) {
+        events.push(entry)
+        return
+    }
+
+    const index = events.findIndex((item) => item.id === entry.id)
+
+    if (index === -1) {
+        return
+    }
+
+    events[index] = entry
+}
+
+function startPendingSuspenseSpan(input: TKeepAliveRecordInput, id: string, now: number, activeSpans: Map<string, ISpanHandle>) {
+    const handle = startSpan({
+        name: `suspense:${input.name}`,
+        type: 'suspense',
+        metadata: { id, phase: input.phase, parentComponent: input.parentComponent, timeoutMs: input.timeoutMs },
+        startTime: now,
+    })
+
+    activeSpans.set(id, handle)
+}
+
+function traceKeepAliveBoundary(input: TKeepAliveRecordInput, id: string, now: number) {
+    startSpan({
+        name: `keep-alive:${input.phase}:${input.name}`,
+        type: 'keep-alive',
+        metadata: { id, phase: input.phase, fromCache: input.fromCache, key: input.key, cacheMax: input.cacheMax },
+        startTime: now,
+    }).end({ endTime: now, status: 'ok' })
+}
+
+function finishOpenSpan(
+    span: ISpanHandle | undefined,
+    input: TKeepAliveRecordInput,
+    id: string,
+    now: number,
+    endTime: number | undefined,
+    fallbackMs: number | undefined,
+    activeSpans: Map<string, ISpanHandle>
+) {
+    if (!span || (input.phase !== 'resolved' && input.phase !== 'interrupted')) {
+        return
+    }
+
+    span.end({
+        endTime: endTime ?? now,
+        status: input.phase === 'interrupted' ? 'cancelled' : 'ok',
+        metadata: { phase: input.phase, fallbackMs },
+    })
+    activeSpans.delete(id)
+}
+
+function traceRecord(
+    input: TKeepAliveRecordInput,
+    entry: IKeepAliveEntry,
+    id: string,
+    now: number,
+    endTime: number | undefined,
+    activeSpans: Map<string, ISpanHandle>
+) {
+    if (input.kind === 'suspense' && input.phase === 'pending') {
+        startPendingSuspenseSpan(input, id, now, activeSpans)
+    } else if (input.kind === 'keep-alive' && (input.phase === 'activated' || input.phase === 'deactivated')) {
+        traceKeepAliveBoundary(input, id, now)
+    }
+
+    finishOpenSpan(activeSpans.get(id), input, id, now, endTime, entry.fallbackMs, activeSpans)
 }
 
 export function setupKeepAliveRegistry(options: { maxEntries?: number } = {}) {
@@ -77,9 +171,7 @@ export function setupKeepAliveRegistry(options: { maxEntries?: number } = {}) {
             return
         }
 
-        const victims = living
-            .filter((entry) => entry.status === 'cached')
-            .sort((a, b) => a.lastEventAt - b.lastEventAt)
+        const victims = living.filter((entry) => entry.status === 'cached').sort((a, b) => a.lastEventAt - b.lastEventAt)
 
         const overflow = living.length - cacheMax
 
@@ -126,68 +218,20 @@ export function setupKeepAliveRegistry(options: { maxEntries?: number } = {}) {
         const id = input.id ?? `${input.kind}::${input.name}::${now}::${++seq}`
         const existing = eventsById.get(id)
         const endTime = input.endTime ?? existing?.endTime
-        let durationMs = durationBetween(existing?.startTime ?? input.startTime, endTime)
-
-        if (input.kind === 'keep-alive' && input.phase === 'activated' && input.fromCache) {
-            const key = cacheKey(input.name, input.key)
-            const parkedAt = lastDeactivateAt.get(key)
-
-            if (parkedAt !== undefined) {
-                durationMs = durationBetween(parkedAt, now)
-            }
-        }
-
+        const durationMs = resolveDurationMs(input, now, lastDeactivateAt, durationBetween(existing?.startTime ?? input.startTime, endTime))
         const entry: IKeepAliveEntry = {
             ...existing,
             ...input,
             id,
             durationMs,
-            cacheSize: input.kind === 'keep-alive' ? [...cache.values()].filter((item) => item.status !== 'evicted').length : input.cacheSize,
+            cacheSize: cacheSizeFor(input, cache, input.cacheSize),
         }
 
-        if (existing) {
-            const index = events.findIndex((item) => item.id === id)
-
-            if (index !== -1) {
-                events[index] = entry
-            }
-        } else {
-            events.push(entry)
-        }
-
+        storeEvent(events, entry, existing !== undefined)
         eventsById.set(id, entry)
         updateCache(input, now)
-        entry.cacheSize = input.kind === 'keep-alive' ? [...cache.values()].filter((item) => item.status !== 'evicted').length : entry.cacheSize
-
-        if (input.kind === 'suspense' && input.phase === 'pending') {
-            const handle = startSpan({
-                name: `suspense:${input.name}`,
-                type: 'suspense',
-                metadata: { id, phase: input.phase, parentComponent: input.parentComponent, timeoutMs: input.timeoutMs },
-                startTime: now,
-            })
-
-            activeSpans.set(id, handle)
-        } else if (input.kind === 'keep-alive' && (input.phase === 'activated' || input.phase === 'deactivated')) {
-            startSpan({
-                name: `keep-alive:${input.phase}:${input.name}`,
-                type: 'keep-alive',
-                metadata: { id, phase: input.phase, fromCache: input.fromCache, key: input.key, cacheMax: input.cacheMax },
-                startTime: now,
-            }).end({ endTime: now, status: 'ok' })
-        }
-
-        const span = activeSpans.get(id)
-
-        if (span && (input.phase === 'resolved' || input.phase === 'interrupted')) {
-            span.end({
-                endTime: endTime ?? now,
-                status: input.phase === 'interrupted' ? 'cancelled' : 'ok',
-                metadata: { phase: input.phase, fallbackMs: entry.fallbackMs },
-            })
-            activeSpans.delete(id)
-        }
-
+        entry.cacheSize = cacheSizeFor(input, cache, entry.cacheSize)
+        traceRecord(input, entry, id, now, endTime, activeSpans)
         evictOverflow()
         notify()
 

@@ -680,7 +680,7 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
     // ID derived from name + file + line so that re-executions on every navigation
     // update the existing entry rather than registering a duplicate.
     const id = instance
-        ? `${name}::${instance.uid}::${meta.file}:${meta.line}::${Date.now()}::${Math.random().toString(36).slice(2, 7)}`
+        ? `${name}::${instance.uid}::${meta.file}:${meta.line}::${Date.now()}::${crypto.randomUUID()}`
         : `${name}::global::${meta.file}:${meta.line}`
 
     // ── Interval tracking ────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
 
     return {
         ok: true,
-        cartId: `cart_${Math.random().toString(36).slice(2, 9)}`,
+        cartId: `cart_${crypto.randomUUID()}`,
         productId: body.productId,
         quantity: body.quantity ?? 1,
         addedAt: new Date().toISOString(),

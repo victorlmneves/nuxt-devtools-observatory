@@ -24,7 +24,7 @@ function addComponentSpan(
     options: { startTime?: number; durationMs?: number; route?: string } = {}
 ) {
     const { startTime = performance.now(), durationMs = 10, route = '/' } = options
-    const traceId = `test-component-${uid}-${lifecycle}-${Math.random()}`
+    const traceId = `test-component-${uid}-${lifecycle}-${crypto.randomUUID()}`
     const span = traceStore.addSpan({
         traceId,
         name: `component:${lifecycle}`,

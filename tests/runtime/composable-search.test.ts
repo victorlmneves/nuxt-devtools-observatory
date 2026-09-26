@@ -98,6 +98,40 @@ describe('matchesComposableEntryQuery', () => {
         expect(matchesComposableEntryQuery(entry, 'root')).toBe(true)
     })
 
+    it('matches Map keys and values and Set values', () => {
+        const entry = makeEntry({
+            refs: {
+                lookup: {
+                    type: 'reactive',
+                    value: {
+                        bySku: new Map<string, { title: string }>([['SKU-9', { title: 'Desk Lamp' }]]),
+                        tags: new Set(['featured', 'warehouse']),
+                    },
+                },
+            },
+        })
+
+        expect(matchesComposableEntryQuery(entry, 'sku-9')).toBe(true)
+        expect(matchesComposableEntryQuery(entry, 'desk lamp')).toBe(true)
+        expect(matchesComposableEntryQuery(entry, 'warehouse')).toBe(true)
+    })
+
+    it('stops walking objects past the search depth', () => {
+        const entry = makeEntry({
+            refs: {
+                tree: {
+                    type: 'reactive',
+                    value: {
+                        a: { b: { c: { d: { e: { f: { secret: 'needle' } } } } } },
+                    },
+                },
+            },
+        })
+
+        expect(matchesComposableEntryQuery(entry, 'needle')).toBe(false)
+        expect(matchesComposableEntryQuery(entry, 'secret')).toBe(false)
+    })
+
     it('returns false for non-matching query', () => {
         const entry = makeEntry({
             refs: {

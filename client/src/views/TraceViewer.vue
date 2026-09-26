@@ -753,10 +753,12 @@ function handleCrossTraceRowClick(componentKey: string) {
                                         </button>
                                         <span class="trace-viewer__comparison-spacer"></span>
                                         <input
+                                            id="trace-viewer-component-search"
                                             v-model="crossTraceSearch"
                                             class="trace-viewer__comparison-search mono"
                                             type="search"
                                             placeholder="filter component..."
+                                            aria-label="Filter components"
                                         />
                                     </div>
                                     <table class="data-table trace-viewer__render-summary-table">

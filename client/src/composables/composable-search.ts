@@ -7,6 +7,61 @@ interface ISearchBudget {
     nodes: number
 }
 
+function isSearchPrimitive(value: unknown): value is string | number | boolean | bigint {
+    const valueType = typeof value
+
+    return valueType === 'string' || valueType === 'number' || valueType === 'boolean' || valueType === 'bigint'
+}
+
+function mapMatchesQuery(
+    value: Map<unknown, unknown>,
+    query: string,
+    seen: WeakSet<object>,
+    budget: ISearchBudget,
+    depth: number
+): boolean {
+    for (const [mapKey, mapValue] of value.entries()) {
+        if (valueMatchesQuery(mapKey, query, seen, budget, depth)) {
+            return true
+        }
+
+        if (valueMatchesQuery(mapValue, query, seen, budget, depth)) {
+            return true
+        }
+    }
+
+    return false
+}
+
+function setMatchesQuery(value: Set<unknown>, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth: number): boolean {
+    for (const setValue of value.values()) {
+        if (valueMatchesQuery(setValue, query, seen, budget, depth)) {
+            return true
+        }
+    }
+
+    return false
+}
+
+function recordMatchesQuery(value: object, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth: number): boolean {
+    try {
+        for (const [key, nestedValue] of Object.entries(value)) {
+            if (key.toLowerCase().includes(query)) {
+                return true
+            }
+
+            if (valueMatchesQuery(nestedValue, query, seen, budget, depth)) {
+                return true
+            }
+        }
+    } catch {
+        // Ignore objects that throw on entry access and continue matching safely.
+        return false
+    }
+
+    return false
+}
+
 function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth = 0): boolean {
     if (budget.nodes >= MAX_SEARCH_NODES) {
         return false
@@ -18,74 +73,31 @@ function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>,
         return false
     }
 
-    const valueType = typeof value
-
-    if (valueType === 'string' || valueType === 'number' || valueType === 'boolean' || valueType === 'bigint') {
+    if (isSearchPrimitive(value)) {
         return String(value).toLowerCase().includes(query)
     }
 
-    if (valueType !== 'object') {
+    if (typeof value !== 'object' || depth >= MAX_SEARCH_DEPTH || seen.has(value)) {
         return false
     }
 
-    if (depth >= MAX_SEARCH_DEPTH) {
-        return false
-    }
+    seen.add(value)
 
-    const objectValue = value as object
-
-    if (seen.has(objectValue)) {
-        return false
-    }
-
-    seen.add(objectValue)
+    const nextDepth = depth + 1
 
     if (Array.isArray(value)) {
-        return value.some((item) => valueMatchesQuery(item, query, seen, budget, depth + 1))
+        return value.some((item) => valueMatchesQuery(item, query, seen, budget, nextDepth))
     }
 
     if (value instanceof Map) {
-        for (const [mapKey, mapValue] of value.entries()) {
-            if (valueMatchesQuery(mapKey, query, seen, budget, depth + 1)) {
-                return true
-            }
-
-            if (valueMatchesQuery(mapValue, query, seen, budget, depth + 1)) {
-                return true
-            }
-        }
-
-        return false
+        return mapMatchesQuery(value, query, seen, budget, nextDepth)
     }
 
     if (value instanceof Set) {
-        for (const setValue of value.values()) {
-            if (valueMatchesQuery(setValue, query, seen, budget, depth + 1)) {
-                return true
-            }
-        }
-
-        return false
+        return setMatchesQuery(value, query, seen, budget, nextDepth)
     }
 
-    try {
-        const entries = Object.entries(value as Record<string, unknown>)
-
-        for (const [key, nestedValue] of entries) {
-            if (key.toLowerCase().includes(query)) {
-                return true
-            }
-
-            if (valueMatchesQuery(nestedValue, query, seen, budget, depth + 1)) {
-                return true
-            }
-        }
-    } catch {
-        // Ignore objects that throw on entry access and continue matching safely.
-        return false
-    }
-
-    return false
+    return recordMatchesQuery(value, query, seen, budget, nextDepth)
 }
 
 /**

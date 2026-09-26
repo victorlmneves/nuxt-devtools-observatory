@@ -299,10 +299,12 @@ function formatSize(bytes: number) {
             <button :class="{ active: filter === 'pending' }" @click="filter = 'pending'">pending</button>
             <button :class="{ active: filter === 'cached' }" @click="filter = 'cached'">cached</button>
             <input
+                id="fetch-dashboard-search"
                 v-model="search"
                 type="search"
                 class="fetch-dashboard__search tracker-toolbar__spacer"
                 placeholder="search key or url…"
+                aria-label="Search fetches by key or URL"
             />
         </div>
 
