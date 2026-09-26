@@ -258,21 +258,18 @@ function directionColor(e: ITransitionEntry): string {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr
-                            v-if="virtualizedRowsEnabled && topTablePadding > 0"
-                            class="transition-timeline__virtual-spacer-row"
-                            aria-hidden="true"
-                        >
+                        <tr v-if="virtualizedRowsEnabled && topTablePadding > 0" class="transition-timeline__virtual-spacer-row" inert>
                             <td colspan="6" :style="{ height: `${topTablePadding}px` }"></td>
                         </tr>
-                        <tr
-                            v-for="row in visibleRows"
-                            :key="row.entry.id"
-                            :class="{ selected: selected?.id === row.entry.id }"
-                            @click="selectedId = selected?.id === row.entry.id ? null : row.entry.id"
-                        >
+                        <tr v-for="row in visibleRows" :key="row.entry.id" :class="{ selected: selected?.id === row.entry.id }">
                             <td>
-                                <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
+                                <button
+                                    type="button"
+                                    class="transition-timeline__name data-table__row-select mono"
+                                    @click="selectedId = selected?.id === row.entry.id ? null : row.entry.id"
+                                >
+                                    {{ row.entry.transitionName }}
+                                </button>
                                 <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm">group</span>
                             </td>
                             <td>
@@ -302,11 +299,7 @@ function directionColor(e: ITransitionEntry): string {
                             </td>
                         </tr>
 
-                        <tr
-                            v-if="virtualizedRowsEnabled && bottomTablePadding > 0"
-                            class="transition-timeline__virtual-spacer-row"
-                            aria-hidden="true"
-                        >
+                        <tr v-if="virtualizedRowsEnabled && bottomTablePadding > 0" class="transition-timeline__virtual-spacer-row" inert>
                             <td colspan="6" :style="{ height: `${bottomTablePadding}px` }"></td>
                         </tr>
 

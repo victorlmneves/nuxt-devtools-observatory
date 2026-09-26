@@ -118,79 +118,78 @@ const TreeNode = defineComponent({
                     },
                 },
                 [
-                    h(
-                        'div',
-                        {
-                            class: ['tree-row', rowClass(node)],
+                    h('div', { class: ['tree-row', rowClass(node)] }, [
+                        h('button', {
+                            type: 'button',
+                            class: 'tree-row-select',
+                            'aria-label': node.label,
                             onClick: (event: MouseEvent) => {
                                 event.stopPropagation()
                                 emit('select', node)
                             },
-                        },
-                        [
-                            h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
-                            canExpand
+                        }),
+                        h('span', { class: 'tree-rail', 'aria-hidden': 'true' }),
+                        canExpand
+                            ? h(
+                                  'button',
+                                  {
+                                      class: 'tree-toggle',
+                                      onClick: (event: MouseEvent) => {
+                                          event.stopPropagation()
+                                          emit('toggle', node.id)
+                                      },
+                                  },
+                                  expanded ? '⌄' : '›'
+                              )
+                            : null,
+                        h('div', { class: 'tree-copy' }, [
+                            h('span', { class: 'tree-name mono', title: node.label }, node.label),
+                            badges.length
+                                ? h(
+                                      'div',
+                                      { class: 'tree-badges' },
+                                      badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
+                                  )
+                                : null,
+                        ]),
+                        h('div', { class: 'tree-metrics mono' }, [
+                            node.isPersistent
+                                ? h(
+                                      'span',
+                                      { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
+                                      'persistent'
+                                  )
+                                : null,
+                            node.isHydrationMount
+                                ? h(
+                                      'span',
+                                      {
+                                          class: 'tree-hydration-pill',
+                                          title: 'First mount was SSR hydration — not a user-triggered render',
+                                      },
+                                      'hydrated'
+                                  )
+                                : null,
+                            isHot(node)
+                                ? h('span', { class: 'tree-hot-pill', title: 'Hot component — exceeds current threshold' }, 'hot')
+                                : null,
+                            h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
+                            node.file && node.file !== 'unknown'
                                 ? h(
                                       'button',
                                       {
-                                          class: 'tree-toggle',
-                                          onClick: (event: MouseEvent) => {
-                                              event.stopPropagation()
-                                              emit('toggle', node.id)
+                                          class: 'tree-jump-btn',
+                                          title: `Open ${node.file} in editor`,
+                                          onClick: (e: MouseEvent) => {
+                                              e.stopPropagation()
+                                              openInEditor(node.file)
                                           },
                                       },
-                                      expanded ? '⌄' : '›'
+                                      '↗'
                                   )
                                 : null,
-                            h('div', { class: 'tree-copy' }, [
-                                h('span', { class: 'tree-name mono', title: node.label }, node.label),
-                                badges.length
-                                    ? h(
-                                          'div',
-                                          { class: 'tree-badges' },
-                                          badges.slice(0, 1).map((badge) => h('span', { class: 'tree-badge mono', title: badge }, badge))
-                                      )
-                                    : null,
-                            ]),
-                            h('div', { class: 'tree-metrics mono' }, [
-                                node.isPersistent
-                                    ? h(
-                                          'span',
-                                          { class: 'tree-persistent-pill', title: 'Layout / persistent component — survives navigation' },
-                                          'persistent'
-                                      )
-                                    : null,
-                                node.isHydrationMount
-                                    ? h(
-                                          'span',
-                                          {
-                                              class: 'tree-hydration-pill',
-                                              title: 'First mount was SSR hydration — not a user-triggered render',
-                                          },
-                                          'hydrated'
-                                      )
-                                    : null,
-                                isHot(node)
-                                    ? h('span', { class: 'tree-hot-pill', title: 'Hot component — exceeds current threshold' }, 'hot')
-                                    : null,
-                                h('span', { class: 'tree-metric-pill' }, `${metric} ${metricLabel}`),
-                                node.file && node.file !== 'unknown'
-                                    ? h(
-                                          'button',
-                                          {
-                                              class: 'tree-jump-btn',
-                                              title: `Open ${node.file} in editor`,
-                                              onClick: (e: MouseEvent) => {
-                                                  e.stopPropagation()
-                                                  openInEditor(node.file)
-                                              },
-                                          },
-                                          '↗'
-                                      )
-                                    : null,
-                            ]),
-                        ]
-                    ),
+                        ]),
+                    ]),
                     expanded && canExpand
                         ? h(
                               'div',
@@ -1085,8 +1084,13 @@ function formatTimestamp(t: number): string {
                                     { selected: activeSelected?.id === row.node.id, hot: row.hot, 'no-toggle': !row.node.children.length },
                                 ]"
                                 :style="{ '--tree-depth': String(row.node.depth) }"
-                                @click="selectNode(row.node)"
                             >
+                                <button
+                                    type="button"
+                                    class="tree-row-select"
+                                    :aria-label="row.node.label"
+                                    @click="selectNode(row.node)"
+                                ></button>
                                 <span class="tree-rail" aria-hidden="true" />
                                 <button v-if="row.node.children.length" class="tree-toggle" @click.stop="toggleNode(row.node.id)">
                                     {{ expandedIds.has(row.node.id) ? '⌄' : '›' }}
@@ -1447,6 +1451,7 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-row) {
+    position: relative;
     display: grid;
     grid-template-columns: 18px minmax(140px, 1fr) auto;
     align-items: center;
@@ -1479,7 +1484,20 @@ function formatTimestamp(t: number): string {
     border-color: color-mix(in srgb, var(--red) 45%, var(--border));
 }
 
+:deep(.tree-row-select) {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
 :deep(.tree-toggle) {
+    position: relative;
+    z-index: 2;
     width: 16px;
     height: 16px;
     border: none;
@@ -1699,6 +1717,8 @@ function formatTimestamp(t: number): string {
 }
 
 :deep(.tree-jump-btn) {
+    position: relative;
+    z-index: 2;
     display: none;
     padding: 0 4px;
     border: none;

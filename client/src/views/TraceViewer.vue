@@ -19,10 +19,14 @@ import {
 import type { IObservatoryExportFile } from '@observatory-client/composables/useExportImport'
 import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
+type TCrossTraceSortKey = 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName'
+
+type TSpanUid = string | number | undefined
+
 type TTraceSpanRow = {
     span: ITraceSpan
     displayName: string
-    uid: string | number | undefined
+    uid: TSpanUid
 }
 
 const { traces, connected } = useObservatoryData()
@@ -36,12 +40,12 @@ const viewMode = ref<'overview' | 'flamegraph' | 'waterfall'>('overview')
 const showFilters = ref(false)
 const renderSummaryOpen = ref(true)
 const crossTraceSummaryOpen = ref(true)
-const crossTraceSortBy = ref<'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName'>('avgRerendersPerTrace')
+const crossTraceSortBy = ref<TCrossTraceSortKey>('avgRerendersPerTrace')
 const crossTraceSortDir = ref<'asc' | 'desc'>('desc')
 const crossTraceOnlyRegressions = ref(false)
 const crossTraceOnlyComparable = ref(false)
 const crossTraceSearch = ref('')
-const highlightedUid = ref<string | number | undefined>(undefined)
+const highlightedUid = ref<TSpanUid>(undefined)
 const highlightedComponentKey = ref<string | undefined>(undefined)
 const traceListScrollRef = ref<HTMLElement | null>(null)
 const crossTraceScrollRef = ref<HTMLElement | null>(null)
@@ -314,10 +318,10 @@ function getSpanDisplayName(span: ITraceSpan): string {
     return span.name
 }
 
-function getSpanUid(span: ITraceSpan): string | number | undefined {
+function getSpanUid(span: ITraceSpan): TSpanUid {
     const metadata = span.metadata as Record<string, unknown> | undefined
 
-    return metadata?.uid as string | number | undefined
+    return metadata?.uid as TSpanUid
 }
 
 const selectedTraceSpanRows = computed<TTraceSpanRow[]>(() => {
@@ -436,7 +440,7 @@ function deltaToneClass(value?: number): string {
     return 'trace-viewer__delta--neutral'
 }
 
-function cycleCrossTraceSort(next: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName') {
+function cycleCrossTraceSort(next: TCrossTraceSortKey) {
     if (crossTraceSortBy.value === next) {
         crossTraceSortDir.value = crossTraceSortDir.value === 'desc' ? 'asc' : 'desc'
 
@@ -447,7 +451,7 @@ function cycleCrossTraceSort(next: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 
     crossTraceSortDir.value = next === 'componentName' ? 'asc' : 'desc'
 }
 
-function sortIndicator(key: 'avgRerendersPerTrace' | 'deltaVsBaseline' | 'totalMs' | 'componentName') {
+function sortIndicator(key: TCrossTraceSortKey) {
     if (crossTraceSortBy.value !== key) {
         return ''
     }
@@ -557,7 +561,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                             <tr
                                 v-if="virtualizedTraceRowsEnabled && traceListTopPadding > 0"
                                 class="trace-viewer__virtual-spacer-row"
-                                aria-hidden="true"
+                                inert
                             >
                                 <td colspan="3" :style="{ height: `${traceListTopPadding}px` }"></td>
                             </tr>
@@ -566,16 +570,19 @@ function handleCrossTraceRowClick(componentKey: string) {
                                 :key="trace.id"
                                 :class="{ 'trace-viewer__trace-row--selected': selectedTrace?.id === trace.id }"
                                 class="trace-viewer__trace-row"
-                                @click="selectTrace(trace)"
                             >
-                                <td class="mono">{{ trace.name }}</td>
+                                <td class="mono">
+                                    <button type="button" class="data-table__row-select" @click="selectTrace(trace)">
+                                        {{ trace.name }}
+                                    </button>
+                                </td>
                                 <td class="mono">{{ formatDuration(trace.durationMs, trace) }}</td>
                                 <td class="mono">{{ trace.spans.length }}</td>
                             </tr>
                             <tr
                                 v-if="virtualizedTraceRowsEnabled && traceListBottomPadding > 0"
                                 class="trace-viewer__virtual-spacer-row"
-                                aria-hidden="true"
+                                inert
                             >
                                 <td colspan="3" :style="{ height: `${traceListBottomPadding}px` }"></td>
                             </tr>
@@ -649,9 +656,10 @@ function handleCrossTraceRowClick(componentKey: string) {
                             </div>
 
                             <div class="trace-viewer__span-list">
-                                <div
+                                <button
                                     v-for="spanRow in selectedTraceSpanRows"
                                     :key="spanRow.span.id"
+                                    type="button"
                                     :class="{
                                         'trace-viewer__span-item--selected': selectedSpan?.id === spanRow.span.id,
                                         'trace-viewer__span-item--highlighted':
@@ -665,22 +673,29 @@ function handleCrossTraceRowClick(componentKey: string) {
                                         <span class="trace-viewer__span-type">{{ spanRow.span.type }}</span>
                                         <span class="trace-viewer__span-duration">{{ formatDuration(spanRow.span.durationMs) }}</span>
                                     </div>
-                                </div>
+                                </button>
                             </div>
 
                             <!-- Render Summary panel — shown when the trace has render spans -->
                             <template v-if="renderSummary.length > 0">
-                                <div class="trace-viewer__render-summary-header" @click="renderSummaryOpen = !renderSummaryOpen">
-                                    <span class="trace-viewer__render-summary-toggle">{{ renderSummaryOpen ? '▾' : '▸' }}</span>
-                                    <span class="trace-viewer__render-summary-title">Render Summary</span>
-                                    <span class="trace-viewer__render-summary-count muted">{{ renderSummary.length }} components</span>
-                                    <span
+                                <div class="trace-viewer__render-summary-header">
+                                    <button
+                                        type="button"
+                                        class="trace-viewer__render-summary-toggle-btn"
+                                        @click="renderSummaryOpen = !renderSummaryOpen"
+                                    >
+                                        <span class="trace-viewer__render-summary-toggle">{{ renderSummaryOpen ? '▾' : '▸' }}</span>
+                                        <span class="trace-viewer__render-summary-title">Render Summary</span>
+                                        <span class="trace-viewer__render-summary-count muted">{{ renderSummary.length }} components</span>
+                                    </button>
+                                    <button
                                         v-if="highlightedUid !== undefined"
+                                        type="button"
                                         class="trace-viewer__render-summary-clear"
-                                        @click.stop="highlightedUid = undefined"
+                                        @click="highlightedUid = undefined"
                                     >
                                         ✕ clear
-                                    </span>
+                                    </button>
                                 </div>
                                 <div v-if="renderSummaryOpen" class="trace-viewer__render-summary-table-wrap">
                                     <table class="data-table trace-viewer__render-summary-table">
@@ -700,9 +715,16 @@ function handleCrossTraceRowClick(componentKey: string) {
                                                 :class="{ 'trace-viewer__render-summary-row--active': highlightedUid === row.uid }"
                                                 class="trace-viewer__render-summary-row"
                                                 :title="row.file"
-                                                @click="handleRenderSummaryRowClick(row.uid)"
                                             >
-                                                <td class="mono">{{ row.componentName }}</td>
+                                                <td class="mono">
+                                                    <button
+                                                        type="button"
+                                                        class="data-table__row-select"
+                                                        @click="handleRenderSummaryRowClick(row.uid)"
+                                                    >
+                                                        {{ row.componentName }}
+                                                    </button>
+                                                </td>
                                                 <td class="mono">{{ row.mountCount }}</td>
                                                 <td class="mono" :class="{ 'trace-viewer__render-hot': row.rerenderCount > 3 }">
                                                     {{ row.rerenderCount }}
@@ -717,23 +739,30 @@ function handleCrossTraceRowClick(componentKey: string) {
 
                             <!-- Cross-trace comparison panel -->
                             <template v-if="crossTraceRenderSummary.length > 0">
-                                <div class="trace-viewer__render-summary-header" @click="crossTraceSummaryOpen = !crossTraceSummaryOpen">
-                                    <span class="trace-viewer__render-summary-toggle">{{ crossTraceSummaryOpen ? '▾' : '▸' }}</span>
-                                    <span class="trace-viewer__render-summary-title">Cross-Trace Render Comparison</span>
-                                    <span class="trace-viewer__render-summary-count muted">
-                                        {{ crossTraceRenderSummary.length }} components · {{ filteredTraces.length }} traces
-                                    </span>
-                                    <span class="trace-viewer__render-summary-count muted">
-                                        {{ crossTraceRegressionsCount }} regressions
-                                    </span>
-                                    <span class="trace-viewer__mobile-hint muted">mobile mode: condensed columns</span>
-                                    <span
+                                <div class="trace-viewer__render-summary-header">
+                                    <button
+                                        type="button"
+                                        class="trace-viewer__render-summary-toggle-btn"
+                                        @click="crossTraceSummaryOpen = !crossTraceSummaryOpen"
+                                    >
+                                        <span class="trace-viewer__render-summary-toggle">{{ crossTraceSummaryOpen ? '▾' : '▸' }}</span>
+                                        <span class="trace-viewer__render-summary-title">Cross-Trace Render Comparison</span>
+                                        <span class="trace-viewer__render-summary-count muted">
+                                            {{ crossTraceRenderSummary.length }} components · {{ filteredTraces.length }} traces
+                                        </span>
+                                        <span class="trace-viewer__render-summary-count muted">
+                                            {{ crossTraceRegressionsCount }} regressions
+                                        </span>
+                                        <span class="trace-viewer__mobile-hint muted">mobile mode: condensed columns</span>
+                                    </button>
+                                    <button
                                         v-if="highlightedComponentKey !== undefined"
+                                        type="button"
                                         class="trace-viewer__render-summary-clear"
-                                        @click.stop="clearCrossTraceHighlight"
+                                        @click="clearCrossTraceHighlight"
                                     >
                                         ✕ clear
-                                    </span>
+                                    </button>
                                 </div>
                                 <div v-if="crossTraceSummaryOpen" ref="crossTraceScrollRef" class="trace-viewer__render-summary-table-wrap">
                                     <div class="trace-viewer__comparison-toolbar">
@@ -764,26 +793,36 @@ function handleCrossTraceRowClick(componentKey: string) {
                                     <table class="data-table trace-viewer__render-summary-table">
                                         <thead>
                                             <tr>
-                                                <th class="trace-viewer__sortable" @click="cycleCrossTraceSort('componentName')">
-                                                    Component{{ sortIndicator('componentName') }}
+                                                <th class="trace-viewer__sortable">
+                                                    <button
+                                                        type="button"
+                                                        class="trace-viewer__sort-btn"
+                                                        @click="cycleCrossTraceSort('componentName')"
+                                                    >
+                                                        Component{{ sortIndicator('componentName') }}
+                                                    </button>
                                                 </th>
                                                 <th class="trace-viewer__col-desktop" title="How many traces include this component">
                                                     Traces
                                                 </th>
-                                                <th
-                                                    class="trace-viewer__sortable"
-                                                    title="Average re-renders per trace"
-                                                    @click="cycleCrossTraceSort('avgRerendersPerTrace')"
-                                                >
-                                                    Avg Re-renders{{ sortIndicator('avgRerendersPerTrace') }}
+                                                <th class="trace-viewer__sortable" title="Average re-renders per trace">
+                                                    <button
+                                                        type="button"
+                                                        class="trace-viewer__sort-btn"
+                                                        @click="cycleCrossTraceSort('avgRerendersPerTrace')"
+                                                    >
+                                                        Avg Re-renders{{ sortIndicator('avgRerendersPerTrace') }}
+                                                    </button>
                                                 </th>
                                                 <th class="trace-viewer__col-desktop" title="Re-renders in selected trace">Selected</th>
-                                                <th
-                                                    class="trace-viewer__sortable"
-                                                    title="Selected trace vs other traces baseline"
-                                                    @click="cycleCrossTraceSort('deltaVsBaseline')"
-                                                >
-                                                    Delta{{ sortIndicator('deltaVsBaseline') }}
+                                                <th class="trace-viewer__sortable" title="Selected trace vs other traces baseline">
+                                                    <button
+                                                        type="button"
+                                                        class="trace-viewer__sort-btn"
+                                                        @click="cycleCrossTraceSort('deltaVsBaseline')"
+                                                    >
+                                                        Delta{{ sortIndicator('deltaVsBaseline') }}
+                                                    </button>
                                                 </th>
                                                 <th class="trace-viewer__col-desktop" title="Average render duration across all renders">
                                                     Avg ms
@@ -791,9 +830,14 @@ function handleCrossTraceRowClick(componentKey: string) {
                                                 <th
                                                     class="trace-viewer__sortable"
                                                     title="Sum of all render duration across filtered traces"
-                                                    @click="cycleCrossTraceSort('totalMs')"
                                                 >
-                                                    Total ms{{ sortIndicator('totalMs') }}
+                                                    <button
+                                                        type="button"
+                                                        class="trace-viewer__sort-btn"
+                                                        @click="cycleCrossTraceSort('totalMs')"
+                                                    >
+                                                        Total ms{{ sortIndicator('totalMs') }}
+                                                    </button>
                                                 </th>
                                             </tr>
                                         </thead>
@@ -801,7 +845,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                                             <tr
                                                 v-if="virtualizedTraceRowsEnabled && crossTraceTopPadding > 0"
                                                 class="trace-viewer__virtual-spacer-row"
-                                                aria-hidden="true"
+                                                inert
                                             >
                                                 <td colspan="7" :style="{ height: `${crossTraceTopPadding}px` }"></td>
                                             </tr>
@@ -814,9 +858,16 @@ function handleCrossTraceRowClick(componentKey: string) {
                                                 }"
                                                 class="trace-viewer__render-summary-row"
                                                 :title="row.file"
-                                                @click="handleCrossTraceRowClick(row.componentKey)"
                                             >
-                                                <td class="mono">{{ row.componentName }}</td>
+                                                <td class="mono">
+                                                    <button
+                                                        type="button"
+                                                        class="data-table__row-select"
+                                                        @click="handleCrossTraceRowClick(row.componentKey)"
+                                                    >
+                                                        {{ row.componentName }}
+                                                    </button>
+                                                </td>
                                                 <td class="mono trace-viewer__col-desktop">{{ row.tracesSeen }}</td>
                                                 <td class="mono">{{ (Math.round(row.avgRerendersPerTrace * 10) / 10).toFixed(1) }}</td>
                                                 <td class="mono trace-viewer__col-desktop">{{ row.selectedRerenders ?? 'n/a' }}</td>
@@ -831,7 +882,7 @@ function handleCrossTraceRowClick(componentKey: string) {
                                             <tr
                                                 v-if="virtualizedTraceRowsEnabled && crossTraceBottomPadding > 0"
                                                 class="trace-viewer__virtual-spacer-row"
-                                                aria-hidden="true"
+                                                inert
                                             >
                                                 <td colspan="7" :style="{ height: `${crossTraceBottomPadding}px` }"></td>
                                             </tr>
@@ -1108,8 +1159,16 @@ function handleCrossTraceRowClick(componentKey: string) {
 }
 
 .trace-viewer__span-item {
+    display: block;
+    width: 100%;
+    margin: 0;
     padding: 8px 16px;
+    border: none;
     border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     transition: background 0.2s;
 }
@@ -1182,9 +1241,24 @@ function handleCrossTraceRowClick(componentKey: string) {
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
     background: var(--bg3, var(--bg2, var(--bg)));
-    cursor: pointer;
     user-select: none;
     flex-shrink: 0;
+}
+
+.trace-viewer__render-summary-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .trace-viewer__render-summary-header:hover {
@@ -1214,6 +1288,10 @@ function handleCrossTraceRowClick(componentKey: string) {
 
 .trace-viewer__render-summary-clear {
     margin-left: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
     font-size: 11px;
     color: var(--accent);
     cursor: pointer;
@@ -1276,6 +1354,19 @@ function handleCrossTraceRowClick(componentKey: string) {
 }
 
 .trace-viewer__sortable {
+    user-select: none;
+}
+
+.trace-viewer__sort-btn {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    text-transform: inherit;
     cursor: pointer;
     user-select: none;
 }

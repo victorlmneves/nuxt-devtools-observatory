@@ -306,6 +306,10 @@ function isRefExpanded(entryId: string, refKey: string): boolean {
     return expandedRefs.value.has(refExpandKey(entryId, refKey))
 }
 
+function toggleCard(entryId: string) {
+    expanded.value = expanded.value === entryId ? null : entryId
+}
+
 function toggleRefExpand(entryId: string, refKey: string) {
     const key = refExpandKey(entryId, refKey)
     const next = new Set(expandedRefs.value)
@@ -520,47 +524,53 @@ function applyEdit() {
                     'composable-tracker__card--leak': card.entry.leak,
                     'composable-tracker__card--expanded': expanded === card.entry.id,
                 }"
-                @click="expanded = expanded === card.entry.id ? null : card.entry.id"
             >
-                <div class="composable-tracker__card-header">
-                    <div class="composable-tracker__identity">
-                        <span class="composable-tracker__name mono">{{ card.entry.name }}</span>
-                        <span class="composable-tracker__file muted mono">{{ basename(card.entry.componentFile) }}</span>
+                <button
+                    type="button"
+                    class="composable-tracker__card-toggle"
+                    :aria-expanded="expanded === card.entry.id"
+                    @click="toggleCard(card.entry.id)"
+                >
+                    <div class="composable-tracker__card-header">
+                        <div class="composable-tracker__identity">
+                            <span class="composable-tracker__name mono">{{ card.entry.name }}</span>
+                            <span class="composable-tracker__file muted mono">{{ basename(card.entry.componentFile) }}</span>
+                        </div>
+                        <div class="composable-tracker__meta">
+                            <span v-if="card.entry.watcherCount > 0 && !card.entry.leak" class="badge badge-warn">
+                                {{ card.entry.watcherCount }}w
+                            </span>
+                            <span v-if="card.entry.intervalCount > 0 && !card.entry.leak" class="badge badge-warn">
+                                {{ card.entry.intervalCount }}t
+                            </span>
+                            <span v-if="card.entry.leak" class="badge badge-err">leak</span>
+                            <span v-else-if="card.entry.status === 'mounted'" class="badge badge-ok">mounted</span>
+                            <span v-else class="badge badge-gray">unmounted</span>
+                        </div>
                     </div>
-                    <div class="composable-tracker__meta">
-                        <span v-if="card.entry.watcherCount > 0 && !card.entry.leak" class="badge badge-warn">
-                            {{ card.entry.watcherCount }}w
+
+                    <!-- Inline ref preview — shows up to 3 refs without expanding -->
+                    <div v-if="card.refCount" class="composable-tracker__refs-preview">
+                        <span
+                            v-for="row in card.previewRefs"
+                            :key="row.key"
+                            class="composable-tracker__ref-chip"
+                            :class="{
+                                'composable-tracker__ref-chip--reactive': row.ref.type === 'reactive',
+                                'composable-tracker__ref-chip--computed': row.ref.type === 'computed',
+                                'composable-tracker__ref-chip--shared': row.shared,
+                            }"
+                            :title="row.shared ? 'shared global state' : ''"
+                        >
+                            <span class="composable-tracker__ref-chip-key">{{ row.key }}</span>
+                            <span class="composable-tracker__ref-chip-val">{{ formatVal(row.ref.value) }}</span>
+                            <span v-if="row.shared" class="composable-tracker__ref-chip-shared-dot" title="global"></span>
                         </span>
-                        <span v-if="card.entry.intervalCount > 0 && !card.entry.leak" class="badge badge-warn">
-                            {{ card.entry.intervalCount }}t
-                        </span>
-                        <span v-if="card.entry.leak" class="badge badge-err">leak</span>
-                        <span v-else-if="card.entry.status === 'mounted'" class="badge badge-ok">mounted</span>
-                        <span v-else class="badge badge-gray">unmounted</span>
+                        <span v-if="card.refCount > 3" class="muted text-sm">+{{ card.refCount - 3 }} more</span>
                     </div>
-                </div>
+                </button>
 
-                <!-- Inline ref preview — shows up to 3 refs without expanding -->
-                <div v-if="card.refCount" class="composable-tracker__refs-preview">
-                    <span
-                        v-for="row in card.previewRefs"
-                        :key="row.key"
-                        class="composable-tracker__ref-chip"
-                        :class="{
-                            'composable-tracker__ref-chip--reactive': row.ref.type === 'reactive',
-                            'composable-tracker__ref-chip--computed': row.ref.type === 'computed',
-                            'composable-tracker__ref-chip--shared': row.shared,
-                        }"
-                        :title="row.shared ? 'shared global state' : ''"
-                    >
-                        <span class="composable-tracker__ref-chip-key">{{ row.key }}</span>
-                        <span class="composable-tracker__ref-chip-val">{{ formatVal(row.ref.value) }}</span>
-                        <span v-if="row.shared" class="composable-tracker__ref-chip-shared-dot" title="global"></span>
-                    </span>
-                    <span v-if="card.refCount > 3" class="muted text-sm">+{{ card.refCount - 3 }} more</span>
-                </div>
-
-                <div v-if="expanded === card.entry.id" class="composable-tracker__detail" @click.stop>
+                <div v-if="expanded === card.entry.id" class="composable-tracker__detail">
                     <div v-if="card.entry.leak" class="composable-tracker__leak-banner">{{ card.entry.leakReason }}</div>
 
                     <!-- Global state warning -->
@@ -577,17 +587,18 @@ function applyEdit() {
                     <div class="composable-tracker__section-label tracker-section-label">reactive state</div>
                     <div v-if="!card.refCount" class="composable-tracker__compact-muted muted text-sm">no tracked state returned</div>
                     <div v-for="row in card.detailRefs" :key="row.key" class="composable-tracker__ref-row">
-                        <span
+                        <button
+                            type="button"
                             class="composable-tracker__ref-key composable-tracker__ref-key--clickable mono text-sm"
                             :title="
                                 card.entry.sharedKeyGroups?.[row.key]
-                                    ? `click to see instances sharing this exact '${row.key}' state`
-                                    : `click to see all instances exposing '${row.key}'`
+                                    ? `Show instances sharing this exact '${row.key}' state`
+                                    : `Show all instances exposing '${row.key}'`
                             "
-                            @click.stop="openLookup(card.entry, row.key)"
+                            @click="openLookup(card.entry, row.key)"
                         >
                             {{ row.key }}
-                        </span>
+                        </button>
                         <span
                             class="composable-tracker__ref-val mono text-sm"
                             :class="{
@@ -727,7 +738,13 @@ function applyEdit() {
 
         <!-- ── Edit value dialog ─────────────────────────────────────────── -->
         <Transition name="fade">
-            <div v-if="editTarget" class="composable-tracker__edit-overlay" @click.self="editTarget = null">
+            <div v-if="editTarget" class="composable-tracker__edit-overlay">
+                <button
+                    type="button"
+                    class="composable-tracker__edit-backdrop"
+                    aria-label="Close editor"
+                    @click="editTarget = null"
+                ></button>
                 <div class="composable-tracker__edit-dialog">
                     <div class="composable-tracker__edit-dialog-header">
                         edit
@@ -804,8 +821,20 @@ function applyEdit() {
     border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
-    cursor: pointer;
     flex-shrink: 0;
+}
+
+.composable-tracker__card-toggle {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .composable-tracker__card:hover {
@@ -1131,6 +1160,12 @@ function applyEdit() {
 }
 
 .composable-tracker__ref-key--clickable {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     text-decoration: underline dotted var(--text3);
     text-underline-offset: 2px;
@@ -1217,7 +1252,19 @@ function applyEdit() {
     justify-content: center;
 }
 
+.composable-tracker__edit-backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
 .composable-tracker__edit-dialog {
+    position: relative;
+    z-index: 1;
     background: var(--bg1, var(--bg2));
     border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
