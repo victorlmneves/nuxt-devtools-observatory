@@ -62,6 +62,14 @@ export default defineNuxtConfig({
         asyncContext: true,
     },
 
+    typescript: {
+        tsConfig: {
+            compilerOptions: {
+                module: 'ESNext',
+            },
+        },
+    },
+
     icon: {
         provider: 'iconify',
     },

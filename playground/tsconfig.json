@@ -1,4 +1,8 @@
 {
     "$schema": "https://json.schemastore.org/tsconfig",
-    "extends": "./.nuxt/tsconfig.json"
+    "files": [],
+    "references": [
+        { "path": "./.nuxt/tsconfig.json" },
+        { "path": "./.nuxt/tsconfig.server.json" }
+    ]
 }
