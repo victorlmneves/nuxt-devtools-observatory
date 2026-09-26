@@ -1,3 +1,10 @@
+# [0.9.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.8.0...v0.9.0) (2026-09-26)
+
+
+### Features
+
+* add KeepAlive and Suspense tracking to Observatory ([87243d1](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/87243d16b7bc626ff90c4e11eadda2a1ec6cb0dc))
+
 # [0.8.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.7.0...v0.8.0) (2026-09-25)
 
 
