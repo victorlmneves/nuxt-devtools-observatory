@@ -2,8 +2,6 @@ import { isRef, unref, watch, getCurrentInstance, onUnmounted } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 import type { IStateCookieEntry, TStateCookieKind } from '../../types/snapshot'
 
-export type { IStateCookieEntry, TStateCookieKind }
-
 const MAX_PREVIEW_BYTES = 500
 const DEFAULT_MAX_ENTRIES = 200
 

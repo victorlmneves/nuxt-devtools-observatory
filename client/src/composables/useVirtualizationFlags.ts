@@ -33,7 +33,7 @@ function getStorage(): Storage | null {
 
     // Prefer window.localStorage so mocked window objects in tests work too.
     // eslint-disable-next-line no-restricted-syntax
-    return typeof window.localStorage === 'undefined' ? null : window.localStorage
+    return window.localStorage ?? null
 }
 
 function parseBooleanParam(value: string | null): boolean | null {

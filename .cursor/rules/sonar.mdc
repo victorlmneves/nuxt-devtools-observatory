@@ -1,0 +1,65 @@
+---
+description: SonarCloud constraints to follow when writing TypeScript or Vue
+alwaysApply: true
+---
+
+# SonarCloud constraints
+
+SonarCloud runs on CI. Write code that already passes these checks.
+
+- Keep cognitive complexity at or below 15. Extract a helper when a function nests loops, conditions, or boolean chains.
+- Define a function at module scope when it does not use variables from the enclosing function.
+- Alphabetical `sort` and `toSorted` must take a compare function that uses `String.localeCompare` (typescript:S2871). Do not call either with no comparer. Sort numbers with a numeric comparer.
+- Do not pass `unknown` or `object` values to `String()`. Narrow with `typeof value === 'string'` first.
+- Compare with `undefined` directly instead of `typeof x === 'undefined'` (typescript:S7741). Reserve `typeof` for a binding that may not exist, such as `window` during server render.
+- Use `??` when the only fallback is `null` or `undefined`.
+- Import snapshot types from `src/types/snapshot.ts`. Do not re-export them from the file that uses them.
+- Do not use `Math.random()` for tokens, secrets, session ids, passwords, or nonces (typescript:S2245). Use `crypto.randomUUID()` or `crypto.getRandomValues()`. `Math.random()` is only acceptable for non-security values such as UI jitter or demo data.
+- Prefer `Number` static methods and properties over the global equivalents (typescript:S7773): `Number.parseInt`, `Number.parseFloat`, `Number.isNaN`, `Number.isFinite`, `Number.NaN`, `Number.POSITIVE_INFINITY`, and `Number.NEGATIVE_INFINITY`.
+- Every `<label>` needs accessible text and an associated control (Web:S6853). Set `for` to the control `id`, or wrap the control. Text, `aria-label`, or `aria-labelledby` must name the label.
+- Every `<input>`, `<select>`, and `<textarea>` needs a label (Web:InputWithoutLabelCheck). Give the control an `id` and point a `<label for>` at it, wrap it in a `<label>`, or set `aria-label` / `aria-labelledby`.
+- Do not set `aria-hidden="true"` on a focusable element (Web:S6825): links, buttons, inputs, selects, textareas, `contenteditable`, or anything with `tabindex` of 0 or more. Put `aria-hidden` on a decorative child, such as an icon, instead of the control.
+- Keep regular expressions linear (typescript:S8786). Do not nest quantifiers or overlap alternatives that can match the same text, such as `(a+)+` or `(a|aa)+`. Use one quantifier or a negated character class.
+- Use a collection's contents or do not create it (typescript:S4030). Do not build an array, set, or map that is never read. Use `forEach` or a loop for side effects, and keep the result of `map`, `filter`, `slice`, and `concat`.
+
+```ts
+// ❌ BAD
+return typeof window.localStorage === 'undefined' ? null : window.localStorage
+return names.sort()
+return names.toSorted()
+const sessionId = Math.random().toString(36)
+const port = parseInt(raw, 10)
+const letters = /^(a+)+$/
+names.map((name) => name.toLowerCase())
+
+// ✅ GOOD
+return window.localStorage ?? null
+return names.sort((left, right) => left.localeCompare(right))
+return names.toSorted((left, right) => left.localeCompare(right))
+const sessionId = crypto.randomUUID()
+const port = Number.parseInt(raw, 10)
+const letters = /^a+$/
+const normalized = names.map((name) => name.toLowerCase())
+```
+
+```vue
+<!-- ❌ BAD -->
+<label></label>
+<label>Route</label>
+<input type="text" />
+<select></select>
+<textarea></textarea>
+<button type="button" aria-hidden="true">Close</button>
+
+<!-- ✅ GOOD -->
+<label for="route-filter">Route</label>
+<input id="route-filter" type="text" />
+<label for="span-type">Span type</label>
+<select id="span-type"></select>
+<label for="trace-notes">Notes</label>
+<textarea id="trace-notes"></textarea>
+<button type="button">
+    <span aria-hidden="true">×</span>
+    Close
+</button>
+```

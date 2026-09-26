@@ -109,6 +109,30 @@ describe('useVirtualizationFlags', () => {
         expect(effective.value.traces).toBe(true)
     })
 
+    it('uses default flags when localStorage is missing', async () => {
+        Object.defineProperty(globalThis, 'window', {
+            value: {
+                location: {
+                    search: '',
+                },
+            },
+            configurable: true,
+        })
+
+        const { useVirtualizationFlags } = await import('@observatory-client/composables/useVirtualizationFlags')
+        const { flags, effective } = useVirtualizationFlags()
+
+        expect(flags.value).toEqual({
+            enabled: true,
+            heatmap: true,
+            traces: true,
+            composables: true,
+            fetch: true,
+            transitions: true,
+        })
+        expect(effective.value.heatmap).toBe(true)
+    })
+
     it('restores persisted flags from localStorage', async () => {
         setWindowSearch(
             '',

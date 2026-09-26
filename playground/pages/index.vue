@@ -12,7 +12,20 @@ const showLeaky = ref(false)
 const items = ref(Array.from({ length: 20 }, (_, i) => ({ id: i, name: `Item ${i}`, price: Math.round(((i * 13 + 7) % 100) * 10) / 10 })))
 
 function shuffleItems() {
-    items.value = [...items.value].sort(() => Math.random() - 0.5)
+    const next = [...items.value]
+    const values = new Uint32Array(next.length)
+
+    crypto.getRandomValues(values)
+
+    for (let index = next.length - 1; index > 0; index -= 1) {
+        const swapIndex = values[index] % (index + 1)
+        const current = next[index]
+
+        next[index] = next[swapIndex]
+        next[swapIndex] = current
+    }
+
+    items.value = next
 }
 
 // ── useFetch ────────────────────────────────────────────────────────────────

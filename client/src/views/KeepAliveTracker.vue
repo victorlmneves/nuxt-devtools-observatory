@@ -21,7 +21,12 @@ const filtered = computed(() => {
 
         const q = search.value.toLowerCase()
 
-        if (q && !entry.name.toLowerCase().includes(q) && !entry.phase.toLowerCase().includes(q) && !entry.parentComponent.toLowerCase().includes(q)) {
+        if (
+            q &&
+            !entry.name.toLowerCase().includes(q) &&
+            !entry.phase.toLowerCase().includes(q) &&
+            !entry.parentComponent.toLowerCase().includes(q)
+        ) {
             return false
         }
 
@@ -134,9 +139,7 @@ function onRowKeydown(event: KeyboardEvent, id: string) {
                         <tr v-if="!filtered.length">
                             <td colspan="5" class="tracker-empty-cell">
                                 {{
-                                    connected
-                                        ? 'No KeepAlive or Suspense events recorded yet.'
-                                        : 'Waiting for connection to the Nuxt app…'
+                                    connected ? 'No KeepAlive or Suspense events recorded yet.' : 'Waiting for connection to the Nuxt app…'
                                 }}
                             </td>
                         </tr>
@@ -186,7 +189,10 @@ function onRowKeydown(event: KeyboardEvent, id: string) {
                         <tr v-for="item in cache" :key="item.id">
                             <td class="mono">{{ item.name }}</td>
                             <td>
-                                <span class="badge" :class="item.status === 'evicted' ? 'badge-err' : item.status === 'active' ? 'badge-ok' : 'badge-gray'">
+                                <span
+                                    class="badge"
+                                    :class="item.status === 'evicted' ? 'badge-err' : item.status === 'active' ? 'badge-ok' : 'badge-gray'"
+                                >
                                     {{ item.status }}
                                 </span>
                             </td>

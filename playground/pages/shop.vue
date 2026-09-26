@@ -67,7 +67,7 @@ watch(
     products,
     (list) => {
         if (!list) return
-        categories.value = [...new Set(list.map((p) => p.category))].sort()
+        categories.value = [...new Set(list.map((p) => p.category))].sort((left, right) => left.localeCompare(right))
     },
     { immediate: true }
 )
@@ -103,7 +103,12 @@ const filteredProducts = computed(() => {
             <div class="toolbar">
                 <button :disabled="productsStatus === 'pending'" @click="() => refreshProducts()">↺ Refresh list</button>
                 <span style="color: #aaa; font-size: 12px">currency:</span>
-                <select v-model="currency" style="font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d3d1c7">
+                <select
+                    id="shop-currency"
+                    v-model="currency"
+                    aria-label="Currency"
+                    style="font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d3d1c7"
+                >
                     <option>USD</option>
                     <option>EUR</option>
                     <option>GBP</option>

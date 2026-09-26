@@ -487,7 +487,14 @@ function applyEdit() {
                 mode: {{ composableMode }}
             </button>
             <span class="tracker-toolbar__spacer"></span>
-            <input v-model="search" class="composable-tracker__search" type="search" placeholder="search name, file, or ref…" />
+            <input
+                id="composable-tracker-search"
+                v-model="search"
+                class="composable-tracker__search"
+                type="search"
+                placeholder="search name, file, or ref…"
+                aria-label="Search composables"
+            />
             <button
                 v-if="composableMode === 'session'"
                 class="composable-tracker__clear-btn"
@@ -732,7 +739,14 @@ function applyEdit() {
                         <span class="mono">ref</span>
                         values are writable.
                     </p>
-                    <textarea v-model="editTarget.rawValue" class="composable-tracker__edit-textarea" rows="6" spellcheck="false" />
+                    <label class="composable-tracker__edit-help muted text-sm" for="composable-tracker-edit-value">Ref value</label>
+                    <textarea
+                        id="composable-tracker-edit-value"
+                        v-model="editTarget.rawValue"
+                        class="composable-tracker__edit-textarea"
+                        rows="6"
+                        spellcheck="false"
+                    />
                     <div v-if="editError" class="composable-tracker__edit-error text-sm">{{ editError }}</div>
                     <div class="composable-tracker__edit-actions">
                         <button @click="applyEdit">apply</button>

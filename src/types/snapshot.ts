@@ -228,14 +228,7 @@ export interface IStateCookieEntry {
 
 export type TKeepAliveKind = 'keep-alive' | 'suspense'
 
-export type TKeepAlivePhase =
-    | 'activated'
-    | 'deactivated'
-    | 'evicted'
-    | 'pending'
-    | 'fallback'
-    | 'resolved'
-    | 'interrupted'
+export type TKeepAlivePhase = 'activated' | 'deactivated' | 'evicted' | 'pending' | 'fallback' | 'resolved' | 'interrupted'
 
 export type TKeepAliveCacheStatus = 'active' | 'cached' | 'evicted'
 
