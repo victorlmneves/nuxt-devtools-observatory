@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.9.0...v0.10.0) (2026-09-26)
+
+
+### Features
+
+* add SonarCloud rules for TypeScript and Vue coding standards ([ea16f09](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/ea16f09f837a9c45ada4edec8841d46d2c2e393f))
+
 # [0.9.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.8.0...v0.9.0) (2026-09-26)
 
 
