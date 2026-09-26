@@ -324,21 +324,18 @@ function formatSize(bytes: number) {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr
-                            v-if="virtualizedRowsEnabled && topVirtualPadding > 0"
-                            class="fetch-dashboard__virtual-spacer-row"
-                            aria-hidden="true"
-                        >
+                        <tr v-if="virtualizedRowsEnabled && topVirtualPadding > 0" class="fetch-dashboard__virtual-spacer-row" inert>
                             <td colspan="8" :style="{ height: `${topVirtualPadding}px` }"></td>
                         </tr>
-                        <tr
-                            v-for="entry in visibleRows"
-                            :key="entry.id"
-                            :class="{ selected: selected?.id === entry.id }"
-                            @click="selectedId = entry.id"
-                        >
+                        <tr v-for="entry in visibleRows" :key="entry.id" :class="{ selected: selected?.id === entry.id }">
                             <td>
-                                <span class="fetch-dashboard__key mono tracker-mono-secondary">{{ entry.key }}</span>
+                                <button
+                                    type="button"
+                                    class="fetch-dashboard__key data-table__row-select mono tracker-mono-secondary"
+                                    @click="selectedId = entry.id"
+                                >
+                                    {{ entry.key }}
+                                </button>
                             </td>
                             <td>
                                 <span class="fetch-dashboard__url mono tracker-mono-secondary tracker-truncate" :title="entry.url">
@@ -366,11 +363,7 @@ function formatSize(bytes: number) {
                                 </div>
                             </td>
                         </tr>
-                        <tr
-                            v-if="virtualizedRowsEnabled && bottomVirtualPadding > 0"
-                            class="fetch-dashboard__virtual-spacer-row"
-                            aria-hidden="true"
-                        >
+                        <tr v-if="virtualizedRowsEnabled && bottomVirtualPadding > 0" class="fetch-dashboard__virtual-spacer-row" inert>
                             <td colspan="8" :style="{ height: `${bottomVirtualPadding}px` }"></td>
                         </tr>
                         <tr v-if="!filtered.length">

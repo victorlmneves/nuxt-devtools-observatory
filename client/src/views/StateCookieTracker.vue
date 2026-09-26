@@ -55,13 +55,6 @@ function previewText(entry: IStateCookieEntry, pretty = false) {
 function selectEntry(id: string) {
     selectedId.value = id
 }
-
-function onRowKeydown(event: KeyboardEvent, id: string) {
-    if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault()
-        selectEntry(id)
-    }
-}
 </script>
 
 <template>
@@ -112,15 +105,10 @@ function onRowKeydown(event: KeyboardEvent, id: string) {
                                 {{ connected ? 'No useState or useCookie calls recorded yet.' : 'Waiting for connection to the Nuxt app…' }}
                             </td>
                         </tr>
-                        <tr
-                            v-for="entry in filtered"
-                            :key="entry.id"
-                            :class="{ selected: selected?.id === entry.id }"
-                            tabindex="0"
-                            @click="selectEntry(entry.id)"
-                            @keydown="onRowKeydown($event, entry.id)"
-                        >
-                            <td class="mono">{{ entry.key }}</td>
+                        <tr v-for="entry in filtered" :key="entry.id" :class="{ selected: selected?.id === entry.id }">
+                            <td class="mono">
+                                <button type="button" class="data-table__row-select" @click="selectEntry(entry.id)">{{ entry.key }}</button>
+                            </td>
                             <td>
                                 <span class="badge badge-gray">{{ entry.kind }}</span>
                             </td>

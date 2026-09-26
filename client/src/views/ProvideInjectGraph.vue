@@ -555,9 +555,10 @@ const edges = computed<IEdge[]>(() => {
                                 fill="none"
                             />
                         </svg>
-                        <div
+                        <button
                             v-for="layoutNode in layout"
                             :key="layoutNode.data.id"
+                            type="button"
                             class="provide-graph__node"
                             :class="{ 'provide-graph__node--selected': selectedNode?.id === layoutNode.data.id }"
                             :style="{
@@ -574,7 +575,7 @@ const edges = computed<IEdge[]>(() => {
                                 +{{ layoutNode.data.provides.length }}
                             </span>
                             <span v-if="layoutNode.data.injects.some((entry) => !entry.ok)" class="badge badge-err badge-xs">!</span>
-                        </div>
+                        </button>
                     </div>
                 </div>
                 <div v-else class="provide-graph__graph-empty">
@@ -753,8 +754,12 @@ const edges = computed<IEdge[]>(() => {
     display: flex;
     align-items: center;
     gap: 7px;
+    margin: 0;
     padding: 0 10px;
     height: 32px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     border-radius: var(--radius);
     border: var(--tracker-border-width) solid var(--border);
     background: var(--bg3);

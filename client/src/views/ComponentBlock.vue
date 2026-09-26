@@ -110,34 +110,34 @@ function handleSelect(n: IComponentNode) {
             borderRadius: '6px',
             padding: '6px 9px',
             marginBottom: '5px',
-            cursor: 'pointer',
         }"
-        @click="handleSelect(props.node)"
     >
-        <div style="display: flex; align-items: center; gap: 6px">
-            <span
-                :style="{
-                    fontFamily: 'var(--mono)',
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    color: heatColor(getVal(props.node), getMax(props.node)).text,
-                }"
-            >
-                {{ props.node.label }}
-            </span>
-            <span
-                :style="{
-                    fontFamily: 'var(--mono)',
-                    fontSize: '10px',
-                    color: heatColor(getVal(props.node), getMax(props.node)).text,
-                    opacity: 0.7,
-                    marginLeft: 'auto',
-                }"
-            >
-                {{ props.mode === 'count' ? getVal(props.node) : getVal(props.node).toFixed(1) + 'ms' }}
-                {{ props.mode === 'count' ? 'renders' : 'ms avg' }}
-            </span>
-        </div>
+        <button type="button" class="component-block__select" @click="handleSelect(props.node)">
+            <div style="display: flex; align-items: center; gap: 6px">
+                <span
+                    :style="{
+                        fontFamily: 'var(--mono)',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        color: heatColor(getVal(props.node), getMax(props.node)).text,
+                    }"
+                >
+                    {{ props.node.label }}
+                </span>
+                <span
+                    :style="{
+                        fontFamily: 'var(--mono)',
+                        fontSize: '10px',
+                        color: heatColor(getVal(props.node), getMax(props.node)).text,
+                        opacity: 0.7,
+                        marginLeft: 'auto',
+                    }"
+                >
+                    {{ props.mode === 'count' ? getVal(props.node) : getVal(props.node).toFixed(1) + 'ms' }}
+                    {{ props.mode === 'count' ? 'renders' : 'ms avg' }}
+                </span>
+            </div>
+        </button>
         <div
             v-if="props.node.children && props.node.children.length"
             :style="{
@@ -160,3 +160,18 @@ function handleSelect(n: IComponentNode) {
         </div>
     </div>
 </template>
+
+<style scoped>
+.component-block__select {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+</style>

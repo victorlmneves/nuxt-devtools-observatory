@@ -19,6 +19,10 @@ const emit = defineEmits<{
 
 const expandedNodes = ref<Set<string>>(new Set())
 
+function selectSpan(span: ITraceSpan) {
+    emit('select-span', span)
+}
+
 function toggleExpanded(spanId: string) {
     if (expandedNodes.value.has(spanId)) {
         expandedNodes.value.delete(spanId)
@@ -216,22 +220,23 @@ const flattenedTree = computed(() => {
                     >
                         ▶
                     </button>
-                    <button class="flamegraph__node-button" @click="emit('select-span', node)">
+                    <button class="flamegraph__node-button" @click="selectSpan(node)">
                         <span class="flamegraph__span-name">{{ getSpanDisplayName(node) }}</span>
                         <span class="flamegraph__span-type">{{ node.type }}</span>
                     </button>
                 </div>
 
                 <div class="flamegraph__bar-container">
-                    <div
+                    <button
+                        type="button"
                         class="flamegraph__bar"
                         :class="getSpanColorClass(node.type)"
                         :style="getBarPosition(node)"
                         :title="getSpanTooltip(node)"
-                        @click="emit('select-span', node)"
+                        @click="selectSpan(node)"
                     >
                         <span v-if="!isNarrowBar(node)" class="flamegraph__bar-label">{{ formatDuration(node.durationMs) }}</span>
-                    </div>
+                    </button>
                     <span v-if="isNarrowBar(node)" class="flamegraph__bar-label-outside" :style="{ left: getBarPosition(node).left }">
                         {{ formatDuration(node.durationMs) }}
                     </span>
@@ -381,7 +386,16 @@ const flattenedTree = computed(() => {
     color: white;
     overflow: hidden;
     cursor: pointer;
+    margin: 0;
+    padding: 0;
+    border: none;
+    font: inherit;
     transition: opacity 0.2s;
+}
+
+.flamegraph__bar:focus-visible {
+    outline: 2px solid currentcolor;
+    outline-offset: 1px;
 }
 
 .flamegraph__bar:hover {
