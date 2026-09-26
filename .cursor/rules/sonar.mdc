@@ -16,6 +16,7 @@ SonarCloud runs on CI. Write code that already passes these checks.
 - Import snapshot types from `src/types/snapshot.ts`. Do not re-export them from the file that uses them.
 - Do not use `Math.random()` for tokens, secrets, session ids, passwords, or nonces (typescript:S2245). Use `crypto.randomUUID()` or `crypto.getRandomValues()`. `Math.random()` is only acceptable for non-security values such as UI jitter or demo data.
 - Prefer `Number` static methods and properties over the global equivalents (typescript:S7773): `Number.parseInt`, `Number.parseFloat`, `Number.isNaN`, `Number.isFinite`, `Number.NaN`, `Number.POSITIVE_INFINITY`, and `Number.NEGATIVE_INFINITY`.
+- Group digits consistently when a numeric literal uses separators (typescript:S7749). Decimal groups are 3 digits (`1_000_000`). Hex groups are an even length, such as 2 or 4 (`0x1000_0000`). Do not leave a short group such as `0x1_0000_0000`.
 - Every `<label>` needs accessible text and an associated control (Web:S6853). Set `for` to the control `id`, or wrap the control. Text, `aria-label`, or `aria-labelledby` must name the label.
 - Every `<input>`, `<select>`, and `<textarea>` needs a label (Web:InputWithoutLabelCheck). Give the control an `id` and point a `<label for>` at it, wrap it in a `<label>`, or set `aria-label` / `aria-labelledby`.
 - Do not set `aria-hidden="true"` on a focusable element (Web:S6825): links, buttons, inputs, selects, textareas, `contenteditable`, or anything with `tabindex` of 0 or more. Put `aria-hidden` on a decorative child, such as an icon, instead of the control.
@@ -31,6 +32,7 @@ const sessionId = Math.random().toString(36)
 const port = parseInt(raw, 10)
 const letters = /^(a+)+$/
 names.map((name) => name.toLowerCase())
+const scale = 0x1_0000_0000
 
 // ✅ GOOD
 return window.localStorage ?? null
@@ -40,6 +42,7 @@ const sessionId = crypto.randomUUID()
 const port = Number.parseInt(raw, 10)
 const letters = /^a+$/
 const normalized = names.map((name) => name.toLowerCase())
+const scale = 2 ** 32
 ```
 
 ```vue
