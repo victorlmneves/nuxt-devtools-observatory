@@ -144,7 +144,7 @@ test.describe('Dashboard page (/dashboard)', () => {
 
         // Badge count should have increased
         const afterText = await badge.textContent()
-        const count = parseInt(afterText?.replace(/\D/g, '') ?? '0', 10)
+        const count = Number.parseInt(afterText?.replace(/\D/g, '') ?? '0', 10)
 
         expect(count).toBeGreaterThan(0)
     })

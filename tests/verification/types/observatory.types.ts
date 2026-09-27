@@ -1,18 +1,18 @@
 // Complete type definitions for Observatory data structures - NO unused exports
 
-export interface TraceEntry {
+export interface ITraceEntry {
     id: string
     route: string
     startTime: number
     endTime: number
-    spans: Span[]
+    spans: ISpan[]
     metadata: Record<string, unknown>
 }
 
-export interface Span {
+export interface ISpan {
     id: string
     parentId?: string
-    type: SpanType
+    type: TSpanType
     name: string
     startTime: number
     endTime: number
@@ -20,25 +20,25 @@ export interface Span {
     metadata: Record<string, unknown>
 }
 
-export type SpanType = 'navigation' | 'component' | 'render' | 'fetch' | 'server' | 'composable' | 'transition'
+export type TSpanType = 'navigation' | 'component' | 'render' | 'fetch' | 'server' | 'composable' | 'transition'
 
-export interface HeatmapData {
-    components: Record<string, ComponentHeatmapData>
+export interface IHeatmapData {
+    components: Record<string, IComponentHeatmapData>
 }
 
-export interface ComponentHeatmapData {
+export interface IComponentHeatmapData {
     totalRenders: number
     totalDuration: number
-    byRoute: Record<string, RouteHeatmapData>
-    timeline: TimelineEvent[]
+    byRoute: Record<string, IRouteHeatmapData>
+    timeline: ITimelineEvent[]
 }
 
-export interface RouteHeatmapData {
+export interface IRouteHeatmapData {
     renders: number
     duration: number
 }
 
-export interface TimelineEvent {
+export interface ITimelineEvent {
     timestamp: number
     type: 'mount' | 'update'
     duration: number
@@ -46,53 +46,53 @@ export interface TimelineEvent {
     triggerKey?: string
 }
 
-export interface ComposableEntry {
+export interface IComposableEntry {
     name: string
     id: string
-    status: ComposableStatus
-    state: Record<string, ComposableStateValue>
-    history: HistoryEvent[]
-    leaks?: LeakInfo
+    status: TComposableStatus
+    state: Record<string, IComposableStateValue>
+    history: IHistoryEvent[]
+    leaks?: ILeakInfo
 }
 
-export type ComposableStatus = 'active' | 'unmounted' | 'leaked'
+export type TComposableStatus = 'active' | 'unmounted' | 'leaked'
 
-export interface ComposableStateValue {
+export interface IComposableStateValue {
     value: unknown
     global: boolean
     type: 'ref' | 'computed' | 'reactive'
 }
 
-export interface HistoryEvent {
+export interface IHistoryEvent {
     key: string
     value: unknown
     timestamp: number
 }
 
-export interface LeakInfo {
+export interface ILeakInfo {
     watchers: number
     intervals: number
 }
 
-export interface FetchEntry {
+export interface IFetchEntry {
     key: string
     url: string
-    status: FetchStatus
+    status: TFetchStatus
     duration: number
     origin: 'ssr' | 'csr'
     startOffset: number
     cacheKey?: string
 }
 
-export type FetchStatus = 'pending' | 'success' | 'error'
+export type TFetchStatus = 'pending' | 'success' | 'error'
 
-export interface GraphData {
-    provides: ProvideEntry[]
-    injects: InjectEntry[]
-    components: GraphComponent[]
+export interface IGraphData {
+    provides: IProvideEntry[]
+    injects: IInjectEntry[]
+    components: IGraphComponent[]
 }
 
-export interface ProvideEntry {
+export interface IProvideEntry {
     key: string
     componentName: string
     scope: 'global' | 'layout' | 'component'
@@ -100,21 +100,21 @@ export interface ProvideEntry {
     value: unknown
 }
 
-export interface InjectEntry {
+export interface IInjectEntry {
     key: string
     componentName: string
     resolved: boolean
     providerChain?: string[]
 }
 
-export interface GraphComponent {
+export interface IGraphComponent {
     name: string
     status: 'normal' | 'missing-provider' | 'shadowed'
 }
 
-export interface TransitionEntry {
+export interface ITransitionEntry {
     name: string
-    phase: TransitionPhase
+    phase: TTransitionPhase
     duration: number
     timestamp: number
     parentComponent: string
@@ -122,28 +122,28 @@ export interface TransitionEntry {
     error?: string
 }
 
-export type TransitionPhase = 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled'
+export type TTransitionPhase = 'entering' | 'entered' | 'leaving' | 'left' | 'enter-cancelled' | 'leave-cancelled'
 
-export interface PiniaStateDiff {
+export interface IPiniaStateDiff {
     path: string
     before: unknown
     after: unknown
 }
 
-export interface PiniaDependency {
+export interface IPiniaDependency {
     id: string
     kind: 'component' | 'composable' | 'unknown'
     name: string
     file?: string
 }
 
-export interface PiniaHydrationEvent {
+export interface IPiniaHydrationEvent {
     at: number
     source: 'nuxt-payload' | 'persistedstate' | 'runtime' | 'unknown'
     details?: string
 }
 
-export interface PiniaTimelineEvent {
+export interface IPiniaTimelineEvent {
     id: string
     storeId: string
     storeName: string
@@ -155,66 +155,66 @@ export interface PiniaTimelineEvent {
     status: 'active' | 'ok' | 'error'
     beforeState: unknown
     afterState: unknown
-    diff: PiniaStateDiff[]
+    diff: IPiniaStateDiff[]
     callerStack?: string[]
     payload?: unknown
     error?: string
 }
 
-export interface PiniaStoreEntry {
+export interface IPiniaStoreEntry {
     id: string
     name: string
     state: unknown
-    dependencies: PiniaDependency[]
-    timeline: PiniaTimelineEvent[]
-    hydrationTimeline: PiniaHydrationEvent[]
+    dependencies: IPiniaDependency[]
+    timeline: IPiniaTimelineEvent[]
+    hydrationTimeline: IPiniaHydrationEvent[]
     lastMutationAt?: number
     lastActionAt?: number
-    hydration?: PiniaHydrationEvent
+    hydration?: IPiniaHydrationEvent
 }
 
-export interface InternalCounts {
+export interface IInternalCounts {
     componentMounts: Record<string, number>
     renderOperations: Record<string, number>
-    fetchOperations: Record<string, FetchOperationCount>
+    fetchOperations: Record<string, IFetchOperationCount>
 }
 
-export interface FetchOperationCount {
+export interface IFetchOperationCount {
     count: number
     totalDuration: number
 }
 
-export interface ObservatoryTestAPI {
-    getTraces(): Promise<TraceEntry[]>
-    getHeatmapData(): Promise<HeatmapData>
-    getComposableEntries(): Promise<ComposableEntry[]>
-    getFetchEntries(): Promise<FetchEntry[]>
-    getProvideInjectGraph(): Promise<GraphData>
-    getTransitionEntries(): Promise<TransitionEntry[]>
-    getPiniaStores(): Promise<PiniaStoreEntry[]>
-    getInternalCounts(): Promise<InternalCounts>
+export interface IObservatoryTestAPI {
+    getTraces(): Promise<ITraceEntry[]>
+    getHeatmapData(): Promise<IHeatmapData>
+    getComposableEntries(): Promise<IComposableEntry[]>
+    getFetchEntries(): Promise<IFetchEntry[]>
+    getProvideInjectGraph(): Promise<IGraphData>
+    getTransitionEntries(): Promise<ITransitionEntry[]>
+    getPiniaStores(): Promise<IPiniaStoreEntry[]>
+    getInternalCounts(): Promise<IInternalCounts>
     clearAllData(): Promise<void>
     startRecording(): Promise<void>
     stopRecording(): Promise<void>
     exportSnapshot(): Promise<string>
 }
 
-export interface ExtendedHTMLElement extends HTMLElement {
+export interface IExtendedHTMLElement extends HTMLElement {
     __observatoryMountCount?: number
 }
 
-export interface TestWindow extends Window {
-    __OBSERVATORY_TEST_BRIDGE?: ObservatoryTestAPI
+export interface ITestWindow extends Window {
+    __OBSERVATORY_TEST_BRIDGE?: IObservatoryTestAPI
     __lastMountStart?: number
     __heavyRenderStart?: number
     __editableComponentCounter?: number
 }
 
 // Type guard functions
-export function isTestWindow(window: Window): window is TestWindow {
+export function isTestWindow(window: Window): window is ITestWindow {
     return window !== undefined
 }
 
-export function hasTestBridge(window: Window): window is TestWindow {
+export function hasTestBridge(window: Window): window is ITestWindow {
     return isTestWindow(window) && window.__OBSERVATORY_TEST_BRIDGE !== undefined
 }

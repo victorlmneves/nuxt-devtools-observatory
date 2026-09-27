@@ -13,16 +13,16 @@ function clampOverscan(value: number): number {
     return Math.max(MIN_OVERSCAN, Math.min(MAX_OVERSCAN, Math.round(value)))
 }
 
-export type VirtualizationPreset = {
+export type TVirtualizationPreset = {
     rowHeight: number
     overscan: number
 }
 
-export function useVirtualizationConfig(initial?: Partial<VirtualizationPreset>) {
+export function useVirtualizationConfig(initial?: Partial<TVirtualizationPreset>) {
     const rowHeight = ref(initial?.rowHeight ?? DEFAULT_ROW_HEIGHT)
     const overscan = ref(clampOverscan(initial?.overscan ?? DEFAULT_OVERSCAN))
 
-    const preset = computed<VirtualizationPreset>(() => ({
+    const preset = computed<TVirtualizationPreset>(() => ({
         rowHeight: Math.max(20, rowHeight.value),
         overscan: clampOverscan(overscan.value),
     }))

@@ -1,9 +1,9 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type ObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { SpanType } from './types/observatory.types'
+import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
+import type { TSpanType } from './types/observatory.types'
 
 test.describe('Trace Viewer Correctness', () => {
-    let api: ObservatoryTestAPI
+    let api: IObservatoryTestAPI
     let page: Page
 
     test.beforeEach(async ({ page: testPage }) => {
@@ -126,7 +126,7 @@ test.describe('Trace Viewer Correctness', () => {
     })
 
     test('should capture all 7 span types', async () => {
-        const expectedTypes: SpanType[] = ['navigation', 'component', 'render', 'fetch', 'server', 'composable', 'transition']
+        const expectedTypes: TSpanType[] = ['navigation', 'component', 'render', 'fetch', 'server', 'composable', 'transition']
 
         await page.click('[data-testid="trigger-all-spans"]')
         await page.waitForTimeout(500)

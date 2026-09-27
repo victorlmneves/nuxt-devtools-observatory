@@ -1,14 +1,14 @@
 import type { ComponentPublicInstance } from 'vue'
 import { useRuntimeConfig } from '#app'
 import { bumpSnapshotRevision } from '../snapshot-revision'
-import type { Span } from '../tracing/trace'
+import type { ISpan } from '../tracing/trace'
 import { traceStore } from '../tracing/traceStore'
 
-interface DevtoolsWindow extends Window {
+interface IDevtoolsWindow extends Window {
     __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } }
 }
 
-export interface RenderEvent {
+export interface IRenderEvent {
     /** 'mount' for initial mount, 'update' for reactive re-renders */
     kind: 'mount' | 'update'
     /** performance.now() timestamp */
@@ -21,7 +21,7 @@ export interface RenderEvent {
     route: string
 }
 
-export interface RenderEntry {
+export interface IRenderEntry {
     uid: number
     name: string
     file: string
@@ -35,7 +35,7 @@ export interface RenderEntry {
     avgMs: number
     triggers: Array<{ key: string; type: string; timestamp: number }>
     /** Per-render timeline, capped at MAX_TIMELINE events (newest last) */
-    timeline: RenderEvent[]
+    timeline: IRenderEvent[]
     rect?: { x: number; y: number; width: number; height: number; top: number; left: number }
     parentUid?: number
     /** True if this component survived at least one reset() — indicates a layout/persistent component */
@@ -56,7 +56,7 @@ export interface RenderEntry {
  * @returns {object} An object containing the render registry's API methods: `getAll()`, `getSnapshot()`, `snapshot()`, `reset()`, and `setRoute()`.
  */
 export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, options: { isHydrating?: () => boolean } = {}) {
-    const entries = new Map<number, RenderEntry>()
+    const entries = new Map<number, IRenderEntry>()
     let currentRoute = '/'
     const config = useRuntimeConfig().public.observatory as { heatmapHideInternals?: boolean; maxRenderTimeline?: number }
     const MAX_TIMELINE = config.maxRenderTimeline ?? 100
@@ -156,8 +156,8 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             .flatMap((trace) => trace.spans)
             .filter((span) => span.type === 'render' || span.type === 'component')
 
-        const allSpansByUid = new Map<number, Span[]>()
-        const postResetSpansByUid = new Map<number, Span[]>()
+        const allSpansByUid = new Map<number, ISpan[]>()
+        const postResetSpansByUid = new Map<number, ISpan[]>()
 
         for (const span of componentSpans) {
             const uidValue = span.metadata?.uid
@@ -182,7 +182,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             const allSpans = (allSpansByUid.get(uid) ?? []).sort((a, b) => a.startTime - b.startTime)
             const postResetSpans = (postResetSpansByUid.get(uid) ?? []).sort((a, b) => a.startTime - b.startTime)
 
-            const timeline: RenderEvent[] = postResetSpans.slice(-MAX_TIMELINE).map((span) => {
+            const timeline: IRenderEvent[] = postResetSpans.slice(-MAX_TIMELINE).map((span) => {
                 const isMountLifecycle = span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
                 const lifecycle = isMountLifecycle ? 'mount' : 'update'
                 const routeValue = span.metadata?.route
@@ -196,7 +196,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
                 }
             })
 
-            const isMountSpan = (span: Span) => span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
+            const isMountSpan = (span: ISpan) => span.metadata?.lifecycle === 'render:mount' || span.metadata?.lifecycle === 'mounted'
             const mountCount = allSpans.filter(isMountSpan).length
             const rerenders = postResetSpans.filter((span) => !isMountSpan(span)).length
             const totalMs = postResetSpans.reduce((sum, span) => sum + (span.durationMs ?? 0), 0)
@@ -255,7 +255,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         },
     })
 
-    function sanitize(entry: RenderEntry): RenderEntry {
+    function sanitize(entry: IRenderEntry): IRenderEntry {
         return {
             uid: entry.uid,
             name: entry.name,
@@ -284,7 +284,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         }
     }
 
-    function getAll(): RenderEntry[] {
+    function getAll(): IRenderEntry[] {
         aggregateFromComponentSpans()
 
         return [...entries.values()].map(sanitize)
@@ -317,7 +317,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
         return cachedSnapshot
     }
 
-    function snapshot(): RenderEntry[] {
+    function snapshot(): IRenderEntry[] {
         return getAll()
     }
 
@@ -326,7 +326,7 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
             return
         }
 
-        const channel = (window as DevtoolsWindow).__nuxt_devtools__?.channel
+        const channel = (window as IDevtoolsWindow).__nuxt_devtools__?.channel
         channel?.send(event, data)
     }
 
@@ -334,14 +334,14 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 }
 
 /**
- * Creates a new RenderEntry object from a given component instance.
+ * Creates a new IRenderEntry object from a given component instance.
  * @param {number} uid - A unique identifier for the component.
  * @param {ComponentPublicInstance} instance - The component instance.
  * @param {string} route - The current route path.
  * @param {number} [parentUid] - The unique identifier of the parent component, if any.
- * @returns {RenderEntry} A new RenderEntry object.
+ * @returns {IRenderEntry} A new IRenderEntry object.
  */
-function makeEntry(uid: number, instance: ComponentPublicInstance, route: string, parentUid?: number): RenderEntry {
+function makeEntry(uid: number, instance: ComponentPublicInstance, route: string, parentUid?: number): IRenderEntry {
     const type = instance.$.type as { __name?: string; __file?: string; name?: string }
     const parentType = instance.$parent?.$?.type as { __name?: string; __file?: string; name?: string } | undefined
     const element = describeElement(instance.$el)

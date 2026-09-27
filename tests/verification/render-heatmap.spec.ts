@@ -1,8 +1,8 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type ObservatoryTestAPI } from './helpers/observatory-bridge'
+import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
 
 test.describe('Render Heatmap Correctness', () => {
-    let api: ObservatoryTestAPI
+    let api: IObservatoryTestAPI
     let page: Page
 
     test.beforeEach(async ({ page: testPage }) => {
@@ -13,13 +13,13 @@ test.describe('Render Heatmap Correctness', () => {
     })
 
     test('should not increment mount count for persistent components on navigation', async () => {
-        interface ExtendedElement extends HTMLElement {
+        interface IExtendedElement extends HTMLElement {
             __observatoryMountCount?: number
         }
 
         const getMountCount = async (): Promise<number> => {
             return await page.evaluate(() => {
-                const element = document.querySelector('[data-testid="persistent-layout"]') as ExtendedElement | null
+                const element = document.querySelector('[data-testid="persistent-layout"]') as IExtendedElement | null
 
                 return element?.__observatoryMountCount ?? 0
             })

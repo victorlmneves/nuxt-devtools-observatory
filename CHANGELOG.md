@@ -1,3 +1,55 @@
+# [0.10.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.9.0...v0.10.0) (2026-09-26)
+
+
+### Features
+
+* add SonarCloud rules for TypeScript and Vue coding standards ([ea16f09](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/ea16f09f837a9c45ada4edec8841d46d2c2e393f))
+
+# [0.9.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.8.0...v0.9.0) (2026-09-26)
+
+
+### Features
+
+* add KeepAlive and Suspense tracking to Observatory ([87243d1](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/87243d16b7bc626ff90c4e11eadda2a1ec6cb0dc))
+
+# [0.8.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.7.0...v0.8.0) (2026-09-25)
+
+
+### Features
+
+* add State Cookie Tracker to Observatory ([fec668a](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/fec668a489e676c0dc19227d639319ed31d8653e))
+* enhance observatory and State Cookie Tracker with type safety and message event handling ([74fa208](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/74fa208a056eb0db65d9b57517f4c4e60f73355e))
+
+# [0.7.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.6.1...v0.7.0) (2026-09-25)
+
+
+### Features
+
+* enhance observatory plugin and fetch instrumentation ([682012f](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/682012f10564981c76f0caf3d6f1003c096db52d))
+* enhance Trace Viewer and SSR trace handling ([f25309b](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/f25309b874f2f5387d364c5d1b93464dd3949ba7))
+
+## [0.6.1](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.6.0...v0.6.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* add --ignore-scripts flag to npm installation for trusted publishing in Release workflow ([fe43d2d](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/fe43d2df1058a1e70c5866f8b495cdc087e7a394))
+* install npm 11 in Release so trusted publishing can authenticate ([5a76895](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/5a768957b1c2d87324973b9e5d7824a28bcaf0da))
+* update npm version to 12.1.0 for trusted publishing in Release workflow ([554eb52](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/554eb52939deaf7f366455634b6b8a67daf90c3a))
+
+# [0.6.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.5.0...v0.6.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* stop using corepack to set up npm in the Release workflow ([3abad27](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/3abad27aa041b0e878a3f98204f1a166b74d215e))
+
+
+### Features
+
+* add Payload Inspector for Nuxt payload keys ([c7a62f4](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/c7a62f4590ca4a5cf6dedbe7e2ae3279be755eea))
+* enhance Payload Inspector with improved entry selection and search functionality ([c8b845c](https://github.com/victorlmneves/nuxt-devtools-observatory/commit/c8b845c78a08289c526cc00c65e5ab41ffa36979))
+
 # [0.5.0](https://github.com/victorlmneves/nuxt-devtools-observatory/compare/v0.4.0...v0.5.0) (2026-09-18)
 
 

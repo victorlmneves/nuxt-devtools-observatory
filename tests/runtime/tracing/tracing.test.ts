@@ -3,13 +3,13 @@ import { startSpan } from '@observatory/runtime/tracing/tracing'
 import { TraceStore } from '@observatory/runtime/tracing/traceStore'
 
 const TRACE_CONTEXT_KEY = '__observatory_trace_context__'
-interface Carrier {
+interface ICarrier {
     [TRACE_CONTEXT_KEY]?: { currentTraceId?: string }
 }
 
 function makeContext() {
     const store = new TraceStore()
-    const carrier: Carrier = {}
+    const carrier: ICarrier = {}
 
     return { store, carrier }
 }
@@ -43,8 +43,8 @@ describe('startSpan', () => {
 
     it('creates a separate trace when a fresh carrier is provided', () => {
         const store = new TraceStore()
-        const carrier1: Carrier = {}
-        const carrier2: Carrier = {}
+        const carrier1: ICarrier = {}
+        const carrier2: ICarrier = {}
         startSpan({ name: 'span1', type: 'custom' }, { store, carrier: carrier1 })
         startSpan({ name: 'span2', type: 'custom' }, { store, carrier: carrier2 })
 

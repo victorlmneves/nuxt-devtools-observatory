@@ -1,24 +1,24 @@
 import { startSpan } from '../tracing/tracing'
 
-interface AsyncDataMeta {
+interface IAsyncDataMeta {
     key: string
     file: string
     line: number
     originalFn?: string
 }
 
-type AnyFn = (...args: unknown[]) => unknown
+type TAnyFn = (...args: unknown[]) => unknown
 
 function getNormalizedKey(key: unknown) {
     return typeof key === 'string' && key.length > 0 ? key : 'useAsyncData'
 }
 
-export function useTracedAsyncData<TFn extends AnyFn>(
+export function useTracedAsyncData<TFn extends TAnyFn>(
     originalFn: TFn,
     args: unknown[],
     handlerIndex: number,
     key: unknown,
-    meta: AsyncDataMeta
+    meta: IAsyncDataMeta
 ): ReturnType<TFn> {
     if (!import.meta.dev || !import.meta.client) {
         return originalFn(...(args as Parameters<TFn>)) as ReturnType<TFn>
@@ -46,7 +46,7 @@ export function useTracedAsyncData<TFn extends AnyFn>(
             },
         })
 
-        return Promise.resolve((originalHandler as AnyFn)(...handlerArgs))
+        return Promise.resolve((originalHandler as TAnyFn)(...handlerArgs))
             .then((result) => {
                 span.end({
                     status: 'ok',

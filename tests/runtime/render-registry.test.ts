@@ -24,7 +24,7 @@ function addComponentSpan(
     options: { startTime?: number; durationMs?: number; route?: string } = {}
 ) {
     const { startTime = performance.now(), durationMs = 10, route = '/' } = options
-    const traceId = `test-component-${uid}-${lifecycle}-${Math.random()}`
+    const traceId = `test-component-${uid}-${lifecycle}-${crypto.randomUUID()}`
     const span = traceStore.addSpan({
         traceId,
         name: `component:${lifecycle}`,
@@ -318,7 +318,7 @@ describe('setupRenderRegistry', () => {
 
 // ── Tests for fixes introduced in the bug-fix pass ────────────────────────
 
-describe('RenderEntry interface — children field removed (fix: render-registry)', () => {
+describe('IRenderEntry interface — children field removed (fix: render-registry)', () => {
     it('getAll() entries do not have a children property', () => {
         const app = createApp({ render: () => h('div') })
         const { getAll } = setupRenderRegistry({ vueApp: app })

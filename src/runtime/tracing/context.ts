@@ -1,16 +1,16 @@
 const TRACE_CONTEXT_KEY = '__observatory_trace_context__'
 
-type TraceContextCarrier = {
+type TTraceContextCarrier = {
     [TRACE_CONTEXT_KEY]?: {
         currentTraceId?: string
     }
 }
 
-function getGlobalCarrier(): TraceContextCarrier {
-    return globalThis as TraceContextCarrier
+function getGlobalCarrier(): TTraceContextCarrier {
+    return globalThis as TTraceContextCarrier
 }
 
-export function setCurrentTraceId(traceId: string | undefined, carrier?: TraceContextCarrier) {
+export function setCurrentTraceId(traceId: string | undefined, carrier?: TTraceContextCarrier) {
     const target = carrier ?? getGlobalCarrier()
 
     if (!target[TRACE_CONTEXT_KEY]) {
@@ -20,7 +20,7 @@ export function setCurrentTraceId(traceId: string | undefined, carrier?: TraceCo
     target[TRACE_CONTEXT_KEY]!.currentTraceId = traceId
 }
 
-export function getCurrentTraceId(carrier?: TraceContextCarrier) {
+export function getCurrentTraceId(carrier?: TTraceContextCarrier) {
     const target = carrier ?? getGlobalCarrier()
 
     return target[TRACE_CONTEXT_KEY]?.currentTraceId

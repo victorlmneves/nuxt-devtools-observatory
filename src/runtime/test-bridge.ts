@@ -1,10 +1,10 @@
 // @ts-nocheck — verification-only host bridge; APIs here are not part of the typed public surface.
-import type { ObservatoryTestAPI, InternalCounts } from '../../tests/verification/types/observatory.types'
+import type { IObservatoryTestAPI, IInternalCounts } from '../../tests/verification/types/observatory.types'
 
 // This file should be added to your runtime directory
 // Only loaded in development mode
 
-interface VueApp {
+interface IVueApp {
     _context?: {
         app?: {
             _component?: unknown
@@ -12,7 +12,7 @@ interface VueApp {
     }
 }
 
-interface ObservatoryRuntimeWindow extends Window {
+interface IObservatoryRuntimeWindow extends Window {
     __observatory__?: {
         pinia?: {
             getAll?: () => unknown[]
@@ -21,7 +21,7 @@ interface ObservatoryRuntimeWindow extends Window {
     }
 }
 
-interface VueInstance {
+interface IVueInstance {
     type?: {
         name?: string
         __name?: string
@@ -30,20 +30,20 @@ interface VueInstance {
         __observatoryMountCount?: number
     }
     subTree?: {
-        children?: VueInstance[]
+        children?: IVueInstance[]
     }
 }
 
 declare global {
     interface Window {
         __NUXT__?: {
-            vueApp?: VueApp
+            vueApp?: IVueApp
         }
-        __OBSERVATORY_TEST_BRIDGE?: ObservatoryTestAPI
+        __OBSERVATORY_TEST_BRIDGE?: IObservatoryTestAPI
     }
 }
 
-function walkComponentTree(instance: VueInstance | undefined, counts: InternalCounts): void {
+function walkComponentTree(instance: IVueInstance | undefined, counts: IInternalCounts): void {
     if (!instance) {
         return
     }
@@ -65,7 +65,7 @@ export function injectTestBridge(): void {
         return
     }
 
-    const bridge: ObservatoryTestAPI = {
+    const bridge: IObservatoryTestAPI = {
         async getTraces() {
             // Import dynamically to avoid circular dependencies
             const { traceStore } = await import('./tracing/traceStore')
@@ -104,7 +104,7 @@ export function injectTestBridge(): void {
         },
 
         async getPiniaStores() {
-            const observatory = (window as ObservatoryRuntimeWindow).__observatory__
+            const observatory = (window as IObservatoryRuntimeWindow).__observatory__
             const registry = observatory?.pinia
 
             if (!registry?.getAll) {
@@ -114,8 +114,8 @@ export function injectTestBridge(): void {
             return registry.getAll()
         },
 
-        async getInternalCounts(): Promise<InternalCounts> {
-            const counts: InternalCounts = {
+        async getInternalCounts(): Promise<IInternalCounts> {
+            const counts: IInternalCounts = {
                 componentMounts: {},
                 renderOperations: {},
                 fetchOperations: {},
@@ -127,7 +127,7 @@ export function injectTestBridge(): void {
                 return counts
             }
 
-            walkComponentTree(vueApp._context?.app?._component as VueInstance | undefined, counts)
+            walkComponentTree(vueApp._context?.app?._component as IVueInstance | undefined, counts)
 
             return counts
         },
@@ -137,7 +137,7 @@ export function injectTestBridge(): void {
             const { renderRegistry } = await import('./composables/render-registry')
             const { composableRegistry } = await import('./composables/composable-registry')
             const { fetchRegistry } = await import('./composables/fetch-registry')
-            const observatory = (window as ObservatoryRuntimeWindow).__observatory__
+            const observatory = (window as IObservatoryRuntimeWindow).__observatory__
             const piniaRegistry = observatory?.pinia
 
             traceStore.clear()

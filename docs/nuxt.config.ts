@@ -31,8 +31,11 @@ export default defineNuxtConfig({
                 '/feature-guides/usefetch-dashboard',
                 '/feature-guides/provide-inject-graph',
                 '/feature-guides/composable-tracker',
+                '/feature-guides/pinia-tracker',
+                '/feature-guides/payload-inspector',
                 '/feature-guides/render-heatmap',
                 '/feature-guides/transition-tracker',
+                '/feature-guides/trace-viewer',
                 '/api-reference',
                 '/api-reference/module-options',
                 '/api-reference/rpc-contracts',
@@ -61,9 +64,5 @@ export default defineNuxtConfig({
 
     icon: {
         provider: 'iconify',
-    },
-
-    site: {
-        url: 'https://nuxt-devtools-observatory.vercel.app',
     },
 })

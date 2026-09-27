@@ -1,24 +1,24 @@
 import type {
-    ObservatoryTestAPI,
-    TestWindow,
-    TraceEntry,
-    HeatmapData,
-    ComposableEntry,
-    FetchEntry,
-    GraphData,
-    TransitionEntry,
-    InternalCounts,
+    IObservatoryTestAPI,
+    ITestWindow,
+    ITraceEntry,
+    IHeatmapData,
+    IComposableEntry,
+    IFetchEntry,
+    IGraphData,
+    ITransitionEntry,
+    IInternalCounts,
 } from '../types/observatory.types'
 
-function getSafeWindow(): TestWindow {
+function getSafeWindow(): ITestWindow {
     if (typeof window === 'undefined') {
         throw new Error('Window is not defined - this code must run in browser environment')
     }
 
-    return window as TestWindow
+    return window as ITestWindow
 }
 
-export async function getTestBridge(): Promise<ObservatoryTestAPI> {
+export async function getTestBridge(): Promise<IObservatoryTestAPI> {
     const win = getSafeWindow()
 
     if (!win.__OBSERVATORY_TEST_BRIDGE) {
@@ -44,17 +44,17 @@ export async function waitForBridge(timeoutMs: number = 5000): Promise<void> {
     throw new Error(`Observatory test bridge not initialized within ${timeoutMs}ms`)
 }
 
-type WritableTestWindowKey = '__lastMountStart' | '__heavyRenderStart' | '__editableComponentCounter'
+type TWritableTestWindowKey = '__lastMountStart' | '__heavyRenderStart' | '__editableComponentCounter'
 
-export function setTestMetadata(key: WritableTestWindowKey, value: number): void {
+export function setTestMetadata(key: TWritableTestWindowKey, value: number): void {
     const win = getSafeWindow()
     win[key] = value
 }
 
-export function getTestMetadata(key: WritableTestWindowKey): number | undefined {
+export function getTestMetadata(key: TWritableTestWindowKey): number | undefined {
     const win = getSafeWindow()
 
     return win[key]
 }
 
-export type { ObservatoryTestAPI, TraceEntry, HeatmapData, ComposableEntry, FetchEntry, GraphData, TransitionEntry, InternalCounts }
+export type { IObservatoryTestAPI, ITraceEntry, IHeatmapData, IComposableEntry, IFetchEntry, IGraphData, ITransitionEntry, IInternalCounts }

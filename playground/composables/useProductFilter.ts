@@ -2,7 +2,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { useCartStore } from '../stores/cart'
 import { useUserStore } from '../stores/user'
 
-interface FilterableProduct {
+interface IFilterableProduct {
     id: number
     name: string
     price: number
@@ -32,7 +32,7 @@ export function useProductFilter() {
     const cartStore = useCartStore()
     const userStore = useUserStore()
 
-    const _products = ref<FilterableProduct[]>([])
+    const _products = ref<IFilterableProduct[]>([])
     const filterText = ref('')
     const activeFilters = ref<string[]>([])
     const filterStats = ref({ totalWatcherFires: 0 })
@@ -120,9 +120,9 @@ export function useProductFilter() {
 
     /**
      * Load (or replace) the full product list that this composable filters.
-     * @param {FilterableProduct[]} products - The new product list to filter against.
+     * @param {IFilterableProduct[]} products - The new product list to filter against.
      */
-    function setProducts(products: FilterableProduct[]) {
+    function setProducts(products: IFilterableProduct[]) {
         _products.value = products
     }
 

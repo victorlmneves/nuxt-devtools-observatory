@@ -12,9 +12,11 @@ description: Track per-route spans and compare render regressions across traces.
 - Fetch timing and SSR/CSR origin
 - Transition phase spans
 - Composable setup spans (client and SSR)
-- Server phase spans for SSR handling
+- Server phase spans for SSR handling, API / server routes, middleware, and cached handlers (`instrumentServer` required)
 - Vue / app / navigation errors attached to the active route trace
 - Navigation abort spans when a route is superseded before `page:finish`
+
+Document HTML traces are named `ssr:<path>`. Non-HTML Nitro requests (API routes, middleware-only responses) appear in the same Trace Viewer as `nitro:<METHOD> <path>`. Cached handlers add a `nitro:cached` span with `cache: hit` or `cache: miss` when Nitro exposes cache status. Named middleware spans (`nitro:middleware:<name>`) are recorded when the h3 handler stack can be wrapped; otherwise a single `nitro:middleware` span covers the request until the handler. The archive used for API traces is a bounded list (same cap as `maxTraces`) and is not sent over HMR snapshots.
 
 ## What to watch for
 

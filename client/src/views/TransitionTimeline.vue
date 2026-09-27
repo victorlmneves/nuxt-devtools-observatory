@@ -5,13 +5,13 @@ import { useVirtualizationConfig } from '@observatory-client/composables/useVirt
 import { useVirtualizationFlags } from '@observatory-client/composables/useVirtualizationFlags'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData } from '@observatory-client/stores/observatory'
-import type { TransitionEntry } from '@observatory/types/snapshot'
+import type { ITransitionEntry } from '@observatory/types/snapshot'
 
 const { transitions: entries, connected } = useObservatoryData()
 const { paneWidth: detailWidth, onHandleMouseDown } = useResizablePane(260, 'observatory:transitions:detailWidth')
 
-type FilterMode = 'all' | 'cancelled' | 'active' | 'completed'
-const filter = ref<FilterMode>('all')
+type TFilterMode = 'all' | 'cancelled' | 'active' | 'completed'
+const filter = ref<TFilterMode>('all')
 const search = ref('')
 const selectedId = ref<string | null>(null)
 const tableScrollRef = ref<HTMLElement | null>(null)
@@ -133,10 +133,10 @@ const visibleRows = computed(() => {
             entry: filtered.value[item.index],
             geometry: timelineGeometry.value[item.index],
         }))
-        .filter((row): row is { entry: TransitionEntry; geometry: { left: number; width: number } } => Boolean(row.entry && row.geometry))
+        .filter((row): row is { entry: ITransitionEntry; geometry: { left: number; width: number } } => Boolean(row.entry && row.geometry))
 })
 
-function phaseColor(phase: TransitionEntry['phase']): string {
+function phaseColor(phase: ITransitionEntry['phase']): string {
     if (phase === 'entering' || phase === 'leaving') {
         return '#7f77dd'
     }
@@ -160,7 +160,7 @@ function phaseColor(phase: TransitionEntry['phase']): string {
     return '#888'
 }
 
-function phaseBadgeClass(phase: TransitionEntry['phase']): string {
+function phaseBadgeClass(phase: ITransitionEntry['phase']): string {
     if (phase === 'entering' || phase === 'leaving') {
         return 'badge-purple'
     }
@@ -180,7 +180,7 @@ function phaseBadgeClass(phase: TransitionEntry['phase']): string {
     return 'badge-gray'
 }
 
-function directionLabel(e: TransitionEntry): string {
+function directionLabel(e: ITransitionEntry): string {
     if (e.appear) {
         return '✦ appear'
     }
@@ -188,7 +188,7 @@ function directionLabel(e: TransitionEntry): string {
     return e.direction === 'enter' ? '→ enter' : '← leave'
 }
 
-function directionColor(e: TransitionEntry): string {
+function directionColor(e: ITransitionEntry): string {
     if (e.appear) {
         return 'var(--amber)'
     }
@@ -224,13 +224,13 @@ function directionColor(e: TransitionEntry): string {
 
         <!-- Toolbar -->
         <div class="transition-timeline__toolbar tracker-toolbar">
-            <label class="sr-only" for="transition-timeline-search">Filter transitions</label>
             <input
                 id="transition-timeline-search"
                 v-model="search"
                 type="search"
                 placeholder="filter by name or component…"
                 class="transition-timeline__search"
+                aria-label="Filter transitions by name or component"
             />
             <div class="transition-timeline__filters">
                 <button :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
@@ -258,17 +258,18 @@ function directionColor(e: TransitionEntry): string {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-if="virtualizedRowsEnabled && topTablePadding > 0" class="transition-timeline__virtual-spacer-row">
+                        <tr v-if="virtualizedRowsEnabled && topTablePadding > 0" class="transition-timeline__virtual-spacer-row" inert>
                             <td colspan="6" :style="{ height: `${topTablePadding}px` }"></td>
                         </tr>
-                        <tr
-                            v-for="row in visibleRows"
-                            :key="row.entry.id"
-                            :class="{ selected: selected?.id === row.entry.id }"
-                            @click="selectedId = selected?.id === row.entry.id ? null : row.entry.id"
-                        >
+                        <tr v-for="row in visibleRows" :key="row.entry.id" :class="{ selected: selected?.id === row.entry.id }">
                             <td>
-                                <span class="transition-timeline__name mono">{{ row.entry.transitionName }}</span>
+                                <button
+                                    type="button"
+                                    class="transition-timeline__name data-table__row-select mono"
+                                    @click="selectedId = selected?.id === row.entry.id ? null : row.entry.id"
+                                >
+                                    {{ row.entry.transitionName }}
+                                </button>
                                 <span v-if="row.entry.component === 'TransitionGroup'" class="muted text-sm">group</span>
                             </td>
                             <td>
@@ -298,7 +299,7 @@ function directionColor(e: TransitionEntry): string {
                             </td>
                         </tr>
 
-                        <tr v-if="virtualizedRowsEnabled && bottomTablePadding > 0" class="transition-timeline__virtual-spacer-row">
+                        <tr v-if="virtualizedRowsEnabled && bottomTablePadding > 0" class="transition-timeline__virtual-spacer-row" inert>
                             <td colspan="6" :style="{ height: `${bottomTablePadding}px` }"></td>
                         </tr>
 

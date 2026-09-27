@@ -8,27 +8,27 @@
  * `node:async_hooks` is loaded lazily so the client bundle does not need the module.
  */
 
-export interface SsrRequestContext {
+export interface ISsrRequestContext {
     __observatoryRequestId: string
     __ssrFetchStart: number
 }
 
-interface ContextStore {
-    enterWith(value: SsrRequestContext | undefined): void
-    getStore(): SsrRequestContext | undefined
-    run<T>(value: SsrRequestContext, fn: () => T): T
+interface IContextStore {
+    enterWith(value: ISsrRequestContext | undefined): void
+    getStore(): ISsrRequestContext | undefined
+    run<T>(value: ISsrRequestContext, fn: () => T): T
 }
 
-function createContextStore(): ContextStore {
+function createContextStore(): IContextStore {
     if (typeof process !== 'undefined' && process.versions?.node) {
         try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { AsyncLocalStorage } = require('node:async_hooks') as typeof import('node:async_hooks')
-            const als = new AsyncLocalStorage<SsrRequestContext>()
+            const als = new AsyncLocalStorage<ISsrRequestContext>()
 
             return {
                 enterWith(value) {
-                    als.enterWith(value as SsrRequestContext)
+                    als.enterWith(value as ISsrRequestContext)
                 },
                 getStore() {
                     return als.getStore()
@@ -42,7 +42,7 @@ function createContextStore(): ContextStore {
         }
     }
 
-    let slot: SsrRequestContext | undefined
+    let slot: ISsrRequestContext | undefined
 
     return {
         enterWith(value) {
@@ -66,11 +66,11 @@ function createContextStore(): ContextStore {
 
 const store = createContextStore()
 
-export function enterSsrRequestContext(context: SsrRequestContext): void {
+export function enterSsrRequestContext(context: ISsrRequestContext): void {
     store.enterWith(context)
 }
 
-export function getSsrRequestContext(): SsrRequestContext | undefined {
+export function getSsrRequestContext(): ISsrRequestContext | undefined {
     return store.getStore()
 }
 
@@ -82,6 +82,6 @@ export function clearSsrRequestContext(requestId: string): void {
     }
 }
 
-export function runWithSsrRequestContext<T>(context: SsrRequestContext, fn: () => T): T {
+export function runWithSsrRequestContext<T>(context: ISsrRequestContext, fn: () => T): T {
     return store.run(context, fn)
 }

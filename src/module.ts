@@ -5,10 +5,11 @@ import { composableTrackerPlugin } from './transforms/composable-transform'
 import { fetchInstrumentPlugin } from './transforms/fetch-transform'
 import { provideInjectPlugin } from './transforms/provide-inject-transform'
 import { transitionTrackerPlugin } from './transforms/transition-transform'
-import type { ObservatoryCommand, ObservatorySnapshot, ObservatoryClientFunctions, ObservatoryServerFunctions } from './types/rpc'
+import { stateCookieTrackerPlugin } from './transforms/state-cookie-transform'
+import type { TObservatoryCommand, IObservatorySnapshot, IObservatoryClientFunctions, IObservatoryServerFunctions } from './types/rpc'
 import { createModuleDefaults, resolveInstrumentServer } from './env-options'
 
-export interface ModuleOptions {
+export interface IModuleOptions {
     /**
      * Instrument composables, provide/inject, fetch, and transitions on the
      * server build as well as the client build. Enable this when using SSR so
@@ -105,6 +106,24 @@ export interface ModuleOptions {
     piniaTracker?: boolean
 
     /**
+     * Enable the payload and hydration inspector tab
+     * @default true
+     */
+    payloadInspector?: boolean
+
+    /**
+     * Enable the useState / useCookie tracker tab
+     * @default true
+     */
+    stateCookieTracker?: boolean
+
+    /**
+     * Maximum number of useState / useCookie entries to keep in memory
+     * @default 200
+     */
+    maxStateCookieEntries?: number
+
+    /**
      * Enable the render heatmap tab
      * @default true
      */
@@ -115,6 +134,18 @@ export interface ModuleOptions {
      * @default true
      */
     transitionTracker?: boolean
+
+    /**
+     * Enable the KeepAlive / Suspense tracker tab
+     * @default true
+     */
+    keepAliveTracker?: boolean
+
+    /**
+     * Maximum number of KeepAlive / Suspense events to keep in memory
+     * @default 300
+     */
+    maxKeepAliveEntries?: number
 
     /**
      * Enable the trace viewer tab (per-route component + fetch + composable + render spans)
@@ -150,7 +181,7 @@ export interface ModuleOptions {
 // Feature tabs default on. instrumentServer is resolved in setup from SSR/SPA.
 const defaults = createModuleDefaults()
 
-export default defineNuxtModule<ModuleOptions>({
+export default defineNuxtModule<IModuleOptions>({
     meta: {
         name: 'nuxt-devtools-observatory',
         configKey: 'observatory',
@@ -193,6 +224,9 @@ export default defineNuxtModule<ModuleOptions>({
             aliases['nuxt-devtools-observatory/runtime/async-data-instrumentation'] = resolver.resolve(
                 './runtime/instrumentation/asyncData'
             )
+            aliases['nuxt-devtools-observatory/runtime/state-cookie-registry'] = resolver.resolve(
+                './runtime/composables/state-cookie-registry'
+            )
             ;(config as { resolve?: object }).resolve = { ...config.resolve, alias: aliases }
         })
 
@@ -217,8 +251,13 @@ export default defineNuxtModule<ModuleOptions>({
             addVitePlugin(composableTrackerPlugin(), vitePluginScope)
         }
 
-        if (resolved.transitionTracker) {
+        if (resolved.transitionTracker || resolved.keepAliveTracker) {
             addVitePlugin(transitionTrackerPlugin(), vitePluginScope)
+        }
+
+        if (resolved.stateCookieTracker) {
+            addVitePlugin(stateCookieTrackerPlugin(), vitePluginScope)
+            addImports([{ name: '__trackStateCookie', from: resolver.resolve('./runtime/composables/state-cookie-registry') }])
         }
 
         const trackersEnabled = Boolean(
@@ -226,8 +265,11 @@ export default defineNuxtModule<ModuleOptions>({
             resolved.provideInjectGraph ||
             resolved.composableTracker ||
             resolved.piniaTracker ||
+            resolved.payloadInspector ||
+            resolved.stateCookieTracker ||
             resolved.renderHeatmap ||
             resolved.transitionTracker ||
+            resolved.keepAliveTracker ||
             resolved.traceViewer
         )
 
@@ -240,6 +282,14 @@ export default defineNuxtModule<ModuleOptions>({
 
         // ── Nitro plugin for SSR fetch capture / trace injection ──────────────
         if (resolved.fetchDashboard || (resolved.traceViewer && resolved.instrumentServer)) {
+            const nitroOptions = nuxt.options as typeof nuxt.options & {
+                nitro?: { env?: Record<string, string | undefined> }
+            }
+            nitroOptions.nitro = nitroOptions.nitro ?? {}
+            nitroOptions.nitro.env = {
+                ...(nitroOptions.nitro.env ?? {}),
+                OBSERVATORY_MAX_TRACES: String(resolved.maxTraces ?? 50),
+            }
             addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
         }
 
@@ -254,7 +304,7 @@ export default defineNuxtModule<ModuleOptions>({
         }
 
         // Last host-app snapshot received from runtime/plugin.ts through Vite HMR.
-        let latestSnapshot: ObservatorySnapshot = {
+        let latestSnapshot: IObservatorySnapshot = {
             fetch: [],
             provideInject: { provides: [], injects: [] },
             composables: [],
@@ -262,25 +312,31 @@ export default defineNuxtModule<ModuleOptions>({
             renders: [],
             transitions: [],
             traces: [],
+            payload: { capturedAt: 0, isHydrating: false, serverRendered: false, keyCount: 0, totalBytes: 0, keys: [] },
+            stateCookies: [],
+            keepAlive: { events: [], cache: [] },
             features: {
                 fetchDashboard: !!resolved.fetchDashboard,
                 provideInjectGraph: !!resolved.provideInjectGraph,
                 composableTracker: !!resolved.composableTracker,
                 piniaTracker: !!resolved.piniaTracker,
+                payloadInspector: !!resolved.payloadInspector,
+                stateCookieTracker: !!resolved.stateCookieTracker,
                 composableNavigationMode: resolved.composableNavigationMode,
                 fetchPageSize: resolved.fetchPageSize,
                 heatmapThresholdCount: resolved.heatmapThresholdCount,
                 heatmapThresholdTime: resolved.heatmapThresholdTime,
                 renderHeatmap: !!resolved.renderHeatmap,
                 transitionTracker: !!resolved.transitionTracker,
+                keepAliveTracker: !!resolved.keepAliveTracker,
                 traceViewer: !!resolved.traceViewer,
             },
         }
 
-        let rpc: ReturnType<typeof extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>> | null = null
+        let rpc: ReturnType<typeof extendServerRpc<IObservatoryClientFunctions, IObservatoryServerFunctions>> | null = null
         let viteServer: { ws: { send: (event: string, data: unknown) => void } } | null = null
 
-        const emitCommand = (command: ObservatoryCommand) => {
+        const emitCommand = (command: TObservatoryCommand) => {
             if (!viteServer) {
                 console.warn('[observatory][rpc][server] command dropped (vite ws not ready)', command)
 
@@ -302,7 +358,7 @@ export default defineNuxtModule<ModuleOptions>({
                 const clientDist = resolver.resolve('../client/dist')
                 server.middlewares.use(base, sirv(clientDist, { dev: true, single: true }))
 
-                server.ws.on('observatory:snapshot', (snapshot: ObservatorySnapshot) => {
+                server.ws.on('observatory:snapshot', (snapshot: IObservatorySnapshot) => {
                     latestSnapshot = snapshot
                     debugLog('received host snapshot', {
                         fetch: Array.isArray(snapshot.fetch) ? snapshot.fetch.length : 0,
@@ -318,7 +374,7 @@ export default defineNuxtModule<ModuleOptions>({
         })
 
         onDevToolsInitialized(() => {
-            rpc = extendServerRpc<ObservatoryClientFunctions, ObservatoryServerFunctions>(
+            rpc = extendServerRpc<IObservatoryClientFunctions, IObservatoryServerFunctions>(
                 'observatory',
                 {
                     async getSnapshot() {
@@ -370,8 +426,13 @@ export default defineNuxtModule<ModuleOptions>({
             provideInjectGraph: resolved.provideInjectGraph,
             composableTracker: resolved.composableTracker,
             piniaTracker: resolved.piniaTracker,
+            payloadInspector: resolved.payloadInspector,
+            stateCookieTracker: resolved.stateCookieTracker,
+            maxStateCookieEntries: resolved.maxStateCookieEntries,
             renderHeatmap: resolved.renderHeatmap,
             transitionTracker: resolved.transitionTracker,
+            keepAliveTracker: resolved.keepAliveTracker,
+            maxKeepAliveEntries: resolved.maxKeepAliveEntries,
             traceViewer: resolved.traceViewer,
             maxFetchEntries: resolved.maxFetchEntries,
             maxPayloadBytes: resolved.maxPayloadBytes,

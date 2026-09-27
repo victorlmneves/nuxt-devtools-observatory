@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { matchesComposableEntryQuery } from '@observatory-client/composables/composable-search'
-import type { ComposableEntry } from '@observatory/types/snapshot'
+import type { IComposableEntry } from '@observatory/types/snapshot'
 
-function makeEntry(overrides?: Partial<ComposableEntry>): ComposableEntry {
+function makeEntry(overrides?: Partial<IComposableEntry>): IComposableEntry {
     return {
         id: 'entry-1',
         name: 'usePreferences',
@@ -96,6 +96,40 @@ describe('matchesComposableEntryQuery', () => {
 
         expect(() => matchesComposableEntryQuery(entry, 'root')).not.toThrow()
         expect(matchesComposableEntryQuery(entry, 'root')).toBe(true)
+    })
+
+    it('matches Map keys and values and Set values', () => {
+        const entry = makeEntry({
+            refs: {
+                lookup: {
+                    type: 'reactive',
+                    value: {
+                        bySku: new Map<string, { title: string }>([['SKU-9', { title: 'Desk Lamp' }]]),
+                        tags: new Set(['featured', 'warehouse']),
+                    },
+                },
+            },
+        })
+
+        expect(matchesComposableEntryQuery(entry, 'sku-9')).toBe(true)
+        expect(matchesComposableEntryQuery(entry, 'desk lamp')).toBe(true)
+        expect(matchesComposableEntryQuery(entry, 'warehouse')).toBe(true)
+    })
+
+    it('stops walking objects past the search depth', () => {
+        const entry = makeEntry({
+            refs: {
+                tree: {
+                    type: 'reactive',
+                    value: {
+                        a: { b: { c: { d: { e: { f: { secret: 'needle' } } } } } },
+                    },
+                },
+            },
+        })
+
+        expect(matchesComposableEntryQuery(entry, 'needle')).toBe(false)
+        expect(matchesComposableEntryQuery(entry, 'secret')).toBe(false)
     })
 
     it('returns false for non-matching query', () => {

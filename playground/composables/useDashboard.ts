@@ -1,7 +1,7 @@
 import { ref, computed, watchEffect, onMounted, onUnmounted } from 'vue'
 import { useCartStore } from '../stores/cart'
 
-interface StatsSnapshot {
+interface IStatsSnapshot {
     timestamp: number
     activeUsers: number
     pageViews: number
@@ -24,7 +24,7 @@ interface StatsSnapshot {
  * @returns {object} Live stats state, cart-derived metrics, and a manual refresh function.
  */
 export function useDashboard() {
-    const stats = ref<StatsSnapshot | null>(null)
+    const stats = ref<IStatsSnapshot | null>(null)
     const isLoading = ref(false)
     const error = ref<string | null>(null)
     const pollCount = ref(0)
@@ -48,7 +48,7 @@ export function useDashboard() {
         error.value = null
 
         try {
-            const data = await $fetch<StatsSnapshot>('/api/stats')
+            const data = await $fetch<IStatsSnapshot>('/api/stats')
             stats.value = data
             pollCount.value++
         } catch (e) {

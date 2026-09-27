@@ -11,9 +11,12 @@ Nuxt DevTools Observatory is a module that brings advanced observability and run
 - **provide/inject Graph** — interactive tree showing the full injection topology, value inspection, scope labels, shadow detection, and missing-provider warnings
 - **Composable Tracker** — live view of active composables, reactive state, change history, leak detection, inline value editing, and reverse lookup
 - **Pinia Tracker** — inspect Pinia store state, action/mutation timelines, dependency edges, and hydration attribution
+- **Payload Inspector** — inspect Nuxt payload keys, serialized size, and SSR versus CSR hydration origin
+- **State / cookies** — live `useState` and `useCookie` keys, current value preview, and cookie option metadata
 - **Render Heatmap** — component tree colour-coded by render frequency and duration, with per-render timeline, route filtering, and persistent-component accuracy fixes
 - **Transition Tracker** — live timeline of every `<Transition>` lifecycle event with phase, duration, and cancellation state
-- **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, and navigation events in a unified Flamegraph and Waterfall view
+- **KeepAlive / Suspense** — activation, cache hits and evictions, plus Suspense pending and fallback timing
+- **Trace Viewer** — per-route span traces capturing component mount order, real render durations, fetch timing, composable setup, navigation events, and Nitro server-route timing in a unified Flamegraph and Waterfall view
 
 ### How is this different from Nuxt DevTools?
 
@@ -56,6 +59,8 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `provideInjectGraph` (boolean) — Enable provide/inject graph
 - `composableTracker` (boolean) — Enable composable tracker
 - `piniaTracker` (boolean) — Enable Pinia store tracker (set via `OBSERVATORY_PINIA_TRACKER`)
+- `payloadInspector` (boolean) — Enable payload and hydration inspector (set via `OBSERVATORY_PAYLOAD_INSPECTOR`)
+- `stateCookieTracker` (boolean) — Enable useState / useCookie tracker (set via `OBSERVATORY_STATE_COOKIE_TRACKER`)
 - `renderHeatmap` (boolean) — Enable render heatmap
 - `transitionTracker` (boolean) — Enable transition tracker (set via `OBSERVATORY_TRANSITION_TRACKER`)
 - `traceViewer` (boolean) — Enable trace viewer tab with per-route Flamegraph and Waterfall (set via `OBSERVATORY_TRACE_VIEWER`)
@@ -71,6 +76,7 @@ Options set in `nuxt.config.ts` take precedence over environment variables.
 - `maxComposableHistory` (number) — Max composable history events per entry
 - `maxComposableEntries` (number) — Max composable entries to keep in memory
 - `maxPiniaTimeline` (number) — Max Pinia timeline events per store (set via `OBSERVATORY_MAX_PINIA_TIMELINE`)
+- `maxStateCookieEntries` (number) — Max useState / useCookie entries to keep (set via `OBSERVATORY_MAX_STATE_COOKIE_ENTRIES`)
 - `maxRenderTimeline` (number) — Max render timeline events per entry
 
 Feature tabs are enabled by default in development. `instrumentServer` defaults to
@@ -87,6 +93,8 @@ export default defineNuxtConfig({
         provideInjectGraph: true, // Enable provide/inject graph
         composableTracker: true, // Enable composable tracker
         piniaTracker: true, // Enable Pinia store tracker
+        payloadInspector: true, // Enable payload and hydration inspector
+        stateCookieTracker: true, // Enable useState / useCookie tracker
         renderHeatmap: true, // Enable render heatmap
         transitionTracker: true, // Enable transition tracker
         traceViewer: true, // Enable trace viewer
@@ -102,6 +110,7 @@ export default defineNuxtConfig({
         maxComposableHistory: 50, // Max composable history events per entry
         maxComposableEntries: 300, // Max composable entries to keep in memory
         maxPiniaTimeline: 100, // Max Pinia timeline events per store
+        maxStateCookieEntries: 200, // Max useState / useCookie entries to keep
         maxRenderTimeline: 100, // Max render timeline events per entry
     },
 
@@ -109,14 +118,14 @@ export default defineNuxtConfig({
 })
 ```
 
-Open the Nuxt DevTools panel — seven Observatory tabs will appear when all features are enabled.
+Open the Nuxt DevTools panel — Observatory tabs will appear for each enabled feature.
 
 The DevTools client SPA is served same-origin via the Nuxt dev server at `/__observatory/`.
 
 ## How it works
 
 All instrumentation is **dev-only**. The module registers Vite transforms that wrap
-`useFetch`, `provide/inject`, `useX()` composable calls, and `<Transition>` at the
+`useFetch`, `provide/inject`, `useState` / `useCookie`, `useX()` composable calls, and `<Transition>` at the
 AST/module level before compilation. Pinia is instrumented at runtime through a Pinia
 plugin. In production (`import.meta.dev === false`) the transforms and plugin are
 skipped entirely — zero runtime overhead.
@@ -208,7 +217,7 @@ Accurate duration is measured by bracketing each `beforeMount`/`mounted` and
 Component bounding boxes are captured via `$el.getBoundingClientRect()` for the DOM
 overlay mode.
 
-Each `RenderEntry` carries a `timeline: RenderEvent[]` (capped at 100 events, newest
+Each `IRenderEntry` carries a `timeline: IRenderEvent[]` (capped at 100 events, newest
 last). Every mount and update cycle appends an event recording:
 
 - `kind` — `mount` or `update`
@@ -273,13 +282,43 @@ The panel provides:
 - **Dependency graph** — which components and composables interacted with each store
 - **Hydration timeline** — attribution for initial state source(s)
 
+### Payload Inspector
+
+The Payload Inspector lists keys from the Nuxt payload (`data`, `state`, Pinia, errors, and other root fields), estimates serialized size, and marks whether each key was present during SSR hydration or added on the client.
+
+The panel provides:
+
+- **Stats** — key count, total bytes, `serverRendered`, hydrating
+- **Table** — key, bucket, origin, size, preview
+- **Inspector** — selected key preview (truncated)
+
+### State / cookies
+
+The State / cookies tab lists live `useState` and `useCookie` calls (the composable tracker skips those Nuxt helpers on purpose). Values are truncated previews; cookie rows include `maxAge` / `path` / `httpOnly` when those options were passed. HttpOnly cookies are not readable from client JS.
+
+The panel provides:
+
+- **Stats** — total entries plus `useState` / `useCookie` counts
+- **Table** — key, kind, origin (`ssr` while hydrating, otherwise `csr`), preview
+- **Inspector** — selected value preview and cookie option metadata
+
+### KeepAlive / Suspense
+
+The KeepAlive tab records `<KeepAlive>` activate / deactivate / eviction and `<Suspense>` pending / fallback / resolve. Cache rows show hits and whether a pane is active, cached, or evicted. Suspense rows include `fallbackMs` and time-to-resolve.
+
+The panel provides:
+
+- **Stats** — event counts, cached panes, pending Suspense, average fallback
+- **Table** — name, kind, phase, duration, fallback
+- **Inspector** — selected event plus the current KeepAlive cache
+
 ### Trace Viewer
 
 [![Trace Viewer](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/trace-viewer.png)](https://github.com/victorlmneves/nuxt-devtools-observatory/blob/main/docs/screenshots/trace-viewer.png)
 
 The Trace Viewer automatically collects per-route traces that span the full lifecycle of
 each page visit. Every significant event is recorded as a typed span and grouped into a
-single `TraceEntry` per navigation, so you can see everything that happened — in order —
+single `ITraceEntry` per navigation, so you can see everything that happened — in order —
 after a route change.
 
 **Span types collected:**
@@ -290,15 +329,26 @@ after a route change.
 | `component`  | Vue mixin lifecycle hooks         | Exact `mounted` / `updated` hook cost                  |
 | `render`     | `beforeMount` → `mounted` bracket | Real DOM-patching time per component mount/update      |
 | `fetch`      | `useFetch` / `useAsyncData` shim  | Network request start, server/client origin, latency   |
-| `server`     | Nitro SSR lifecycle hooks         | Server-side phase timing (e.g. `render:html`)          |
+| `server`     | Nitro SSR / server-route hooks    | HTML render, `nitro:handler`, middleware, cache hit/miss |
 | `composable` | `__trackComposable` shim          | Setup phase of tracked `useXxx()` calls (client + SSR) |
 | `transition` | `<Transition>` wrapper            | Full enter/leave lifecycle phase                       |
+
+Document HTML traces keep the `ssr:<path>` name. API and other non-HTML Nitro
+requests appear as `nitro:<METHOD> <path>` after the client merges the
+dev-only `/__observatory/nitro-timeline` archive (deduped with the HTML inject
+by `traceId`). Named middleware layers are recorded as `nitro:middleware:<name>`
+when Nitro's h3 handler stack can be wrapped; otherwise a single
+`nitro:middleware` span is used. Cached handlers (`defineCachedEventHandler`)
+set `cache: hit|miss` on a `nitro:cached` span when `event.context.cache` (or
+the `x-nitro-cache` header) is present. Server capture requires
+`traceViewer` and `instrumentServer`. No request/response bodies, cookies, or
+headers are stored.
 
 **Render span tracking:**
 Real render time is measured by storing `performance.now()` in a `WeakMap<ComponentPublicInstance, number>` inside `beforeMount` / `beforeUpdate`, then reading it back in the corresponding `mounted` / `updated` hooks. This produces a `type: 'render'` span whose duration is the actual DOM-patching cost, separately from the `component:mounted` hook span (which only measures the hook body itself).
 
 **Trace anchoring:**
-Each `TraceEntry` is anchored to the `startTime` of its first span, so bar positions in the timeline are always relative to the first event in the trace rather than the time the trace object was created.
+Each `ITraceEntry` is anchored to the `startTime` of its first span, so bar positions in the timeline are always relative to the first event in the trace rather than the time the trace object was created.
 
 The panel provides:
 
@@ -419,15 +469,16 @@ src/
     │   ├── composable-registry.ts      ← Composable tracking + __trackComposable + leak detection
     │   ├── pinia-store-registry.ts     ← Pinia plugin: store state, actions, hydration
     │   ├── render-registry.ts          ← Render registry (timeline, route attribution, bbox snapshots)
-    │   └── transition-registry.ts      ← Transition lifecycle store
+    │   ├── transition-registry.ts      ← Transition lifecycle store
+    │   └── keep-alive-registry.ts      ← KeepAlive / Suspense event + cache store
     ├── instrumentation/
     │   ├── route.ts                    ← router.afterEach hook — opens/closes traces per navigation
     │   ├── component.ts                ← Vue mixin lifecycle hooks — component + render spans
     │   ├── fetch.ts                    ← $fetch wrap + fetch span recording
     │   └── asyncData.ts                ← useAsyncData-specific span handling
     ├── tracing/
-    │   ├── trace.ts                    ← Span + Trace types (server-side internal)
-    │   ├── traceStore.ts               ← In-memory Map<string, Trace> store
+    │   ├── trace.ts                    ← ISpan + ITrace types (server-side internal)
+    │   ├── traceStore.ts               ← In-memory Map<string, ITrace> store
     │   ├── tracing.ts                  ← Span open/close helpers
     │   └── context.ts                  ← Current-trace context (per async task)
     └── nitro/
@@ -461,6 +512,7 @@ client/
         ├── ValueInspector.vue          ← Inline JSON value inspector
         ├── RenderHeatmap.vue           ← Heatmap tab UI
         ├── TransitionTimeline.vue      ← Transition tracker tab UI
+        ├── KeepAliveTracker.vue        ← KeepAlive / Suspense tab UI
         └── TraceViewer.vue             ← Trace viewer tab UI (Overview + Flamegraph + Waterfall + Inspector + cross-trace comparison)
 
 playground/

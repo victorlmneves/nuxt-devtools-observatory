@@ -1,0 +1,27 @@
+---
+description: Prefix TypeScript interfaces with I and type aliases with T
+globs: "**/*.{ts,vue}"
+alwaysApply: false
+---
+
+# Type and interface names
+
+- Interfaces use an `I` prefix: `IFetchEntry`, `IObservatorySnapshot`
+- Type aliases use a `T` prefix: `TPayloadBucket`, `TObservatoryCommand`
+- Keep the rest of the name in PascalCase. Do not add a prefix to values, functions, classes, or Vue components.
+
+```ts
+// ❌ BAD
+export interface FetchEntry { id: string }
+export type PayloadBucket = 'data' | 'state'
+
+// ✅ GOOD
+export interface IFetchEntry { id: string }
+export type TPayloadBucket = 'data' | 'state'
+```
+
+Leave these unprefixed:
+
+- Ambient / module-augmentation names that must match the host API (`ImportMeta`, `Window`, `NuxtApp`, `H3Event`)
+- Classes (`TraceStore`)
+- Generic type parameters (`T` in `IObservatoryExportFile<T>`)

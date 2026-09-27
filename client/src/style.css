@@ -224,6 +224,28 @@ input[type='range'] {
     background: var(--tracker-tint-purple-soft);
 }
 
+.data-table tbody tr {
+    position: relative;
+}
+
+.data-table__row-select {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    cursor: pointer;
+}
+
+.data-table__row-select::after {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+}
+
 /* ── Stat card ──────────────────────────────────────────────────────────── */
 .stat-card {
     background: var(--bg2);

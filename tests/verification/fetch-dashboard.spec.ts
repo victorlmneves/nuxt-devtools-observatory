@@ -1,9 +1,9 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type ObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { FetchEntry } from './types/observatory.types'
+import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
+import type { IFetchEntry } from './types/observatory.types'
 
 test.describe('Fetch Dashboard Correctness', () => {
-    let api: ObservatoryTestAPI
+    let api: IObservatoryTestAPI
     let page: Page
 
     test.beforeEach(async ({ page: testPage }) => {
@@ -18,8 +18,8 @@ test.describe('Fetch Dashboard Correctness', () => {
         await page.click('[data-testid="trigger-fetch"]')
         await page.waitForTimeout(500)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
-        const testFetch: FetchEntry | undefined = fetchEntries.find((entry: FetchEntry) => entry.url.includes('/api/test'))
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
+        const testFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/test'))
 
         expect(testFetch).toBeDefined()
 
@@ -42,8 +42,8 @@ test.describe('Fetch Dashboard Correctness', () => {
             return performance.now() - start
         }, startTime)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
-        const slowFetch: FetchEntry | undefined = fetchEntries.find((entry: FetchEntry) => entry.url.includes('/api/slow'))
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
+        const slowFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/slow'))
 
         expect(slowFetch).toBeDefined()
 
@@ -62,13 +62,13 @@ test.describe('Fetch Dashboard Correctness', () => {
         await page.click('[data-testid="trigger-cached-fetch"]')
         await page.waitForTimeout(200)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
-        const cachedFetches: FetchEntry[] = fetchEntries.filter((entry: FetchEntry) => entry.url.includes('/api/cached'))
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
+        const cachedFetches: IFetchEntry[] = fetchEntries.filter((entry: IFetchEntry) => entry.url.includes('/api/cached'))
 
         expect(cachedFetches.length).toBe(2)
 
-        const firstFetch: FetchEntry | undefined = cachedFetches[0]
-        const secondFetch: FetchEntry | undefined = cachedFetches[1]
+        const firstFetch: IFetchEntry | undefined = cachedFetches[0]
+        const secondFetch: IFetchEntry | undefined = cachedFetches[1]
 
         expect(firstFetch).toBeDefined()
         expect(secondFetch).toBeDefined()
@@ -94,8 +94,8 @@ test.describe('Fetch Dashboard Correctness', () => {
         await page.click('[data-testid="trigger-failed-fetch"]')
         await page.waitForTimeout(500)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
-        const failedFetch: FetchEntry | undefined = fetchEntries.find((entry: FetchEntry) => entry.url.includes('/api/fail'))
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
+        const failedFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/fail'))
 
         expect(failedFetch).toBeDefined()
 
@@ -114,9 +114,9 @@ test.describe('Fetch Dashboard Correctness', () => {
         await page.click('[data-testid="trigger-fetch"]')
         await page.waitForTimeout(500)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
-        const ssrFetch: FetchEntry | undefined = fetchEntries.find((entry: FetchEntry) => entry.origin === 'ssr')
-        const csrFetch: FetchEntry | undefined = fetchEntries.find((entry: FetchEntry) => entry.origin === 'csr')
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
+        const ssrFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.origin === 'ssr')
+        const csrFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.origin === 'csr')
 
         // At least one of each type should exist (depending on your test setup)
         // This test assumes your page makes an SSR fetch on load
@@ -135,7 +135,7 @@ test.describe('Fetch Dashboard Correctness', () => {
             await page.waitForTimeout(100)
         }
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         expect(fetchEntries.length).toBeLessThanOrEqual(maxEntries)
     })
 
@@ -144,16 +144,16 @@ test.describe('Fetch Dashboard Correctness', () => {
         await page.click('[data-testid="trigger-parallel-fetches"]')
         await page.waitForTimeout(1000)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         expect(fetchEntries.length).toBeGreaterThanOrEqual(3)
 
         // Sort by start offset to verify waterfall ordering
-        const sortedByStart: FetchEntry[] = [...fetchEntries].sort((a: FetchEntry, b: FetchEntry) => a.startOffset - b.startOffset)
+        const sortedByStart: IFetchEntry[] = [...fetchEntries].sort((a: IFetchEntry, b: IFetchEntry) => a.startOffset - b.startOffset)
 
         // Verify they're in chronological order
         for (let i = 0; i < sortedByStart.length - 1; i++) {
-            const current: FetchEntry | undefined = sortedByStart[i]
-            const next: FetchEntry | undefined = sortedByStart[i + 1]
+            const current: IFetchEntry | undefined = sortedByStart[i]
+            const next: IFetchEntry | undefined = sortedByStart[i + 1]
 
             if (current && next) {
                 expect(current.startOffset).toBeLessThanOrEqual(next.startOffset)
@@ -170,8 +170,8 @@ test.describe('Fetch Dashboard Correctness', () => {
         await page.click('[data-testid="trigger-large-payload-fetch"]')
         await page.waitForTimeout(500)
 
-        const fetchEntries: FetchEntry[] = await api.getFetchEntries()
-        const largeFetch: FetchEntry | undefined = fetchEntries.find((entry: FetchEntry) => entry.url.includes('/api/large'))
+        const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
+        const largeFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/large'))
 
         expect(largeFetch).toBeDefined()
 

@@ -12,7 +12,20 @@ const showLeaky = ref(false)
 const items = ref(Array.from({ length: 20 }, (_, i) => ({ id: i, name: `Item ${i}`, price: Math.round(((i * 13 + 7) % 100) * 10) / 10 })))
 
 function shuffleItems() {
-    items.value = [...items.value].sort(() => Math.random() - 0.5)
+    const next = [...items.value]
+    const values = new Uint32Array(next.length)
+
+    crypto.getRandomValues(values)
+
+    for (let index = next.length - 1; index > 0; index -= 1) {
+        const swapIndex = values[index] % (index + 1)
+        const current = next[index]
+
+        next[index] = next[swapIndex]
+        next[swapIndex] = current
+    }
+
+    items.value = next
 }
 
 // ── useFetch ────────────────────────────────────────────────────────────────
@@ -79,6 +92,22 @@ async function triggerError() {
                 <button @click="shuffleItems">shuffle items (triggers many renders)</button>
             </section>
 
+            <!-- State / cookies section -->
+            <section>
+                <h2>State / cookies</h2>
+                <p style="font-size: 13px; color: #555; margin-bottom: 14px">
+                    Open the
+                    <strong>State</strong>
+                    tab, then use the
+                    <NuxtLink to="/test/state-cookie-verification">verification page</NuxtLink>
+                    to bump
+                    <code>useState</code>
+                    and
+                    <code>useCookie</code>
+                    values.
+                </p>
+            </section>
+
             <!-- Transition tracker section -->
             <section>
                 <h2>Transition Tracker</h2>
@@ -128,6 +157,14 @@ async function triggerError() {
                     <NuxtLink to="/test/fetch-verification" class="verification-link">
                         <strong>Fetch Dashboard Verification</strong>
                         <span>Test fetch timing, cache tracking, and waterfall ordering</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/state-cookie-verification" class="verification-link">
+                        <strong>State / cookies Verification</strong>
+                        <span>Test live useState and useCookie keys, previews, and cookie option metadata</span>
+                    </NuxtLink>
+                    <NuxtLink to="/test/keepalive-verification" class="verification-link">
+                        <strong>KeepAlive / Suspense Verification</strong>
+                        <span>Test cache activation, eviction at max=2, and Suspense fallback timing</span>
                     </NuxtLink>
                 </div>
             </section>

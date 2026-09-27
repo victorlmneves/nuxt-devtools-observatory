@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
-interface Props {
-    trace: TraceEntry
+interface IProps {
+    trace: ITraceEntry
 }
 
-const props = defineProps<Props>()
+const props = defineProps<IProps>()
 
 const spansByType = computed(() => {
-    const groups: Record<string, TraceSpan[]> = {}
+    const groups: Record<string, ITraceSpan[]> = {}
 
     for (const span of props.trace.spans) {
         if (!groups[span.type]) {
@@ -62,20 +62,20 @@ const timelineDuration = computed(() => {
     return maxEndOffset || 1
 })
 
-function getSpanX(span: TraceSpan): number {
+function getSpanX(span: ITraceSpan): number {
     const left = ((span.startTime - props.trace.startTime) / timelineDuration.value) * 100
 
     return Math.min(100, Math.max(0, left))
 }
 
-function getSpanWidth(span: TraceSpan): number {
+function getSpanWidth(span: ITraceSpan): number {
     const left = getSpanX(span)
     const width = ((span.durationMs || 0) / timelineDuration.value) * 100
 
     return Math.max(2, Math.min(100 - left, width))
 }
 
-function isNarrowBar(span: TraceSpan): boolean {
+function isNarrowBar(span: ITraceSpan): boolean {
     const width = ((span.durationMs || 0) / timelineDuration.value) * 100
 
     return width < 5
@@ -126,7 +126,7 @@ function asString(val: unknown): string {
     return typeof val === 'string' ? val : ''
 }
 
-function getSpanDisplayName(span: TraceSpan): string {
+function getSpanDisplayName(span: ITraceSpan): string {
     const m = span.metadata as Record<string, unknown> | undefined
 
     if (!m) {
@@ -167,7 +167,7 @@ function getSpanDisplayName(span: TraceSpan): string {
     return span.name
 }
 
-function getSpanTooltip(span: TraceSpan): string {
+function getSpanTooltip(span: ITraceSpan): string {
     const displayName = getSpanDisplayName(span)
     const duration = formatDuration(span.durationMs)
     const m = span.metadata as Record<string, unknown> | undefined

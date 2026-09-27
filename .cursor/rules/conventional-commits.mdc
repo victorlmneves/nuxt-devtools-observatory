@@ -1,0 +1,24 @@
+---
+description: Conventional Commit messages used by semantic-release
+alwaysApply: true
+---
+
+# Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/). `semantic-release` versions from `main`.
+
+| Prefix | npm release |
+| --- | --- |
+| `fix:` | patch |
+| `feat:` | minor |
+| `feat!:` / `fix!:` / `BREAKING CHANGE:` | major |
+| `docs:`, `chore:`, `refactor:`, `test:`, `ci:`, `style:` | none |
+
+Scope with the tracker or layer: `feat(pinia-tracker):`, `fix(layout):`, `docs(state-cookies):`.
+
+```text
+feat(state-cookies): track useCookie option metadata
+fix(heatmap): keep persistent layout nodes across route reset
+```
+
+Do not bump `package.json` or push `v*` tags. Only commit when the user asks.

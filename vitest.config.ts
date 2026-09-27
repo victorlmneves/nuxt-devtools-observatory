@@ -42,6 +42,8 @@ export default defineConfig({
         include: ['tests/**/*.test.ts'],
         coverage: {
             provider: 'v8',
+            // `lcov` writes coverage/lcov.info for the SonarQube Cloud scan.
+            reporter: ['text', 'html', 'clover', 'json', 'lcov'],
             include: ['src/transforms/**', 'src/runtime/**', 'src/nitro/**'],
             // plugin.ts requires a full Nuxt runtime and cannot be unit tested.
             // Excluding it prevents a misleading 0% entry in the coverage report.

@@ -22,7 +22,8 @@ const SKIP_LIST = new Set([
     'useLazyFetch',
     'useLazyAsyncData',
     // Nuxt auto-imports
-    'useCookie',
+    'useCookie', // State / cookies tab
+    'useRequestEvent',
     'useRequestEvent',
     'useRequestHeaders',
     'useRequestURL',
@@ -33,7 +34,8 @@ const SKIP_LIST = new Set([
     'useRouter',
     'useNuxtData',
     'useError',
-    'useState',
+    'useState', // State / cookies tab
+    'useAppConfig',
     'useAppConfig',
     // Nuxt head
     'useHead',
@@ -65,7 +67,8 @@ export function composableTrackerPlugin(): Plugin {
                 id.includes('node_modules') ||
                 id.includes('composable-registry') ||
                 id.includes('provide-inject-registry') ||
-                id.includes('fetch-registry')
+                id.includes('fetch-registry') ||
+                id.includes('state-cookie-registry')
             ) {
                 return
             }

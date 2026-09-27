@@ -23,7 +23,7 @@ describe('ssr request context', () => {
             ),
         ])
 
-        expect(seen.sort()).toEqual(['req-a', 'req-b'])
+        expect(seen.sort((left, right) => left.localeCompare(right))).toEqual(['req-a', 'req-b'])
     })
 
     it('clears enterWith context only for the matching request id', () => {

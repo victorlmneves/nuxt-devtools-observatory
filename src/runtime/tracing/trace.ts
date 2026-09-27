@@ -1,29 +1,29 @@
-export type SpanType = 'render' | 'component' | 'transition' | 'fetch' | 'composable' | 'navigation' | 'error' | 'custom' | (string & {})
+export type TSpanType = 'render' | 'component' | 'transition' | 'fetch' | 'composable' | 'navigation' | 'error' | 'custom' | (string & {})
 
-export type SpanStatus = 'active' | 'ok' | 'error' | 'cancelled'
+export type TSpanStatus = 'active' | 'ok' | 'error' | 'cancelled'
 
-export interface Span {
+export interface ISpan {
     id: string
     traceId: string
     parentSpanId?: string
     name: string
-    type: SpanType
+    type: TSpanType
     startTime: number
     endTime?: number
     durationMs?: number
-    status: SpanStatus
+    status: TSpanStatus
     metadata?: Record<string, unknown>
 }
 
-export type TraceStatus = 'active' | 'ok' | 'error' | 'cancelled'
+export type TTraceStatus = 'active' | 'ok' | 'error' | 'cancelled'
 
-export interface Trace {
+export interface ITrace {
     id: string
     name: string
     startTime: number
     endTime?: number
     durationMs?: number
-    status: TraceStatus
+    status: TTraceStatus
     metadata?: Record<string, unknown>
-    spans: Span[]
+    spans: ISpan[]
 }

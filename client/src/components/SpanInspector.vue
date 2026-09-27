@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEntry, TraceSpan } from '@observatory/types/snapshot'
+import type { ITraceEntry, ITraceSpan } from '@observatory/types/snapshot'
 
-interface Props {
-    trace: TraceEntry
-    span?: TraceSpan
+interface IProps {
+    trace: ITraceEntry
+    span?: ITraceSpan
 }
 
-const props = defineProps<Props>()
+const props = defineProps<IProps>()
 
 const emit = defineEmits<{
-    'select-span': [span: TraceSpan]
+    'select-span': [span: ITraceSpan]
 }>()
 
 const parentSpan = computed(() => {
@@ -59,7 +59,7 @@ function formatRelativeTime(timestamp: number) {
     return `+${(relative / 1000).toFixed(3)}s`
 }
 
-function getDisplayEndTime(span: TraceSpan) {
+function getDisplayEndTime(span: ITraceSpan) {
     if (span.endTime !== undefined) {
         return span.endTime
     }
@@ -153,20 +153,26 @@ function getSpanColorClass(type: string) {
 
             <div v-if="parentSpan" class="span-inspector__section">
                 <div class="span-inspector__section-title">Parent Span</div>
-                <div class="span-inspector__link" @click="emit('select-span', parentSpan)">
+                <button type="button" class="span-inspector__link" @click="emit('select-span', parentSpan)">
                     <span :class="getSpanColorClass(parentSpan.type)" class="span-inspector__link-badge"></span>
                     {{ parentSpan.name }}
-                </div>
+                </button>
             </div>
 
             <div v-if="childSpans.length > 0" class="span-inspector__section">
                 <div class="span-inspector__section-title">Child Spans ({{ childSpans.length }})</div>
                 <div class="span-inspector__child-list">
-                    <div v-for="child in childSpans" :key="child.id" class="span-inspector__child-item" @click="emit('select-span', child)">
+                    <button
+                        v-for="child in childSpans"
+                        :key="child.id"
+                        type="button"
+                        class="span-inspector__child-item"
+                        @click="emit('select-span', child)"
+                    >
                         <span :class="getSpanColorClass(child.type)" class="span-inspector__child-badge"></span>
                         <span class="span-inspector__child-name">{{ child.name }}</span>
                         <span class="span-inspector__child-duration">{{ formatDuration(child.durationMs) }}</span>
-                    </div>
+                    </button>
                 </div>
             </div>
 
@@ -307,10 +313,15 @@ function getSpanColorClass(type: string) {
     display: flex;
     align-items: center;
     gap: 6px;
+    width: 100%;
+    margin: 0;
     padding: 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: 3px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     transition: background 0.2s;
 }
@@ -337,11 +348,17 @@ function getSpanColorClass(type: string) {
     display: flex;
     align-items: center;
     gap: 6px;
+    width: 100%;
+    margin: 0;
     padding: 6px 8px;
     background: var(--bg-secondary);
+    border: none;
     border-radius: 3px;
-    cursor: pointer;
+    color: inherit;
+    font: inherit;
     font-size: 12px;
+    text-align: left;
+    cursor: pointer;
     transition: background 0.2s;
 }
 

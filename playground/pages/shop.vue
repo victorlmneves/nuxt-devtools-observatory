@@ -67,7 +67,7 @@ watch(
     products,
     (list) => {
         if (!list) return
-        categories.value = [...new Set(list.map((p) => p.category))].sort()
+        categories.value = [...new Set(list.map((p) => p.category))].sort((left, right) => left.localeCompare(right))
     },
     { immediate: true }
 )
@@ -103,7 +103,12 @@ const filteredProducts = computed(() => {
             <div class="toolbar">
                 <button :disabled="productsStatus === 'pending'" @click="() => refreshProducts()">↺ Refresh list</button>
                 <span style="color: #aaa; font-size: 12px">currency:</span>
-                <select v-model="currency" style="font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d3d1c7">
+                <select
+                    id="shop-currency"
+                    v-model="currency"
+                    aria-label="Currency"
+                    style="font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d3d1c7"
+                >
                     <option>USD</option>
                     <option>EUR</option>
                     <option>GBP</option>
@@ -133,13 +138,16 @@ const filteredProducts = computed(() => {
                     :key="product.id"
                     class="product-card"
                     :class="{ selected: selectedId === product.id }"
-                    @click="selectProduct(product.id)"
                 >
-                    <div class="product-name">{{ product.name }}</div>
-                    <div class="product-cat">{{ product.category }}</div>
-                    <div class="product-price">${{ product.price.toFixed(2) }}</div>
-                    <div class="product-stock" :style="{ color: product.stock < 8 ? '#c0392b' : '#888' }">{{ product.stock }} in stock</div>
-                    <button class="add-btn" @click.stop="addToCart(product)">+ Add to cart</button>
+                    <button type="button" class="product-card__select" @click="selectProduct(product.id)">
+                        <div class="product-name">{{ product.name }}</div>
+                        <div class="product-cat">{{ product.category }}</div>
+                        <div class="product-price">${{ product.price.toFixed(2) }}</div>
+                        <div class="product-stock" :style="{ color: product.stock < 8 ? '#c0392b' : '#888' }">
+                            {{ product.stock }} in stock
+                        </div>
+                    </button>
+                    <button class="add-btn" @click="addToCart(product)">+ Add to cart</button>
                 </div>
             </TransitionGroup>
 
@@ -266,11 +274,25 @@ const filteredProducts = computed(() => {
     border: 1px solid #e0ded8;
     border-radius: 10px;
     padding: 16px;
-    cursor: pointer;
     transition: border-color 0.15s;
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+.product-card__select {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .product-card:hover,

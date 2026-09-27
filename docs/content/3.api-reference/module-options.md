@@ -3,7 +3,7 @@ title: Module Options
 description: Configuration for Observatory instrumentation and limits.
 ---
 
-`ModuleOptions` is defined in `src/module.ts`.
+`IModuleOptions` is defined in `src/module.ts`.
 
 ## Feature toggles
 
@@ -11,13 +11,16 @@ description: Configuration for Observatory instrumentation and limits.
 - `provideInjectGraph`
 - `composableTracker`
 - `piniaTracker`
+- `payloadInspector`
+- `stateCookieTracker`
 - `renderHeatmap`
 - `transitionTracker`
+- `keepAliveTracker`
 - `traceViewer`
 
 ## Runtime behavior
 
-- `instrumentServer`
+- `instrumentServer` — required for SSR composable capture and Nitro server-route spans in Trace Viewer
 - `composableNavigationMode` (`route` | `session`)
 - `debugRpc`
 
@@ -36,8 +39,10 @@ description: Configuration for Observatory instrumentation and limits.
 - `maxComposableHistory`
 - `maxComposableEntries`
 - `maxRenderTimeline`
-- `maxTraces`
+- `maxTraces` — also caps the in-memory Nitro/SSR request archive used by Trace Viewer
 - `maxPiniaTimeline`
+- `maxStateCookieEntries`
+- `maxKeepAliveEntries`
 
 ## Guidance
 

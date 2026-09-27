@@ -3,7 +3,7 @@ import { startSpan } from '../tracing/tracing'
 import { getCurrentTraceId } from '../tracing/context'
 import { traceStore } from '../tracing/traceStore'
 
-type ErrorLike = {
+type TErrorLike = {
     message?: unknown
     stack?: unknown
     name?: unknown
@@ -15,8 +15,8 @@ function asMessage(error: unknown): string {
         return error.message
     }
 
-    if (error && typeof error === 'object' && 'message' in (error as ErrorLike)) {
-        const message = (error as ErrorLike).message
+    if (error && typeof error === 'object' && 'message' in (error as TErrorLike)) {
+        const message = (error as TErrorLike).message
 
         if (typeof message === 'string' && message.length > 0) {
             return message
@@ -31,8 +31,8 @@ function asStack(error: unknown): string | undefined {
         return error.stack
     }
 
-    if (error && typeof error === 'object' && typeof (error as ErrorLike).stack === 'string') {
-        return (error as ErrorLike).stack as string
+    if (error && typeof error === 'object' && typeof (error as TErrorLike).stack === 'string') {
+        return (error as TErrorLike).stack as string
     }
 
     return undefined
@@ -43,16 +43,16 @@ function asName(error: unknown): string | undefined {
         return error.name
     }
 
-    if (error && typeof error === 'object' && typeof (error as ErrorLike).name === 'string') {
-        return (error as ErrorLike).name as string
+    if (error && typeof error === 'object' && typeof (error as TErrorLike).name === 'string') {
+        return (error as TErrorLike).name as string
     }
 
     return undefined
 }
 
 function asStatusCode(error: unknown): number | undefined {
-    if (error && typeof error === 'object' && typeof (error as ErrorLike).statusCode === 'number') {
-        return (error as ErrorLike).statusCode as number
+    if (error && typeof error === 'object' && typeof (error as TErrorLike).statusCode === 'number') {
+        return (error as TErrorLike).statusCode as number
     }
 
     return undefined

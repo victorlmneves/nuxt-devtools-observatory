@@ -1,36 +1,36 @@
 import { getCurrentTraceId, setCurrentTraceId } from './context'
 import { traceStore, type TraceStore } from './traceStore'
-import type { Span, SpanStatus, SpanType, Trace } from './trace'
+import type { ISpan, TSpanStatus, TSpanType, ITrace } from './trace'
 
-export interface StartSpanInput {
+export interface IStartSpanInput {
     name: string
-    type: SpanType
+    type: TSpanType
     traceId?: string
     parentSpanId?: string
     metadata?: Record<string, unknown>
     startTime?: number
 }
 
-export interface EndSpanInput {
+export interface IEndSpanInput {
     endTime?: number
-    status?: SpanStatus
+    status?: TSpanStatus
     metadata?: Record<string, unknown>
 }
 
-export interface SpanHandle {
-    trace: Trace
-    span: Span
-    end: (input?: EndSpanInput) => Span
+export interface ISpanHandle {
+    trace: ITrace
+    span: ISpan
+    end: (input?: IEndSpanInput) => ISpan
 }
 
-export interface StartSpanOptions {
+export interface IStartSpanOptions {
     store?: TraceStore
     carrier?: object
     traceName?: string
     traceMetadata?: Record<string, unknown>
 }
 
-export function startSpan(input: StartSpanInput, options: StartSpanOptions = {}): SpanHandle {
+export function startSpan(input: IStartSpanInput, options: IStartSpanOptions = {}): ISpanHandle {
     const store = options.store ?? traceStore
     const activeTraceId = input.traceId ?? getCurrentTraceId(options.carrier as never)
 
@@ -58,7 +58,7 @@ export function startSpan(input: StartSpanInput, options: StartSpanOptions = {})
 
     let ended = false
 
-    const end = (endInput: EndSpanInput = {}) => {
+    const end = (endInput: IEndSpanInput = {}) => {
         if (ended) {
             return span
         }

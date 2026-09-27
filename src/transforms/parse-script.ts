@@ -1,8 +1,8 @@
 import { parse, type ParserPlugin } from '@babel/parser'
 
-export type ObservatoryScriptLang = 'js' | 'ts' | 'jsx' | 'tsx'
+export type TObservatoryScriptLang = 'js' | 'ts' | 'jsx' | 'tsx'
 
-export function resolveScriptLang(blockLang: string | null | undefined, filename: string): ObservatoryScriptLang {
+export function resolveScriptLang(blockLang: string | null | undefined, filename: string): TObservatoryScriptLang {
     const raw = (blockLang ?? '').trim().toLowerCase()
 
     if (raw === 'tsx' || raw === 'jsx' || raw === 'ts' || raw === 'js') {
@@ -34,7 +34,7 @@ export function resolveScriptLang(blockLang: string | null | undefined, filename
     return 'js'
 }
 
-export function babelPluginsForScript(lang: ObservatoryScriptLang): ParserPlugin[] {
+export function babelPluginsForScript(lang: TObservatoryScriptLang): ParserPlugin[] {
     if (lang === 'tsx') {
         return ['jsx', 'typescript']
     }

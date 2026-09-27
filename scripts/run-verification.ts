@@ -5,7 +5,7 @@ import chalk from 'chalk'
 
 const execAsync = promisify(exec)
 
-interface VerificationResult {
+interface IVerificationResult {
     name: string
     passed: boolean
     duration: number
@@ -13,7 +13,7 @@ interface VerificationResult {
     details?: Record<string, unknown>
 }
 
-interface TestSuiteReport {
+interface ITestSuiteReport {
     suites?: Array<{
         specs?: Array<{
             ok: boolean
@@ -23,7 +23,7 @@ interface TestSuiteReport {
 }
 
 class VerificationRunner {
-    private results: VerificationResult[] = []
+    private results: IVerificationResult[] = []
     
     async runAll(): Promise<boolean> {
         // eslint-disable-next-line no-console
@@ -45,7 +45,7 @@ class VerificationRunner {
         
         this.printReport()
 
-        return this.results.every((result: VerificationResult) => result.passed)
+        return this.results.every((result: IVerificationResult) => result.passed)
     }
     
     private async runTestSuite(suite: string): Promise<void> {
@@ -59,11 +59,11 @@ class VerificationRunner {
             )
             const duration: number = performance.now() - start
             
-            let report: TestSuiteReport = {}
+            let report: ITestSuiteReport = {}
             let passed: boolean = false
             
             try {
-                report = JSON.parse(stdout) as TestSuiteReport
+                report = JSON.parse(stdout) as ITestSuiteReport
                 passed = report.suites?.every((suiteItem: { specs?: Array<{ ok: boolean }> }) => 
                 suiteItem.specs?.every((spec: { ok: boolean }) => spec.ok === true) ?? false) ?? false
             } catch {
@@ -118,8 +118,8 @@ class VerificationRunner {
 
         console.info(chalk.bold('└─────────────┴────────┴────────────┴──────────────────────────────┘'))
 
-        const totalPassed: number = this.results.filter((r: VerificationResult) => r.passed).length
-        const totalFailed: number = this.results.filter((r: VerificationResult) => !r.passed).length
+        const totalPassed: number = this.results.filter((r: IVerificationResult) => r.passed).length
+        const totalFailed: number = this.results.filter((r: IVerificationResult) => !r.passed).length
         const totalTests: number = this.results.length
 
         console.info(chalk.bold(`\nSummary: ${totalPassed} passed, ${totalFailed} failed (${totalTests} total)\n`))

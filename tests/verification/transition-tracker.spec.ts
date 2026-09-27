@@ -1,9 +1,9 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type ObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { TransitionEntry, TransitionPhase } from './types/observatory.types'
+import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
+import type { ITransitionEntry, TTransitionPhase } from './types/observatory.types'
 
 test.describe('Transition Tracker Correctness', () => {
-    let api: ObservatoryTestAPI
+    let api: IObservatoryTestAPI
     let page: Page
 
     test.beforeEach(async ({ page: testPage }) => {
@@ -15,7 +15,7 @@ test.describe('Transition Tracker Correctness', () => {
     })
 
     test('should capture all transition lifecycle phases', async () => {
-        const expectedPhases: TransitionPhase[] = ['entering', 'entered', 'leaving', 'left']
+        const expectedPhases: TTransitionPhase[] = ['entering', 'entered', 'leaving', 'left']
 
         // Trigger enter transition
         await page.click('[data-testid="show-transition"]')
@@ -25,8 +25,8 @@ test.describe('Transition Tracker Correctness', () => {
         await page.click('[data-testid="hide-transition"]')
         await page.waitForTimeout(300)
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
-        const phasesCaptured: TransitionPhase[] = transitions.map((t: TransitionEntry) => t.phase)
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
+        const phasesCaptured: TTransitionPhase[] = transitions.map((t: ITransitionEntry) => t.phase)
 
         for (const phase of expectedPhases) {
             expect(phasesCaptured).toContain(phase)
@@ -41,9 +41,9 @@ test.describe('Transition Tracker Correctness', () => {
             await page.waitForTimeout(50)
         }
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
-        const cancelledPhases: TransitionPhase[] = ['enter-cancelled', 'leave-cancelled']
-        const cancelledTransitions: TransitionEntry[] = transitions.filter((t: TransitionEntry) => cancelledPhases.includes(t.phase))
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
+        const cancelledPhases: TTransitionPhase[] = ['enter-cancelled', 'leave-cancelled']
+        const cancelledTransitions: ITransitionEntry[] = transitions.filter((t: ITransitionEntry) => cancelledPhases.includes(t.phase))
 
         expect(cancelledTransitions.length).toBeGreaterThan(0)
     })
@@ -58,8 +58,8 @@ test.describe('Transition Tracker Correctness', () => {
             return performance.now() - start
         }, startTime)
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
-        const enterTransition: TransitionEntry | undefined = transitions.find((t: TransitionEntry) => t.phase === 'entered')
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
+        const enterTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.phase === 'entered')
 
         expect(enterTransition).toBeDefined()
 
@@ -74,8 +74,8 @@ test.describe('Transition Tracker Correctness', () => {
         await page.click('[data-testid="show-broken-transition"]')
         await page.waitForTimeout(300)
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
-        const brokenTransition: TransitionEntry | undefined = transitions.find((t: TransitionEntry) => t.name === 'BrokenTransition')
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
+        const brokenTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.name === 'BrokenTransition')
 
         expect(brokenTransition).toBeDefined()
 
@@ -89,8 +89,8 @@ test.describe('Transition Tracker Correctness', () => {
         await page.click('[data-testid="show-nested-transition"]')
         await page.waitForTimeout(300)
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
-        const nestedTransition: TransitionEntry | undefined = transitions.find((t: TransitionEntry) => t.name === 'NestedFade')
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
+        const nestedTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.name === 'NestedFade')
 
         expect(nestedTransition).toBeDefined()
 
@@ -114,7 +114,7 @@ test.describe('Transition Tracker Correctness', () => {
             await page.waitForTimeout(50)
         }
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
         expect(transitions.length).toBeLessThanOrEqual(maxTransitions)
     })
 
@@ -125,8 +125,8 @@ test.describe('Transition Tracker Correctness', () => {
         await page.click('[data-testid="hide-transition"]')
         await page.waitForTimeout(100)
 
-        const transitions: TransitionEntry[] = await api.getTransitionEntries()
-        const cancelledTransition: TransitionEntry | undefined = transitions.find((t: TransitionEntry) => t.cancelled === true)
+        const transitions: ITransitionEntry[] = await api.getTransitionEntries()
+        const cancelledTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.cancelled === true)
 
         expect(cancelledTransition).toBeDefined()
     })

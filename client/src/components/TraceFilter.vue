@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEntry } from '@observatory/types/snapshot'
+import type { ITraceEntry } from '@observatory/types/snapshot'
 import { getSpanTypesFromTraces } from '@observatory-client/composables/useTraceFilter'
 
-interface Props {
-    traces: TraceEntry[]
+interface IProps {
+    traces: ITraceEntry[]
     searchQuery: string
     selectedSpanTypes: Set<string>
     minDuration: number
@@ -13,7 +13,7 @@ interface Props {
     hasActiveFilters: boolean
 }
 
-const props = defineProps<Props>()
+const props = defineProps<IProps>()
 
 const emit = defineEmits<{
     'update:search': [value: string]
@@ -59,12 +59,14 @@ function handleTypeToggle(type: string) {
 }
 
 function handleMinDurationChange(value: string) {
-    const num = Math.max(0, Number.parseInt(value) || 0)
+    const parsed = Number.parseInt(value, 10)
+    const num = Math.max(0, parsed || 0)
     emit('update:min-duration', num)
 }
 
 function handleMaxDurationChange(value: string) {
-    const num = Math.max(0, Number.parseInt(value) || Infinity)
+    const parsed = Number.parseInt(value, 10)
+    const num = Math.max(0, parsed || Number.POSITIVE_INFINITY)
     emit('update:max-duration', num)
 }
 
@@ -95,9 +97,9 @@ function getSpanTypeColor(type: string): string {
     <div class="trace-filter">
         <!-- Search bar -->
         <div class="trace-filter__section">
-            <label class="trace-filter__label" for="trace-search-input">Search</label>
+            <label class="trace-filter__label" for="trace-filter-search">Search</label>
             <input
-                id="trace-search-input"
+                id="trace-filter-search"
                 :value="props.searchQuery"
                 type="text"
                 class="trace-filter__search-input"
@@ -108,8 +110,8 @@ function getSpanTypeColor(type: string): string {
 
         <!-- Span type filter -->
         <div v-if="availableSpanTypes.length > 0" class="trace-filter__section">
-            <fieldset class="trace-filter__type-filters">
-                <legend class="trace-filter__label">Span Type</legend>
+            <span class="trace-filter__label">Span Type</span>
+            <div class="trace-filter__type-filters">
                 <button
                     v-for="type in availableSpanTypes"
                     :key="type"
@@ -121,14 +123,15 @@ function getSpanTypeColor(type: string): string {
                     <span class="trace-filter__type-dot" :style="{ backgroundColor: getSpanTypeColor(type) }"></span>
                     {{ type }}
                 </button>
-            </fieldset>
+            </div>
         </div>
 
         <!-- Duration filter -->
-        <fieldset class="trace-filter__section">
-            <legend class="trace-filter__label">Duration (ms)</legend>
+        <div class="trace-filter__section">
+            <span class="trace-filter__label">Duration (ms)</span>
             <div class="trace-filter__duration-inputs">
                 <input
+                    id="trace-filter-min"
                     :value="props.minDuration"
                     type="number"
                     min="0"
@@ -139,7 +142,8 @@ function getSpanTypeColor(type: string): string {
                 />
                 <span class="trace-filter__duration-separator">–</span>
                 <input
-                    :value="props.maxDuration === Infinity ? '' : props.maxDuration"
+                    id="trace-filter-max"
+                    :value="props.maxDuration === Number.POSITIVE_INFINITY ? '' : props.maxDuration"
                     type="number"
                     :min="props.minDuration"
                     :max="maxTraceDuration"
@@ -149,25 +153,24 @@ function getSpanTypeColor(type: string): string {
                     @input="handleMaxDurationChange(getInputValue($event))"
                 />
             </div>
-            <template v-if="maxTraceDuration">
-                <label for="trace-duration-slider" class="trace-filter__label--sr-only">Maximum duration slider</label>
-                <input
-                    id="trace-duration-slider"
-                    :value="props.maxDuration === Infinity ? maxTraceDuration : props.maxDuration"
-                    type="range"
-                    :min="0"
-                    :max="maxTraceDuration"
-                    class="trace-filter__duration-slider"
-                    @input="handleMaxDurationChange(getInputValue($event))"
-                />
-            </template>
-        </fieldset>
+            <input
+                v-if="maxTraceDuration"
+                id="trace-filter-duration"
+                :value="props.maxDuration === Number.POSITIVE_INFINITY ? maxTraceDuration : props.maxDuration"
+                type="range"
+                :min="0"
+                :max="maxTraceDuration"
+                class="trace-filter__duration-slider"
+                aria-label="Maximum duration slider"
+                @input="handleMaxDurationChange(getInputValue($event))"
+            />
+        </div>
 
         <!-- Route filter -->
         <div class="trace-filter__section">
-            <label class="trace-filter__label" for="trace-route-input">Route</label>
+            <label class="trace-filter__label" for="trace-filter-route">Route</label>
             <input
-                id="trace-route-input"
+                id="trace-filter-route"
                 :value="props.routeFilter"
                 type="text"
                 class="trace-filter__search-input"
@@ -203,18 +206,6 @@ function getSpanTypeColor(type: string): string {
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-}
-
-.trace-filter__label--sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
 }
 
 .trace-filter__search-input {

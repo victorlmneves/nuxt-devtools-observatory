@@ -8,6 +8,9 @@ import PiniaStoreTracker from './views/PiniaStoreTracker.vue'
 import RenderHeatmap from './views/RenderHeatmap.vue'
 import TransitionTimeline from './views/TransitionTimeline.vue'
 import TraceViewer from './views/TraceViewer.vue'
+import PayloadInspector from './views/PayloadInspector.vue'
+import StateCookieTracker from './views/StateCookieTracker.vue'
+import KeepAliveTracker from './views/KeepAliveTracker.vue'
 import { useVirtualizationFlags } from './composables/useVirtualizationFlags'
 
 const pathMap: Record<string, string> = {
@@ -18,6 +21,9 @@ const pathMap: Record<string, string> = {
     heatmap: 'heatmap',
     transitions: 'transitions',
     traces: 'traces',
+    payload: 'payload',
+    state: 'state',
+    keepalive: 'keepalive',
 }
 
 const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
@@ -38,6 +44,9 @@ const tabs = computed(() => {
         f.renderHeatmap && { id: 'heatmap', label: 'Heatmap', icon: '⬡' },
         f.transitionTracker && { id: 'transitions', label: 'Transitions', icon: '⬡' },
         f.traceViewer && { id: 'traces', label: 'Traces', icon: '⬡' },
+        f.payloadInspector && { id: 'payload', label: 'Payload', icon: '⬡' },
+        f.stateCookieTracker && { id: 'state', label: 'State', icon: '⬡' },
+        f.keepAliveTracker && { id: 'keepalive', label: 'KeepAlive', icon: '⬡' },
     ].filter((tab): tab is { id: string; label: string; icon: string } => Boolean(tab))
 })
 </script>
@@ -60,6 +69,9 @@ const tabs = computed(() => {
             <RenderHeatmap v-else-if="activeTab === 'heatmap'" />
             <TransitionTimeline v-else-if="activeTab === 'transitions'" />
             <TraceViewer v-else-if="activeTab === 'traces'" />
+            <PayloadInspector v-else-if="activeTab === 'payload'" />
+            <StateCookieTracker v-else-if="activeTab === 'state'" />
+            <KeepAliveTracker v-else-if="activeTab === 'keepalive'" />
         </main>
     </div>
 </template>

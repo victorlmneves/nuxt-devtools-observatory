@@ -6,8 +6,11 @@ const FLAG_KEYS = [
     'OBSERVATORY_PROVIDE_INJECT_GRAPH',
     'OBSERVATORY_COMPOSABLE_TRACKER',
     'OBSERVATORY_PINIA_TRACKER',
+    'OBSERVATORY_PAYLOAD_INSPECTOR',
+    'OBSERVATORY_STATE_COOKIE_TRACKER',
     'OBSERVATORY_RENDER_HEATMAP',
     'OBSERVATORY_TRANSITION_TRACKER',
+    'OBSERVATORY_KEEPALIVE_TRACKER',
     'OBSERVATORY_TRACE_VIEWER',
     'OBSERVATORY_HEATMAP_HIDE_INTERNALS',
     'OBSERVATORY_DEBUG_RPC',
@@ -62,9 +65,14 @@ describe('createModuleDefaults', () => {
         expect(defaults.provideInjectGraph).toBe(true)
         expect(defaults.composableTracker).toBe(true)
         expect(defaults.piniaTracker).toBe(false)
+        expect(defaults.payloadInspector).toBe(true)
+        expect(defaults.stateCookieTracker).toBe(true)
         expect(defaults.renderHeatmap).toBe(true)
         expect(defaults.transitionTracker).toBe(true)
+        expect(defaults.keepAliveTracker).toBe(true)
         expect(defaults.traceViewer).toBe(true)
+        expect(defaults.maxKeepAliveEntries).toBe(300)
+        expect(defaults.maxStateCookieEntries).toBe(200)
         expect(defaults.debugRpc).toBe(false)
         expect(defaults.heatmapHideInternals).toBe(false)
     })

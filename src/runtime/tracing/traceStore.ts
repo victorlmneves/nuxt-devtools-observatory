@@ -1,35 +1,33 @@
-import type { Span, SpanStatus, Trace, TraceStatus } from './trace'
+import type { ISpan, TSpanStatus, ITrace, TTraceStatus } from './trace'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 
-export interface CreateTraceInput {
+export interface ICreateTraceInput {
     id?: string
     name?: string
     startTime?: number
     metadata?: Record<string, unknown>
 }
 
-export interface AddSpanInput {
+export interface IAddSpanInput {
     id?: string
     traceId: string
     parentSpanId?: string
     name: string
-    type: Span['type']
+    type: ISpan['type']
     startTime?: number
     endTime?: number
-    status?: SpanStatus
+    status?: TSpanStatus
     metadata?: Record<string, unknown>
 }
 
-export interface EndTraceInput {
+export interface IEndTraceInput {
     endTime?: number
-    status?: TraceStatus
+    status?: TTraceStatus
     metadata?: Record<string, unknown>
 }
 
 function createId(prefix: string) {
-    const random = Math.random().toString(36).slice(2, 10)
-
-    return `${prefix}_${Date.now()}_${random}`
+    return `${prefix}_${Date.now()}_${crypto.randomUUID()}`
 }
 
 function computeDuration(startTime: number, endTime: number) {
@@ -37,7 +35,7 @@ function computeDuration(startTime: number, endTime: number) {
 }
 
 export class TraceStore {
-    private readonly traces = new Map<string, Trace>()
+    private readonly traces = new Map<string, ITrace>()
     private maxTraces: number
 
     constructor(maxTraces = 50) {
@@ -49,11 +47,11 @@ export class TraceStore {
         this.evictOverflow()
     }
 
-    createTrace(input: CreateTraceInput = {}): Trace {
+    createTrace(input: ICreateTraceInput = {}): ITrace {
         this.evictOverflow(1)
 
         const startTime = input.startTime ?? performance.now()
-        const trace: Trace = {
+        const trace: ITrace = {
             id: input.id ?? createId('trace'),
             name: input.name ?? 'trace',
             startTime,
@@ -68,11 +66,11 @@ export class TraceStore {
         return trace
     }
 
-    addSpan(input: AddSpanInput): Span {
+    addSpan(input: IAddSpanInput): ISpan {
         const trace = this.ensureTrace(input.traceId, input.startTime)
         const startTime = input.startTime ?? performance.now()
         const endTime = input.endTime
-        const span: Span = {
+        const span: ISpan = {
             id: input.id ?? createId('span'),
             traceId: trace.id,
             parentSpanId: input.parentSpanId,
@@ -95,7 +93,7 @@ export class TraceStore {
         return span
     }
 
-    endTrace(traceId: string, input: EndTraceInput = {}): Trace | null {
+    endTrace(traceId: string, input: IEndTraceInput = {}): ITrace | null {
         const trace = this.traces.get(traceId)
 
         if (!trace) {
@@ -119,7 +117,7 @@ export class TraceStore {
         return trace
     }
 
-    endSpan(spanId: string, traceId: string, input: { endTime?: number; status?: SpanStatus; metadata?: Record<string, unknown> } = {}) {
+    endSpan(spanId: string, traceId: string, input: { endTime?: number; status?: TSpanStatus; metadata?: Record<string, unknown> } = {}) {
         const trace = this.traces.get(traceId)
 
         if (!trace) {

@@ -85,6 +85,9 @@ describe('transitionTrackerPlugin', () => {
             expect(result).toContain("export * from 'vue'")
             expect(result).toContain('_ObservedTransition as Transition')
             expect(result).toContain('_ObservedTransitionGroup as TransitionGroup')
+            expect(result).toContain('_ObservedKeepAlive as KeepAlive')
+            expect(result).toContain('_ObservedSuspense as Suspense')
+            expect(result).toContain('__isSuspense: true')
         })
 
         it('also responds to obs:vue-proxy without the null-byte prefix (vite-node compat)', () => {
@@ -120,6 +123,10 @@ describe('transitionTrackerPlugin', () => {
 
             expect(proxy).toContain('window.__observatory__')
             expect(proxy).toContain('window.__observatory__.transition')
+            expect(proxy).toContain('window.__observatory__.keepAlive')
+            expect(proxy).toContain('onPending')
+            expect(proxy).toContain('onFallback')
+            expect(proxy).toContain('onResolve')
         })
 
         it('proxy module handles missing registry gracefully (SSR / no observatory)', () => {

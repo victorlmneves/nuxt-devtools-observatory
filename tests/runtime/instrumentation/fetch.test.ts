@@ -142,6 +142,22 @@ describe('setupFetchInstrumentation', () => {
 
             expect(getSpans()[0].metadata?.url).toBe('')
         })
+
+        it('uses href from a URL instance', async () => {
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp)
+            await callWith(new URL('https://example.test/api/url'), nuxtApp)
+
+            expect(getSpans()[0].metadata?.url).toBe('https://example.test/api/url')
+        })
+
+        it('does not stringify a plain object as [object Object]', async () => {
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp)
+            await callWith({ href: '/no-url-field' }, nuxtApp)
+
+            expect(getSpans()[0].metadata?.url).toBe('')
+        })
     })
 
     describe('method resolution (resolveMethod)', () => {
@@ -222,6 +238,18 @@ describe('setupFetchInstrumentation', () => {
             expect(entries[0].payload).toEqual({ id: 1 })
         })
 
+        it('assigns unique dashboard ids to successive $fetch calls', async () => {
+            const registry = setupFetchRegistry()
+            const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({}))
+            setupFetchInstrumentation(nuxtApp, registry)
+
+            await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/a')
+            await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/b')
+
+            const [first, second] = registry.getAll()
+            expect(first.id).not.toBe(second.id)
+        })
+
         it('wraps $fetch.raw onto the same dashboard', async () => {
             const raw = vi.fn().mockResolvedValue({ _data: { via: 'raw' } })
             const original = Object.assign(vi.fn().mockResolvedValue({}), { raw })
@@ -285,5 +313,36 @@ describe('setupFetchInstrumentation', () => {
             expect(registry.getAll()).toHaveLength(0)
             expect(getSpans()).toHaveLength(1)
         })
+    })
+
+    it('does not create a span for the nitro timeline archive endpoint', async () => {
+        const fetchImpl = vi.fn().mockResolvedValue([])
+        const nuxtApp = makeNuxtApp(fetchImpl)
+        setupFetchInstrumentation(nuxtApp)
+
+        await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/__observatory/nitro-timeline')
+
+        expect(fetchImpl).toHaveBeenCalled()
+        expect(getSpans()).toHaveLength(0)
+    })
+
+    it('invokes onSuccessfulFetch after a resolved client fetch', async () => {
+        const onSuccessfulFetch = vi.fn()
+        const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue({ ok: true }))
+        setupFetchInstrumentation(nuxtApp, undefined, { onSuccessfulFetch })
+
+        await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/api/users')
+
+        expect(onSuccessfulFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not invoke onSuccessfulFetch for the nitro timeline endpoint', async () => {
+        const onSuccessfulFetch = vi.fn()
+        const nuxtApp = makeNuxtApp(vi.fn().mockResolvedValue([]))
+        setupFetchInstrumentation(nuxtApp, undefined, { onSuccessfulFetch })
+
+        await (nuxtApp.$fetch as unknown as (...a: unknown[]) => Promise<unknown>)('/__observatory/nitro-timeline')
+
+        expect(onSuccessfulFetch).not.toHaveBeenCalled()
     })
 })

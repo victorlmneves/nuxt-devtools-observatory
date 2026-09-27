@@ -1,16 +1,16 @@
 <script setup lang="ts">
-interface ComponentNode {
+interface IComponentNode {
     id: string
     label: string
     file: string
     renders: number
     avgMs: number
     triggers: string[]
-    children: ComponentNode[]
+    children: IComponentNode[]
 }
 
 const props = defineProps<{
-    node: ComponentNode
+    node: IComponentNode
     mode: string
     threshold: number
     hotOnly: boolean
@@ -19,14 +19,14 @@ const props = defineProps<{
 
 const emit = defineEmits(['select'])
 
-function getVal(n: ComponentNode) {
+function getVal(n: IComponentNode) {
     return props.mode === 'count' ? n.renders : n.avgMs
 }
 
-function getMax(n: ComponentNode): number {
+function getMax(n: IComponentNode): number {
     let max = 1
 
-    function walk(ns: ComponentNode[]) {
+    function walk(ns: IComponentNode[]) {
         ns.forEach((n) => {
             const v = getVal(n)
 
@@ -61,7 +61,7 @@ function heatColor(val: number, max: number) {
     }
 }
 
-function isHotNode(n: ComponentNode) {
+function isHotNode(n: IComponentNode) {
     let value: number
 
     if (props.mode === 'count') {
@@ -77,7 +77,7 @@ function isHotNode(n: ComponentNode) {
     }
 }
 
-function shouldShow(n: ComponentNode): boolean {
+function shouldShow(n: IComponentNode): boolean {
     if (!props.hotOnly) {
         return true
     } else {
@@ -93,7 +93,7 @@ function shouldShow(n: ComponentNode): boolean {
     }
 }
 
-function handleSelect(n: ComponentNode) {
+function handleSelect(n: IComponentNode) {
     emit('select', n)
 }
 </script>
@@ -110,34 +110,34 @@ function handleSelect(n: ComponentNode) {
             borderRadius: '6px',
             padding: '6px 9px',
             marginBottom: '5px',
-            cursor: 'pointer',
         }"
-        @click="handleSelect(props.node)"
     >
-        <div style="display: flex; align-items: center; gap: 6px">
-            <span
-                :style="{
-                    fontFamily: 'var(--mono)',
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    color: heatColor(getVal(props.node), getMax(props.node)).text,
-                }"
-            >
-                {{ props.node.label }}
-            </span>
-            <span
-                :style="{
-                    fontFamily: 'var(--mono)',
-                    fontSize: '10px',
-                    color: heatColor(getVal(props.node), getMax(props.node)).text,
-                    opacity: 0.7,
-                    marginLeft: 'auto',
-                }"
-            >
-                {{ props.mode === 'count' ? getVal(props.node) : getVal(props.node).toFixed(1) + 'ms' }}
-                {{ props.mode === 'count' ? 'renders' : 'ms avg' }}
-            </span>
-        </div>
+        <button type="button" class="component-block__select" @click="handleSelect(props.node)">
+            <div style="display: flex; align-items: center; gap: 6px">
+                <span
+                    :style="{
+                        fontFamily: 'var(--mono)',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        color: heatColor(getVal(props.node), getMax(props.node)).text,
+                    }"
+                >
+                    {{ props.node.label }}
+                </span>
+                <span
+                    :style="{
+                        fontFamily: 'var(--mono)',
+                        fontSize: '10px',
+                        color: heatColor(getVal(props.node), getMax(props.node)).text,
+                        opacity: 0.7,
+                        marginLeft: 'auto',
+                    }"
+                >
+                    {{ props.mode === 'count' ? getVal(props.node) : getVal(props.node).toFixed(1) + 'ms' }}
+                    {{ props.mode === 'count' ? 'renders' : 'ms avg' }}
+                </span>
+            </div>
+        </button>
         <div
             v-if="props.node.children && props.node.children.length"
             :style="{
@@ -160,3 +160,18 @@ function handleSelect(n: ComponentNode) {
         </div>
     </div>
 </template>
+
+<style scoped>
+.component-block__select {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+</style>

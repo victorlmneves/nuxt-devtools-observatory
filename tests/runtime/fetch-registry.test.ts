@@ -2,8 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setupFetchRegistry, __devFetchCall, __devFetchHandler } from '@observatory/runtime/composables/fetch-registry'
 
-type DevFetchCallFn = Parameters<typeof __devFetchCall>[0]
-type DevFetchOptions = Parameters<typeof __devFetchCall>[2]
+type TDevFetchCallFn = Parameters<typeof __devFetchCall>[0]
+type TDevFetchOptions = Parameters<typeof __devFetchCall>[2]
 
 // __devFetchCall uses getCurrentInstance() to decide whether to take the main
 // instrumentation path (inside component setup) or the parallel-fetch fallback.
@@ -15,10 +15,10 @@ vi.mock('vue', async () => {
     return { ...vue, getCurrentInstance: vi.fn(() => ({})) }
 })
 
-type ObservatoryWindow = Window & { __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> } }
+type TObservatoryWindow = Window & { __observatory__?: { fetch?: ReturnType<typeof setupFetchRegistry> } }
 
 function getWindow() {
-    return window as ObservatoryWindow
+    return window as TObservatoryWindow
 }
 
 beforeEach(() => {
@@ -124,7 +124,7 @@ describe('__devFetchCall', () => {
         const registry = setupFetchRegistry()
         getWindow().__observatory__ = { fetch: registry }
 
-        const mockFn = vi.fn<DevFetchCallFn>().mockReturnValue({})
+        const mockFn = vi.fn<TDevFetchCallFn>().mockReturnValue({})
         __devFetchCall(mockFn, '/api/users', {}, { key: 'users', file: 'Page.ts', line: 1 })
 
         const entries = registry.getAll()
@@ -137,7 +137,7 @@ describe('__devFetchCall', () => {
     })
 
     it('passes through to originalFn when __observatory__ is not set', () => {
-        const mockFn = vi.fn<DevFetchCallFn>().mockReturnValue({ status: { value: 'success' }, data: { value: 'result' } })
+        const mockFn = vi.fn<TDevFetchCallFn>().mockReturnValue({ status: { value: 'success' }, data: { value: 'result' } })
         const result = __devFetchCall(mockFn, '/api/test', {}, { key: 'test', file: 'F.ts', line: 1 })
 
         expect(mockFn).toHaveBeenCalledWith('/api/test', expect.any(Object))
@@ -155,7 +155,7 @@ describe('__devFetchCall', () => {
             return {}
         })
 
-        __devFetchCall(mockFn as DevFetchCallFn, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
+        __devFetchCall(mockFn as TDevFetchCallFn, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
 
         const mockResponse = {
             ok: true,
@@ -183,7 +183,7 @@ describe('__devFetchCall', () => {
             return {}
         })
 
-        __devFetchCall(mockFn as DevFetchCallFn, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
+        __devFetchCall(mockFn as TDevFetchCallFn, '/api/users', {}, { key: 'users', file: 'P.ts', line: 1 })
         ;(capturedOpts.onResponse as (ctx: unknown) => void)({
             response: {
                 ok: true,
@@ -224,7 +224,7 @@ describe('__devFetchCall', () => {
             return {}
         })
 
-        __devFetchCall(mockFn as DevFetchCallFn, '/api/product', {}, { key: 'product', file: 'P.ts', line: 5 })
+        __devFetchCall(mockFn as TDevFetchCallFn, '/api/product', {}, { key: 'product', file: 'P.ts', line: 5 })
 
         const mockResponse = {
             ok: true,
@@ -247,7 +247,7 @@ describe('__devFetchCall', () => {
             return {}
         })
 
-        __devFetchCall(mockFn as DevFetchCallFn, '/api/broken', {}, { key: 'broken', file: 'P.ts', line: 2 })
+        __devFetchCall(mockFn as TDevFetchCallFn, '/api/broken', {}, { key: 'broken', file: 'P.ts', line: 2 })
 
         const mockResponse = { ok: false, headers: { get: () => null } }
         ;(capturedOpts.onResponseError as (ctx: unknown) => void)({ response: mockResponse })
@@ -270,7 +270,7 @@ describe('__devFetchCall', () => {
             return {}
         })
 
-        __devFetchCall(mockFn as DevFetchCallFn, '/api/users', { onResponse: originalOnResponse }, { key: 'users', file: 'P.ts', line: 1 })
+        __devFetchCall(mockFn as TDevFetchCallFn, '/api/users', { onResponse: originalOnResponse }, { key: 'users', file: 'P.ts', line: 1 })
 
         const ctx = { response: { ok: true, headers: { get: () => null } } }
         ;(capturedOpts.onResponse as (ctx: unknown) => void)(ctx)
@@ -425,9 +425,9 @@ describe('__devFetchCall — pre-existing onResponseError hook is chained', () =
             calls.push('user')
         }
 
-        let capturedOpts: DevFetchOptions = {}
+        let capturedOpts: TDevFetchOptions = {}
 
-        const originalFn: DevFetchCallFn = (_url, opts) => {
+        const originalFn: TDevFetchCallFn = (_url, opts) => {
             capturedOpts = opts
 
             return {}
@@ -436,7 +436,7 @@ describe('__devFetchCall — pre-existing onResponseError hook is chained', () =
         __devFetchCall(originalFn, '/api/test', { onResponseError: userHook }, { key: 'k', file: 'f.ts', line: 1 })
 
         // Invoke the chained hook
-        const response = { response: {} as unknown as Response } as Parameters<NonNullable<DevFetchOptions['onResponseError']>>[0]
+        const response = { response: {} as unknown as Response } as Parameters<NonNullable<TDevFetchOptions['onResponseError']>>[0]
 
         if (typeof capturedOpts.onResponseError === 'function') {
             capturedOpts.onResponseError(response)
@@ -454,7 +454,7 @@ describe('__devFetchCall — getter URL resolution (line 171)', () => {
         // Pass a function as the URL — resolveUrl calls it to get the string
         const urlFn = () => '/api/from-fn'
 
-        __devFetchCall((() => ({ ok: true })) as DevFetchCallFn, urlFn as unknown as string, {}, { key: 'k', file: 'f.ts', line: 1 })
+        __devFetchCall((() => ({ ok: true })) as TDevFetchCallFn, urlFn as unknown as string, {}, { key: 'k', file: 'f.ts', line: 1 })
 
         expect(reg.getAll()[0].url).toBe('/api/from-fn')
     })
@@ -468,7 +468,7 @@ describe('__devFetchCall — getter URL resolution (line 171)', () => {
             throw new Error('bad url getter')
         }
 
-        __devFetchCall((() => ({ ok: true })) as DevFetchCallFn, throwingFn as unknown as string, {}, { key: 'k', file: 'f.ts', line: 1 })
+        __devFetchCall((() => ({ ok: true })) as TDevFetchCallFn, throwingFn as unknown as string, {}, { key: 'k', file: 'f.ts', line: 1 })
 
         // Should not throw; entry registered with String(throwingFn) as fallback URL
         expect(reg.getAll()[0]).toBeDefined()

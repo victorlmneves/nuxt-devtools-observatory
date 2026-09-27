@@ -1,4 +1,4 @@
-export interface ObservatoryExportFile<T> {
+export interface IObservatoryExportFile<T> {
     type: 'observatory-traces' | 'observatory-renders'
     version: '1'
     exportedAt: number
@@ -6,7 +6,7 @@ export interface ObservatoryExportFile<T> {
     data: T[]
 }
 
-export function exportJson(filename: string, envelope: ObservatoryExportFile<unknown>): void {
+export function exportJson(filename: string, envelope: IObservatoryExportFile<unknown>): void {
     const json = JSON.stringify(envelope, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)

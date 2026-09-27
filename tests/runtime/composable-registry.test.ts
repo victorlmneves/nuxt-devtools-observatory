@@ -4,10 +4,10 @@ import { createApp, defineComponent, h, ref, reactive, watch, nextTick } from 'v
 import { setupComposableRegistry, __trackComposable, __recordSsrComposableSpan } from '@observatory/runtime/composables/composable-registry'
 import { createSsrRecord, drainSsrRecord } from '@observatory/runtime/nitro/ssr-trace-store'
 
-type ObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
+type TObservatoryWindow = Window & { __observatory__?: { composable?: ReturnType<typeof setupComposableRegistry> } }
 
 function getWindow() {
-    return window as ObservatoryWindow
+    return window as TObservatoryWindow
 }
 
 beforeEach(() => {
@@ -734,7 +734,7 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
         getWindow().__observatory__ = { composable: reg }
 
         reg.setRoute('/home')
-        const entryA: import('../../src/runtime/composables/composable-registry').ComposableEntry = {
+        const entryA: import('../../src/runtime/composables/composable-registry').IComposableEntry = {
             id: 'useHome::1::H.ts:1::0::abc',
             name: 'useHome',
             componentFile: 'H.ts',
@@ -754,7 +754,7 @@ describe('setupComposableRegistry — setRoute() / route stamping', () => {
         reg.register(entryA)
 
         reg.setRoute('/about')
-        const entryB: import('../../src/runtime/composables/composable-registry').ComposableEntry = {
+        const entryB: import('../../src/runtime/composables/composable-registry').IComposableEntry = {
             ...entryA,
             id: 'useAbout::1::A.ts:1::0::def',
             name: 'useAbout',

@@ -31,6 +31,8 @@ provide(
                         <NuxtLink to="/test/provide-inject-verification" class="nav-dropdown-item">Provide/Inject</NuxtLink>
                         <NuxtLink to="/test/trace-verification" class="nav-dropdown-item">Trace</NuxtLink>
                         <NuxtLink to="/test/transition-verification" class="nav-dropdown-item">Transition</NuxtLink>
+                        <NuxtLink to="/test/state-cookie-verification" class="nav-dropdown-item">State / cookies</NuxtLink>
+                        <NuxtLink to="/test/keepalive-verification" class="nav-dropdown-item">KeepAlive / Suspense</NuxtLink>
                     </div>
                 </div>
             </div>

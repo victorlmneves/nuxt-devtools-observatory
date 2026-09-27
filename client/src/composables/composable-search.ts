@@ -1,82 +1,56 @@
-import type { ComposableEntry } from '@observatory/types/snapshot'
+import type { IComposableEntry } from '@observatory/types/snapshot'
 
 const MAX_SEARCH_DEPTH = 6
 const MAX_SEARCH_NODES = 1500
 
-interface SearchBudget {
+interface ISearchBudget {
     nodes: number
 }
 
-function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>, budget: SearchBudget, depth = 0): boolean {
-    if (budget.nodes >= MAX_SEARCH_NODES) {
-        return false
-    }
-
-    budget.nodes++
-
-    if (value === null || value === undefined) {
-        return false
-    }
-
+function isSearchPrimitive(value: unknown): value is string | number | boolean | bigint {
     const valueType = typeof value
 
-    if (valueType === 'string' || valueType === 'number' || valueType === 'boolean' || valueType === 'bigint') {
-        return String(value).toLowerCase().includes(query)
-    }
+    return valueType === 'string' || valueType === 'number' || valueType === 'boolean' || valueType === 'bigint'
+}
 
-    if (valueType !== 'object') {
-        return false
-    }
-
-    if (depth >= MAX_SEARCH_DEPTH) {
-        return false
-    }
-
-    const objectValue = value as object
-
-    if (seen.has(objectValue)) {
-        return false
-    }
-
-    seen.add(objectValue)
-
-    if (Array.isArray(value)) {
-        return value.some((item) => valueMatchesQuery(item, query, seen, budget, depth + 1))
-    }
-
-    if (value instanceof Map) {
-        for (const [mapKey, mapValue] of value.entries()) {
-            if (valueMatchesQuery(mapKey, query, seen, budget, depth + 1)) {
-                return true
-            }
-
-            if (valueMatchesQuery(mapValue, query, seen, budget, depth + 1)) {
-                return true
-            }
+function mapMatchesQuery(
+    value: Map<unknown, unknown>,
+    query: string,
+    seen: WeakSet<object>,
+    budget: ISearchBudget,
+    depth: number
+): boolean {
+    for (const [mapKey, mapValue] of value.entries()) {
+        if (valueMatchesQuery(mapKey, query, seen, budget, depth)) {
+            return true
         }
 
-        return false
-    }
-
-    if (value instanceof Set) {
-        for (const setValue of value.values()) {
-            if (valueMatchesQuery(setValue, query, seen, budget, depth + 1)) {
-                return true
-            }
+        if (valueMatchesQuery(mapValue, query, seen, budget, depth)) {
+            return true
         }
-
-        return false
     }
 
+    return false
+}
+
+function setMatchesQuery(value: Set<unknown>, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth: number): boolean {
+    for (const setValue of value.values()) {
+        if (valueMatchesQuery(setValue, query, seen, budget, depth)) {
+            return true
+        }
+    }
+
+    return false
+}
+
+function recordMatchesQuery(value: object, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth: number): boolean {
     try {
-        const entries = Object.entries(value as Record<string, unknown>)
-
-        for (const [key, nestedValue] of entries) {
+        for (const [key, nestedValue] of Object.entries(value)) {
             if (key.toLowerCase().includes(query)) {
                 return true
             }
 
-            if (valueMatchesQuery(nestedValue, query, seen, budget, depth + 1)) {
+            if (valueMatchesQuery(nestedValue, query, seen, budget, depth)) {
                 return true
             }
         }
@@ -88,14 +62,52 @@ function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>,
     return false
 }
 
+function valueMatchesQuery(value: unknown, query: string, seen: WeakSet<object>, budget: ISearchBudget, depth = 0): boolean {
+    if (budget.nodes >= MAX_SEARCH_NODES) {
+        return false
+    }
+
+    budget.nodes++
+
+    if (value === null || value === undefined) {
+        return false
+    }
+
+    if (isSearchPrimitive(value)) {
+        return String(value).toLowerCase().includes(query)
+    }
+
+    if (typeof value !== 'object' || depth >= MAX_SEARCH_DEPTH || seen.has(value)) {
+        return false
+    }
+
+    seen.add(value)
+
+    const nextDepth = depth + 1
+
+    if (Array.isArray(value)) {
+        return value.some((item) => valueMatchesQuery(item, query, seen, budget, nextDepth))
+    }
+
+    if (value instanceof Map) {
+        return mapMatchesQuery(value, query, seen, budget, nextDepth)
+    }
+
+    if (value instanceof Set) {
+        return setMatchesQuery(value, query, seen, budget, nextDepth)
+    }
+
+    return recordMatchesQuery(value, query, seen, budget, nextDepth)
+}
+
 /**
  * Returns true when a composable entry matches the search query.
  * Search scope includes name, file, ref keys, and nested reactive key/value content.
- * @param {ComposableEntry} entry - Composable entry to inspect.
+ * @param {IComposableEntry} entry - Composable entry to inspect.
  * @param {string} query - Case-insensitive search query.
  * @returns {boolean} True when the entry matches the query.
  */
-export function matchesComposableEntryQuery(entry: ComposableEntry, query: string): boolean {
+export function matchesComposableEntryQuery(entry: IComposableEntry, query: string): boolean {
     const normalizedQuery = query.trim().toLowerCase()
 
     if (!normalizedQuery) {
@@ -111,7 +123,7 @@ export function matchesComposableEntryQuery(entry: ComposableEntry, query: strin
     }
 
     const seen = new WeakSet<object>()
-    const budget: SearchBudget = { nodes: 0 }
+    const budget: ISearchBudget = { nodes: 0 }
 
     for (const [refKey, refInfo] of Object.entries(entry.refs)) {
         if (refKey.toLowerCase().includes(normalizedQuery)) {

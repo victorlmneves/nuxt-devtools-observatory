@@ -1,8 +1,8 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type ObservatoryTestAPI } from './helpers/observatory-bridge'
+import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
 
 test.describe('Composable Tracker Correctness', () => {
-    let api: ObservatoryTestAPI
+    let api: IObservatoryTestAPI
     let page: Page
 
     test.beforeEach(async ({ page: testPage }) => {
@@ -72,7 +72,7 @@ test.describe('Composable Tracker Correctness', () => {
 
         // Simulate edit through tracker's inline editor
         await page.evaluate(() => {
-            const bridge = (window as unknown as { __OBSERVATORY_TEST_BRIDGE?: ObservatoryTestAPI }).__OBSERVATORY_TEST_BRIDGE
+            const bridge = (window as unknown as { __OBSERVATORY_TEST_BRIDGE?: IObservatoryTestAPI }).__OBSERVATORY_TEST_BRIDGE
 
             if (!bridge) {
                 throw new Error('Bridge not found')

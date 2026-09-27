@@ -10,7 +10,7 @@ import {
     openInEditor as openInEditorFromStore,
 } from '@observatory-client/stores/observatory'
 import { matchesComposableEntryQuery } from '@observatory-client/composables/composable-search'
-import type { ComposableEntry as RuntimeComposableEntry } from '@observatory/types/snapshot'
+import type { IComposableEntry as IRuntimeComposableEntry } from '@observatory/types/snapshot'
 
 const { composables: rawEntries, connected, features, clearComposables } = useObservatoryData()
 
@@ -101,7 +101,7 @@ const listScrollRef = ref<HTMLElement | null>(null)
 const { effective: virtualizationFlags } = useVirtualizationFlags()
 const { preset: virtualizationPreset } = useVirtualizationConfig({ rowHeight: 88, overscan: 6 })
 
-const entries = computed<RuntimeComposableEntry[]>(() => rawEntries.value)
+const entries = computed<IRuntimeComposableEntry[]>(() => rawEntries.value)
 
 const counts = computed(() => ({
     mounted: entries.value.filter((e) => e.status === 'mounted').length,
@@ -134,8 +134,8 @@ const filtered = computed(() => {
     })
 
     // Partition into layout-level (pinned to top) and regular entries
-    const layoutEntries: RuntimeComposableEntry[] = []
-    const regularEntries: RuntimeComposableEntry[] = []
+    const layoutEntries: IRuntimeComposableEntry[] = []
+    const regularEntries: IRuntimeComposableEntry[] = []
 
     for (const entry of filtered) {
         if (entry.isLayoutComposable) {
@@ -194,13 +194,13 @@ const visibleEntries = computed(() => {
 
     return listVirtualItems.value
         .map((item) => filtered.value[item.index])
-        .filter((entry): entry is RuntimeComposableEntry => Boolean(entry))
+        .filter((entry): entry is IRuntimeComposableEntry => Boolean(entry))
 })
 
-const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
+const visibleEntryCards = computed<IVisibleEntryCard[]>(() => {
     return visibleEntries.value.map((entry) => {
-        const refEntries = Object.entries(entry.refs) as Array<[string, RuntimeComposableEntry['refs'][string]]>
-        const detailRefs: RefRowView[] = refEntries.map(([key, ref]) => {
+        const refEntries = Object.entries(entry.refs) as Array<[string, IRuntimeComposableEntry['refs'][string]]>
+        const detailRefs: IRefRowView[] = refEntries.map(([key, ref]) => {
             const isLong = isLongValue(ref.value)
             const expanded = isLong && isRefExpanded(entry.id, key)
             const shared = Boolean(entry.sharedKeys?.includes(key))
@@ -217,7 +217,7 @@ const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
         })
 
         const history = entry.history ?? []
-        const historyRows: HistoryRowView[] = []
+        const historyRows: IHistoryRowView[] = []
         const end = Math.max(history.length - 20, 0)
 
         for (let i = history.length - 1; i >= end; i--) {
@@ -242,7 +242,7 @@ const visibleEntryCards = computed<VisibleEntryCard[]>(() => {
     })
 })
 
-function lifecycleRows(entry: RuntimeComposableEntry) {
+function lifecycleRows(entry: IRuntimeComposableEntry) {
     return [
         {
             label: 'onMounted',
@@ -306,6 +306,10 @@ function isRefExpanded(entryId: string, refKey: string): boolean {
     return expandedRefs.value.has(refExpandKey(entryId, refKey))
 }
 
+function toggleCard(entryId: string) {
+    expanded.value = expanded.value === entryId ? null : entryId
+}
+
 function toggleRefExpand(entryId: string, refKey: string) {
     const key = refExpandKey(entryId, refKey)
     const next = new Set(expandedRefs.value)
@@ -323,15 +327,15 @@ function toggleRefExpand(entryId: string, refKey: string) {
 // Clicking a ref key prefers identity-based lookup for shared/global refs.
 // For non-shared keys, fallback to legacy key-name lookup.
 
-interface LookupTarget {
+interface ILookupTarget {
     key: string
     composableName: string
     identityGroup?: string
 }
 
-interface RefRowView {
+interface IRefRowView {
     key: string
-    ref: RuntimeComposableEntry['refs'][string]
+    ref: IRuntimeComposableEntry['refs'][string]
     isLong: boolean
     expanded: boolean
     displayValue: string
@@ -339,24 +343,24 @@ interface RefRowView {
     shared: boolean
 }
 
-interface HistoryRowView {
+interface IHistoryRowView {
     id: string
     timeLabel: string
     key: string
     value: string
 }
 
-interface VisibleEntryCard {
-    entry: RuntimeComposableEntry
+interface IVisibleEntryCard {
+    entry: IRuntimeComposableEntry
     refCount: number
-    previewRefs: RefRowView[]
-    detailRefs: RefRowView[]
-    historyRows: HistoryRowView[]
+    previewRefs: IRefRowView[]
+    detailRefs: IRefRowView[]
+    historyRows: IHistoryRowView[]
     historyHiddenCount: number
     lifecycle: ReturnType<typeof lifecycleRows>
 }
 
-const lookupTarget = ref<LookupTarget | null>(null)
+const lookupTarget = ref<ILookupTarget | null>(null)
 
 const lookupResults = computed(() => {
     if (!lookupTarget.value) {
@@ -389,9 +393,9 @@ const lookupTitle = computed(() => {
     return lookupTarget.value.key
 })
 
-function openLookup(entry: RuntimeComposableEntry, key: string) {
+function openLookup(entry: IRuntimeComposableEntry, key: string) {
     const identityGroup = entry.sharedKeyGroups?.[key]
-    const next: LookupTarget = {
+    const next: ILookupTarget = {
         key,
         composableName: entry.name,
         identityGroup,
@@ -413,13 +417,13 @@ function openLookup(entry: RuntimeComposableEntry, key: string) {
 // ── Inline editing ────────────────────────────────────────────────────────
 // Only writable refs (type === 'ref') can be edited. Computed are read-only.
 
-interface EditTarget {
+interface IEditTarget {
     id: string
     key: string
     rawValue: string
 }
 
-const editTarget = ref<EditTarget | null>(null)
+const editTarget = ref<IEditTarget | null>(null)
 const editError = ref('')
 
 function openEdit(id: string, key: string, currentValue: unknown) {
@@ -487,7 +491,14 @@ function applyEdit() {
                 mode: {{ composableMode }}
             </button>
             <span class="tracker-toolbar__spacer"></span>
-            <input v-model="search" class="composable-tracker__search" type="search" placeholder="search name, file, or ref…" />
+            <input
+                id="composable-tracker-search"
+                v-model="search"
+                class="composable-tracker__search"
+                type="search"
+                placeholder="search name, file, or ref…"
+                aria-label="Search composables"
+            />
             <button
                 v-if="composableMode === 'session'"
                 class="composable-tracker__clear-btn"
@@ -513,47 +524,53 @@ function applyEdit() {
                     'composable-tracker__card--leak': card.entry.leak,
                     'composable-tracker__card--expanded': expanded === card.entry.id,
                 }"
-                @click="expanded = expanded === card.entry.id ? null : card.entry.id"
             >
-                <div class="composable-tracker__card-header">
-                    <div class="composable-tracker__identity">
-                        <span class="composable-tracker__name mono">{{ card.entry.name }}</span>
-                        <span class="composable-tracker__file muted mono">{{ basename(card.entry.componentFile) }}</span>
+                <button
+                    type="button"
+                    class="composable-tracker__card-toggle"
+                    :aria-expanded="expanded === card.entry.id"
+                    @click="toggleCard(card.entry.id)"
+                >
+                    <div class="composable-tracker__card-header">
+                        <div class="composable-tracker__identity">
+                            <span class="composable-tracker__name mono">{{ card.entry.name }}</span>
+                            <span class="composable-tracker__file muted mono">{{ basename(card.entry.componentFile) }}</span>
+                        </div>
+                        <div class="composable-tracker__meta">
+                            <span v-if="card.entry.watcherCount > 0 && !card.entry.leak" class="badge badge-warn">
+                                {{ card.entry.watcherCount }}w
+                            </span>
+                            <span v-if="card.entry.intervalCount > 0 && !card.entry.leak" class="badge badge-warn">
+                                {{ card.entry.intervalCount }}t
+                            </span>
+                            <span v-if="card.entry.leak" class="badge badge-err">leak</span>
+                            <span v-else-if="card.entry.status === 'mounted'" class="badge badge-ok">mounted</span>
+                            <span v-else class="badge badge-gray">unmounted</span>
+                        </div>
                     </div>
-                    <div class="composable-tracker__meta">
-                        <span v-if="card.entry.watcherCount > 0 && !card.entry.leak" class="badge badge-warn">
-                            {{ card.entry.watcherCount }}w
+
+                    <!-- Inline ref preview — shows up to 3 refs without expanding -->
+                    <div v-if="card.refCount" class="composable-tracker__refs-preview">
+                        <span
+                            v-for="row in card.previewRefs"
+                            :key="row.key"
+                            class="composable-tracker__ref-chip"
+                            :class="{
+                                'composable-tracker__ref-chip--reactive': row.ref.type === 'reactive',
+                                'composable-tracker__ref-chip--computed': row.ref.type === 'computed',
+                                'composable-tracker__ref-chip--shared': row.shared,
+                            }"
+                            :title="row.shared ? 'shared global state' : ''"
+                        >
+                            <span class="composable-tracker__ref-chip-key">{{ row.key }}</span>
+                            <span class="composable-tracker__ref-chip-val">{{ formatVal(row.ref.value) }}</span>
+                            <span v-if="row.shared" class="composable-tracker__ref-chip-shared-dot" title="global"></span>
                         </span>
-                        <span v-if="card.entry.intervalCount > 0 && !card.entry.leak" class="badge badge-warn">
-                            {{ card.entry.intervalCount }}t
-                        </span>
-                        <span v-if="card.entry.leak" class="badge badge-err">leak</span>
-                        <span v-else-if="card.entry.status === 'mounted'" class="badge badge-ok">mounted</span>
-                        <span v-else class="badge badge-gray">unmounted</span>
+                        <span v-if="card.refCount > 3" class="muted text-sm">+{{ card.refCount - 3 }} more</span>
                     </div>
-                </div>
+                </button>
 
-                <!-- Inline ref preview — shows up to 3 refs without expanding -->
-                <div v-if="card.refCount" class="composable-tracker__refs-preview">
-                    <span
-                        v-for="row in card.previewRefs"
-                        :key="row.key"
-                        class="composable-tracker__ref-chip"
-                        :class="{
-                            'composable-tracker__ref-chip--reactive': row.ref.type === 'reactive',
-                            'composable-tracker__ref-chip--computed': row.ref.type === 'computed',
-                            'composable-tracker__ref-chip--shared': row.shared,
-                        }"
-                        :title="row.shared ? 'shared global state' : ''"
-                    >
-                        <span class="composable-tracker__ref-chip-key">{{ row.key }}</span>
-                        <span class="composable-tracker__ref-chip-val">{{ formatVal(row.ref.value) }}</span>
-                        <span v-if="row.shared" class="composable-tracker__ref-chip-shared-dot" title="global"></span>
-                    </span>
-                    <span v-if="card.refCount > 3" class="muted text-sm">+{{ card.refCount - 3 }} more</span>
-                </div>
-
-                <div v-if="expanded === card.entry.id" class="composable-tracker__detail" @click.stop>
+                <div v-if="expanded === card.entry.id" class="composable-tracker__detail">
                     <div v-if="card.entry.leak" class="composable-tracker__leak-banner">{{ card.entry.leakReason }}</div>
 
                     <!-- Global state warning -->
@@ -570,17 +587,18 @@ function applyEdit() {
                     <div class="composable-tracker__section-label tracker-section-label">reactive state</div>
                     <div v-if="!card.refCount" class="composable-tracker__compact-muted muted text-sm">no tracked state returned</div>
                     <div v-for="row in card.detailRefs" :key="row.key" class="composable-tracker__ref-row">
-                        <span
+                        <button
+                            type="button"
                             class="composable-tracker__ref-key composable-tracker__ref-key--clickable mono text-sm"
                             :title="
                                 card.entry.sharedKeyGroups?.[row.key]
-                                    ? `click to see instances sharing this exact '${row.key}' state`
-                                    : `click to see all instances exposing '${row.key}'`
+                                    ? `Show instances sharing this exact '${row.key}' state`
+                                    : `Show all instances exposing '${row.key}'`
                             "
-                            @click.stop="openLookup(card.entry, row.key)"
+                            @click="openLookup(card.entry, row.key)"
                         >
                             {{ row.key }}
-                        </span>
+                        </button>
                         <span
                             class="composable-tracker__ref-val mono text-sm"
                             :class="{
@@ -720,7 +738,13 @@ function applyEdit() {
 
         <!-- ── Edit value dialog ─────────────────────────────────────────── -->
         <Transition name="fade">
-            <div v-if="editTarget" class="composable-tracker__edit-overlay" @click.self="editTarget = null">
+            <div v-if="editTarget" class="composable-tracker__edit-overlay">
+                <button
+                    type="button"
+                    class="composable-tracker__edit-backdrop"
+                    aria-label="Close editor"
+                    @click="editTarget = null"
+                ></button>
                 <div class="composable-tracker__edit-dialog">
                     <div class="composable-tracker__edit-dialog-header">
                         edit
@@ -732,7 +756,14 @@ function applyEdit() {
                         <span class="mono">ref</span>
                         values are writable.
                     </p>
-                    <textarea v-model="editTarget.rawValue" class="composable-tracker__edit-textarea" rows="6" spellcheck="false" />
+                    <label class="composable-tracker__edit-help muted text-sm" for="composable-tracker-edit-value">Ref value</label>
+                    <textarea
+                        id="composable-tracker-edit-value"
+                        v-model="editTarget.rawValue"
+                        class="composable-tracker__edit-textarea"
+                        rows="6"
+                        spellcheck="false"
+                    />
                     <div v-if="editError" class="composable-tracker__edit-error text-sm">{{ editError }}</div>
                     <div class="composable-tracker__edit-actions">
                         <button @click="applyEdit">apply</button>
@@ -790,8 +821,20 @@ function applyEdit() {
     border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);
     overflow: hidden;
-    cursor: pointer;
     flex-shrink: 0;
+}
+
+.composable-tracker__card-toggle {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .composable-tracker__card:hover {
@@ -1117,6 +1160,12 @@ function applyEdit() {
 }
 
 .composable-tracker__ref-key--clickable {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     text-decoration: underline dotted var(--text3);
     text-underline-offset: 2px;
@@ -1203,7 +1252,19 @@ function applyEdit() {
     justify-content: center;
 }
 
+.composable-tracker__edit-backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
 .composable-tracker__edit-dialog {
+    position: relative;
+    z-index: 1;
     background: var(--bg1, var(--bg2));
     border: var(--tracker-border-width) solid var(--border);
     border-radius: var(--radius-lg);

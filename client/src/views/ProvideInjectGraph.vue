@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
 import { useObservatoryData, openInEditor as openInEditorFromStore } from '@observatory-client/stores/observatory'
-import type { InjectEntry, ProvideEntry } from '@observatory/types/snapshot'
+import type { IInjectEntry, IProvideEntry } from '@observatory/types/snapshot'
 
 interface ITreeNodeData {
     id: string
@@ -96,72 +96,6 @@ function matchesSearch(node: ITreeNodeData, query: string): boolean {
     )
 }
 
-function collectTreeOrder(root: ITreeNodeData): ITreeNodeData[] {
-    const order: ITreeNodeData[] = []
-    const stack: ITreeNodeData[] = [root]
-
-    while (stack.length) {
-        const node = stack.pop()!
-        order.push(node)
-
-        for (let i = node.children.length - 1; i >= 0; i--) {
-            stack.push(node.children[i])
-        }
-    }
-
-    return order
-}
-
-function pruneTreeByVisibility(root: ITreeNodeData, filter: string, query: string): ITreeNodeData | null {
-    const order = collectTreeOrder(root)
-    const pruned = new Map<ITreeNodeData, ITreeNodeData | null>()
-
-    for (let i = order.length - 1; i >= 0; i--) {
-        const node = order[i]
-        const visibleChildren = node.children
-            .map((child) => pruned.get(child) ?? null)
-            .filter((child): child is ITreeNodeData => child !== null)
-        const selfMatches = matchesFilter(node, filter) && matchesSearch(node, query)
-
-        if (!selfMatches && !visibleChildren.length) {
-            pruned.set(node, null)
-        } else {
-            pruned.set(node, { ...node, children: visibleChildren })
-        }
-    }
-
-    return pruned.get(root) ?? null
-}
-
-interface ILeafCountFrame {
-    node: ITreeNodeData
-    visited: boolean
-}
-
-/**
- * Visit one node in the iterative post-order traversal that computes subtree leaf counts.
- * @param {ILeafCountFrame} current - The current stack entry.
- * @param {ILeafCountFrame[]} stack - Remaining traversal stack to mutate.
- * @param {Map<string, number>} counts - Running map of node IDs to leaf counts.
- * @returns {void}
- */
-function visitLeafCountNode(current: ILeafCountFrame, stack: ILeafCountFrame[], counts: Map<string, number>): void {
-    if (!current.visited) {
-        stack.push({ node: current.node, visited: true })
-
-        for (let i = current.node.children.length - 1; i >= 0; i--) {
-            stack.push({ node: current.node.children[i], visited: false })
-        }
-
-        return
-    }
-
-    const total =
-        current.node.children.length === 0 ? 1 : current.node.children.reduce((sum, child) => sum + (counts.get(child.id) ?? 1), 0)
-
-    counts.set(current.node.id, total)
-}
-
 /**
  * Build a leaf-count lookup for each node in visible trees.
  * Uses iterative post-order traversal to keep deep trees stack-safe.
@@ -172,10 +106,33 @@ function buildLeafCountMap(roots: ITreeNodeData[]): Map<string, number> {
     const counts = new Map<string, number>()
 
     for (const root of roots) {
-        const stack: ILeafCountFrame[] = [{ node: root, visited: false }]
+        const stack: Array<{ node: ITreeNodeData; visited: boolean }> = [{ node: root, visited: false }]
 
         while (stack.length) {
-            visitLeafCountNode(stack.pop()!, stack, counts)
+            const current = stack.pop()!
+
+            if (!current.visited) {
+                stack.push({ node: current.node, visited: true })
+
+                for (let i = current.node.children.length - 1; i >= 0; i--) {
+                    stack.push({ node: current.node.children[i], visited: false })
+                }
+
+                continue
+            }
+
+            if (current.node.children.length === 0) {
+                counts.set(current.node.id, 1)
+                continue
+            }
+
+            let total = 0
+
+            for (const child of current.node.children) {
+                total += counts.get(child.id) ?? 1
+            }
+
+            counts.set(current.node.id, total)
         }
     }
 
@@ -240,70 +197,58 @@ function openInEditor(file: string) {
     openInEditorFromStore(file)
 }
 
-function componentId(entry: ProvideEntry | InjectEntry) {
+function componentId(entry: IProvideEntry | IInjectEntry) {
     return String(entry.componentUid)
 }
 
-function ensureNodeEntry(
-    nodeMap: Map<string, ITreeNodeData>,
-    parentMap: Map<string, string | null>,
-    entry: ProvideEntry | InjectEntry
-): ITreeNodeData {
-    const id = componentId(entry)
-    const existing = nodeMap.get(id)
+const nodes = computed<ITreeNodeData[]>(() => {
+    const nodeMap = new Map<string, ITreeNodeData>()
+    const parentMap = new Map<string, string | null>()
 
-    if (existing) {
-        return existing
+    function ensureNode(entry: IProvideEntry | IInjectEntry) {
+        const id = componentId(entry)
+        const existing = nodeMap.get(id)
+
+        if (existing) {
+            return existing
+        }
+
+        const created: ITreeNodeData = {
+            id,
+            label: basename(entry.componentFile),
+            componentName: entry.componentName ?? basename(entry.componentFile),
+            componentFile: entry.componentFile,
+            type: 'consumer',
+            provides: [],
+            injects: [],
+            children: [],
+        }
+
+        nodeMap.set(id, created)
+        parentMap.set(id, entry.parentUid !== undefined ? String(entry.parentUid) : null)
+        return created
     }
 
-    const created: ITreeNodeData = {
-        id,
-        label: basename(entry.componentFile),
-        componentName: entry.componentName ?? basename(entry.componentFile),
-        componentFile: entry.componentFile,
-        type: 'consumer',
-        provides: [],
-        injects: [],
-        children: [],
-    }
-
-    nodeMap.set(id, created)
-    parentMap.set(id, entry.parentUid !== undefined ? String(entry.parentUid) : null)
-    return created
-}
-
-function buildInjectsByKey(entries: InjectEntry[]): Map<string, InjectEntry[]> {
-    const injectsByKey = new Map<string, InjectEntry[]>()
-
-    for (const entry of entries) {
+    // Build a lookup: key → list of inject entries (to compute consumer lists)
+    const injectsByKey = new Map<string, IInjectEntry[]>()
+    for (const entry of provideInject.value.injects) {
         const list = injectsByKey.get(entry.key) ?? []
         list.push(entry)
         injectsByKey.set(entry.key, list)
     }
 
-    return injectsByKey
-}
-
-function buildNameByUid(entries: Array<ProvideEntry | InjectEntry>): Map<number, string> {
+    // Build a lookup: uid → componentName for resolvedFrom display
     const nameByUid = new Map<number, string>()
-
-    for (const entry of entries) {
+    for (const entry of provideInject.value.provides) {
+        nameByUid.set(entry.componentUid, entry.componentName)
+    }
+    for (const entry of provideInject.value.injects) {
         nameByUid.set(entry.componentUid, entry.componentName)
     }
 
-    return nameByUid
-}
-
-function addProvideEntries(
-    entries: ProvideEntry[],
-    nodeMap: Map<string, ITreeNodeData>,
-    parentMap: Map<string, string | null>,
-    injectsByKey: Map<string, InjectEntry[]>
-): void {
-    for (const entry of entries) {
-        const node = ensureNodeEntry(nodeMap, parentMap, entry)
+    for (const entry of provideInject.value.provides) {
+        const node = ensureNode(entry)
         const consumers = injectsByKey.get(entry.key) ?? []
-
         node.provides.push({
             key: entry.key,
             val: formatValuePreview(entry.valueSnapshot),
@@ -312,21 +257,13 @@ function addProvideEntries(
             complex: isComplexValue(entry.valueSnapshot),
             scope: entry.scope ?? 'component',
             isShadowing: entry.isShadowing ?? false,
-            consumerUids: consumers.map((consumer) => consumer.componentUid),
-            consumerNames: consumers.map((consumer) => consumer.componentName),
+            consumerUids: consumers.map((c) => c.componentUid),
+            consumerNames: consumers.map((c) => c.componentName),
         })
     }
-}
 
-function addInjectEntries(
-    entries: InjectEntry[],
-    nodeMap: Map<string, ITreeNodeData>,
-    parentMap: Map<string, string | null>,
-    nameByUid: Map<number, string>
-): void {
-    for (const entry of entries) {
-        const node = ensureNodeEntry(nodeMap, parentMap, entry)
-
+    for (const entry of provideInject.value.injects) {
+        const node = ensureNode(entry)
         node.injects.push({
             key: entry.key,
             from: entry.resolvedFromFile ?? null,
@@ -334,9 +271,7 @@ function addInjectEntries(
             ok: entry.resolved,
         })
     }
-}
 
-function applyNodeTypes(nodeMap: Map<string, ITreeNodeData>): void {
     for (const node of nodeMap.values()) {
         if (node.injects.some((entry) => !entry.ok)) {
             node.type = 'error'
@@ -348,9 +283,7 @@ function applyNodeTypes(nodeMap: Map<string, ITreeNodeData>): void {
             node.type = 'consumer'
         }
     }
-}
 
-function buildRootNodes(nodeMap: Map<string, ITreeNodeData>, parentMap: Map<string, string | null>): ITreeNodeData[] {
     const roots: ITreeNodeData[] = []
 
     for (const [id, node] of nodeMap.entries()) {
@@ -365,20 +298,6 @@ function buildRootNodes(nodeMap: Map<string, ITreeNodeData>, parentMap: Map<stri
     }
 
     return roots
-}
-
-const nodes = computed<ITreeNodeData[]>(() => {
-    const nodeMap = new Map<string, ITreeNodeData>()
-    const parentMap = new Map<string, string | null>()
-
-    const injectsByKey = buildInjectsByKey(provideInject.value.injects)
-    const nameByUid = buildNameByUid([...provideInject.value.provides, ...provideInject.value.injects])
-
-    addProvideEntries(provideInject.value.provides, nodeMap, parentMap, injectsByKey)
-    addInjectEntries(provideInject.value.injects, nodeMap, parentMap, nameByUid)
-    applyNodeTypes(nodeMap)
-
-    return buildRootNodes(nodeMap, parentMap)
 })
 
 const activeFilter = ref('all')
@@ -415,9 +334,48 @@ const allKeys = computed(() => {
 })
 
 const visibleNodes = computed<ITreeNodeData[]>(() => {
-    return nodes.value
-        .map((root) => pruneTreeByVisibility(root, activeFilter.value, searchQuery.value))
-        .filter((node): node is ITreeNodeData => node !== null)
+    /**
+     * Iterative post-order prune — avoids stack overflow on deep trees.
+     * Processes nodes bottom-up so each parent can inspect its children's
+     * already-computed visibility before deciding its own.
+     * @param {ITreeNodeData} root - The root node of the tree to prune.
+     * @returns {ITreeNodeData | null} The pruned tree node or null if the node is not visible.
+     */
+    function pruneIterative(root: ITreeNodeData): ITreeNodeData | null {
+        // Phase 1: collect nodes in pre-order (parent before children)
+        const order: ITreeNodeData[] = []
+        const stack: ITreeNodeData[] = [root]
+
+        while (stack.length) {
+            const node = stack.pop()!
+            order.push(node)
+
+            for (let i = node.children.length - 1; i >= 0; i--) {
+                stack.push(node.children[i])
+            }
+        }
+
+        // Phase 2: process in reverse pre-order (children before parents)
+        const pruned = new Map<ITreeNodeData, ITreeNodeData | null>()
+
+        for (let i = order.length - 1; i >= 0; i--) {
+            const node = order[i]
+            const visibleChildren = node.children
+                .map((child) => pruned.get(child) ?? null)
+                .filter((child): child is ITreeNodeData => child !== null)
+            const selfMatches = matchesFilter(node, activeFilter.value) && matchesSearch(node, searchQuery.value)
+
+            if (!selfMatches && !visibleChildren.length) {
+                pruned.set(node, null)
+            } else {
+                pruned.set(node, { ...node, children: visibleChildren })
+            }
+        }
+
+        return pruned.get(root) ?? null
+    }
+
+    return nodes.value.map(pruneIterative).filter(Boolean) as ITreeNodeData[]
 })
 
 const visibleLeafCountById = computed(() => buildLeafCountMap(visibleNodes.value))
@@ -564,13 +522,13 @@ const edges = computed<IEdge[]>(() => {
             <button :class="{ 'danger-active': activeFilter === 'warn' }" @click="activeFilter = activeFilter === 'warn' ? 'all' : 'warn'">
                 warnings
             </button>
-            <label class="sr-only" for="provide-graph-search">Search provide or inject graph</label>
             <input
                 id="provide-graph-search"
                 v-model="searchQuery"
                 type="search"
                 class="provide-graph__search"
                 placeholder="search component or key…"
+                aria-label="Search components or keys"
             />
         </div>
 
@@ -597,9 +555,10 @@ const edges = computed<IEdge[]>(() => {
                                 fill="none"
                             />
                         </svg>
-                        <div
+                        <button
                             v-for="layoutNode in layout"
                             :key="layoutNode.data.id"
+                            type="button"
                             class="provide-graph__node"
                             :class="{ 'provide-graph__node--selected': selectedNode?.id === layoutNode.data.id }"
                             :style="{
@@ -616,7 +575,7 @@ const edges = computed<IEdge[]>(() => {
                                 +{{ layoutNode.data.provides.length }}
                             </span>
                             <span v-if="layoutNode.data.injects.some((entry) => !entry.ok)" class="badge badge-err badge-xs">!</span>
-                        </div>
+                        </button>
                     </div>
                 </div>
                 <div v-else class="provide-graph__graph-empty">
@@ -675,7 +634,9 @@ const edges = computed<IEdge[]>(() => {
                             <pre
                                 v-if="entry.complex && expandedProvideValues.has(provideValueId(selectedNode.id, entry.key, index))"
                                 class="value-box"
-                                >{{ formatValueDetail(entry.raw) }}</pre>
+                            >
+                                {{ formatValueDetail(entry.raw) }}
+                            </pre>
                         </div>
                     </div>
                 </div>
@@ -793,8 +754,12 @@ const edges = computed<IEdge[]>(() => {
     display: flex;
     align-items: center;
     gap: 7px;
+    margin: 0;
     padding: 0 10px;
     height: 32px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
     border-radius: var(--radius);
     border: var(--tracker-border-width) solid var(--border);
     background: var(--bg3);

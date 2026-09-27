@@ -2,10 +2,10 @@ import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueT
 import type { Slots } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 import { startSpan } from '../tracing/tracing'
-import type { Span } from '../tracing/trace'
+import type { ISpan } from '../tracing/trace'
 import { traceStore } from '../tracing/traceStore'
 
-export interface TransitionEntry {
+export interface ITransitionEntry {
     id: string
     transitionName: string
     parentComponent: string
@@ -26,7 +26,7 @@ const MAX_TRANSITIONS =
 
 export function setupTransitionRegistry() {
     const activeSpans = new Map<string, ReturnType<typeof startSpan>>()
-    const entryState = new Map<string, Omit<TransitionEntry, 'durationMs'>>()
+    const entryState = new Map<string, Omit<ITransitionEntry, 'durationMs'>>()
 
     // FIX #2: dirty flag + cached snapshot string.
     // Set to true whenever any mutation occurs. getSnapshot() rebuilds and
@@ -39,7 +39,7 @@ export function setupTransitionRegistry() {
         bumpSnapshotRevision()
     }
 
-    function register(entry: TransitionEntry) {
+    function register(entry: ITransitionEntry) {
         const spanHandle = startSpan({
             name: `transition:${entry.transitionName}`,
             type: 'transition',
@@ -83,14 +83,14 @@ export function setupTransitionRegistry() {
         emit('transition:clear', {})
     }
 
-    function update(id: string, patch: Partial<TransitionEntry>) {
+    function update(id: string, patch: Partial<ITransitionEntry>) {
         const existing = entryState.get(id)
 
         if (!existing) {
             return
         }
 
-        const updated: Omit<TransitionEntry, 'durationMs'> = { ...existing, ...patch }
+        const updated: Omit<ITransitionEntry, 'durationMs'> = { ...existing, ...patch }
         entryState.set(id, updated)
 
         const active = activeSpans.get(id)
@@ -125,7 +125,7 @@ export function setupTransitionRegistry() {
         emit('transition:update', toTransitionEntry(updated, active?.span))
     }
 
-    function toTransitionEntry(base: Omit<TransitionEntry, 'durationMs'>, span?: Span): TransitionEntry {
+    function toTransitionEntry(base: Omit<ITransitionEntry, 'durationMs'>, span?: ISpan): ITransitionEntry {
         const durationMs =
             span?.durationMs ?? (base.endTime !== undefined ? Math.round((base.endTime - base.startTime) * 10) / 10 : undefined)
 
@@ -144,7 +144,7 @@ export function setupTransitionRegistry() {
         }
     }
 
-    function getAll(): TransitionEntry[] {
+    function getAll(): ITransitionEntry[] {
         const spans = traceStore
             .getAllTraces()
             .flatMap((trace) => trace.spans)
@@ -156,9 +156,9 @@ export function setupTransitionRegistry() {
             const id = typeof metadata.id === 'string' ? metadata.id : span.id
             const transitionName = typeof metadata.transitionName === 'string' ? metadata.transitionName : 'default'
             const parentComponent = typeof metadata.parentComponent === 'string' ? metadata.parentComponent : 'unknown'
-            const direction: TransitionEntry['direction'] = metadata.direction === 'leave' ? 'leave' : 'enter'
+            const direction: ITransitionEntry['direction'] = metadata.direction === 'leave' ? 'leave' : 'enter'
             const knownPhase = metadata.phase
-            const phase: TransitionEntry['phase'] =
+            const phase: ITransitionEntry['phase'] =
                 knownPhase === 'entering' ||
                 knownPhase === 'entered' ||
                 knownPhase === 'leaving' ||
@@ -236,13 +236,13 @@ export function setupTransitionRegistry() {
 }
 
 // ── Tracked <Transition> wrapper ─────────────────────────────────────────
-type ElementHook = ((el: Element) => void) | undefined
+type TElementHook = ((el: Element) => void) | undefined
 
 // Monotonically increasing counter used to make transition IDs unique even
 // when multiple transitions fire within the same performance.now() millisecond.
 let _transitionSeq = 0
 
-function mergeHook(original: ElementHook, ours: (el: Element) => void): (el: Element) => void {
+function mergeHook(original: TElementHook, ours: (el: Element) => void): (el: Element) => void {
     return (el: Element) => {
         ours(el)
         original?.(el)
@@ -282,7 +282,7 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
                 const hookedAttrs = {
                     ...attrs,
 
-                    onBeforeEnter: mergeHook(attrs.onBeforeEnter as ElementHook, () => {
+                    onBeforeEnter: mergeHook(attrs.onBeforeEnter as TElementHook, () => {
                         const now = performance.now()
                         const id = `${transitionName}::enter::${now}::${++_transitionSeq}`
                         enterEntryId = id
@@ -299,21 +299,21 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
                         })
                     }),
 
-                    onAfterEnter: mergeHook(attrs.onAfterEnter as ElementHook, () => {
+                    onAfterEnter: mergeHook(attrs.onAfterEnter as TElementHook, () => {
                         if (enterEntryId) {
                             registry.update(enterEntryId, { phase: 'entered', endTime: performance.now() })
                             enterEntryId = null
                         }
                     }),
 
-                    onEnterCancelled: mergeHook(attrs.onEnterCancelled as ElementHook, () => {
+                    onEnterCancelled: mergeHook(attrs.onEnterCancelled as TElementHook, () => {
                         if (enterEntryId) {
                             registry.update(enterEntryId, { phase: 'enter-cancelled', cancelled: true, endTime: performance.now() })
                             enterEntryId = null
                         }
                     }),
 
-                    onBeforeLeave: mergeHook(attrs.onBeforeLeave as ElementHook, () => {
+                    onBeforeLeave: mergeHook(attrs.onBeforeLeave as TElementHook, () => {
                         const now = performance.now()
                         const id = `${transitionName}::leave::${now}::${++_transitionSeq}`
                         leaveEntryId = id
@@ -330,14 +330,14 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
                         })
                     }),
 
-                    onAfterLeave: mergeHook(attrs.onAfterLeave as ElementHook, () => {
+                    onAfterLeave: mergeHook(attrs.onAfterLeave as TElementHook, () => {
                         if (leaveEntryId) {
                             registry.update(leaveEntryId, { phase: 'left', endTime: performance.now() })
                             leaveEntryId = null
                         }
                     }),
 
-                    onLeaveCancelled: mergeHook(attrs.onLeaveCancelled as ElementHook, () => {
+                    onLeaveCancelled: mergeHook(attrs.onLeaveCancelled as TElementHook, () => {
                         if (leaveEntryId) {
                             registry.update(leaveEntryId, { phase: 'leave-cancelled', cancelled: true, endTime: performance.now() })
                             leaveEntryId = null
