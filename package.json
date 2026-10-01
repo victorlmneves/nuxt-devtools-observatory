@@ -86,7 +86,7 @@
         "@commitlint/cli": "21.2.3",
         "@commitlint/config-conventional": "21.2.3",
         "@eslint/js": "10.0.1",
-        "@nuxt/devtools-kit": "4.0.0-alpha.3",
+        "@nuxt/devtools-kit": "4.0.0-alpha.9",
         "@nuxt/eslint": "1.17.0",
         "@nuxt/kit": "3.21.11",
         "@nuxt/module-builder": "1.0.3",
