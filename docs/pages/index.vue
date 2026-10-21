@@ -141,6 +141,7 @@ const quickLinks = [
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
                 class="mx-auto hidden h-64 lg:block"
+                aria-hidden="true"
             >
                 <rect
                     x="1.23706"
