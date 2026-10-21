@@ -47,7 +47,7 @@ useSeoMeta({
         <footer class="docs-page-footer">
             <UButton :to="githubEditUrl" target="_blank" color="neutral" variant="soft" size="sm">Edit this page</UButton>
             <UButton
-                to="https://github.com/victorneves/nuxt-devtools-observatory"
+                to="https://github.com/victorlmneves/nuxt-devtools-observatory"
                 target="_blank"
                 color="neutral"
                 variant="ghost"

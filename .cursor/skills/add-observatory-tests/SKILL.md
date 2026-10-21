@@ -1,4 +1,4 @@
----
+                                                                                                        ---
 name: add-observatory-tests
 description: Write Observatory unit or Playwright verification tests for registries, transforms, Nitro, or panel correctness. Use when adding tests, fixing a failing spec, or covering a new tracker.
 ---

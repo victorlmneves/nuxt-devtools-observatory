@@ -325,7 +325,7 @@ const quickLinks = [
                 { label: 'Open API Reference', to: '/api-reference' },
                 {
                     label: 'View Repository',
-                    to: 'https://github.com/victorneves/nuxt-devtools-observatory',
+                    to: 'https://github.com/victorlmneves/nuxt-devtools-observatory',
                     target: '_blank',
                     variant: 'ghost',
                     color: 'neutral',

@@ -59,7 +59,7 @@ export default defineAppConfig({
                 'aria-label': 'Nuxt DevTools Observatory Feature Guides',
             },
             {
-                to: 'https://github.com/victorneves/nuxt-devtools-observatory',
+                to: 'https://github.com/victorlmneves/nuxt-devtools-observatory',
                 label: 'GitHub',
                 target: '_blank',
                 'aria-label': 'Nuxt DevTools Observatory on GitHub',
