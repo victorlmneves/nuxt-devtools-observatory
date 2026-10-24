@@ -327,7 +327,7 @@ export function transitionTrackerPlugin(): Plugin {
         name: 'observatory:transition-tracker',
         enforce: 'pre',
 
-        async resolveId(id, importer) {
+        resolveId(id, importer) {
             if (id !== 'vue') {
                 return
             }
