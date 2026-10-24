@@ -1,10 +1,19 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createApp, defineComponent, h, type ComponentPublicInstance } from 'vue'
 import { setupRenderRegistry } from '@observatory/runtime/composables/render-registry'
 import { traceStore } from '@observatory/runtime/tracing/traceStore'
 
+const { observatoryConfig } = vi.hoisted(() => ({
+    observatoryConfig: { heatmapHideInternals: false } as { heatmapHideInternals?: boolean },
+}))
+
+vi.mock('#app', () => ({
+    useRuntimeConfig: () => ({ public: { observatory: observatoryConfig } }),
+}))
+
 beforeEach(() => {
+    observatoryConfig.heatmapHideInternals = false
     traceStore.clear()
 })
 
@@ -350,9 +359,35 @@ describe('IRenderEntry interface — children field removed (fix: render-registr
 
         app.unmount()
     })
-})
 
-// ── describeElement / resolveTypeLabel / inferAnonymousLabel coverage ────
+    it('records the nearest app parent when library wrappers are hidden', () => {
+        observatoryConfig.heatmapHideInternals = true
+        const app = createApp({})
+        const { getAll } = setupRenderRegistry(makeNuxtApp(app))
+        const mixins = (app as unknown as { _context: { mixins: Array<Record<string, unknown>> } })._context.mixins
+        const mixin = mixins[mixins.length - 1]
+        const mount = mixin.mounted as (this: ComponentPublicInstance) => void
+        const layout = fakeCPI(1, 'Layout', '/app/layouts/default.vue')
+        const library = fakeCPI(2, 'LibraryWrapper', '/app/node_modules/ui/Wrapper.vue')
+        const page = fakeCPI(3, 'Page', '/app/pages/index.vue')
+        const libraryOnly = fakeCPI(5, 'OnlyLibrary', '/app/node_modules/ui/Only.vue')
+        const orphan = fakeCPI(4, 'Orphan', '/app/pages/orphan.vue')
+
+        library.$parent = layout
+        page.$parent = library
+        orphan.$parent = libraryOnly
+        mount.call(layout)
+        mount.call(library)
+        mount.call(page)
+        mount.call(orphan)
+
+        const entries = getAll()
+
+        expect(entries.map((entry) => entry.uid)).toEqual([1, 3, 4])
+        expect(entries.find((entry) => entry.uid === 3)?.parentUid).toBe(1)
+        expect(entries.find((entry) => entry.uid === 4)?.parentUid).toBeUndefined()
+    })
+})
 
 function triggerRender(mixin: Record<string, unknown>, instance: import('vue').ComponentPublicInstance) {
     ;(mixin.updated as (this: import('vue').ComponentPublicInstance) => void).call(instance)

@@ -618,6 +618,37 @@ describe('__trackComposable — live ref snapshot after unmount (regression: emp
     })
 })
 
+describe('setupComposableRegistry — clearNonLayout()', () => {
+    it('keeps layout composables and drops page composables', () => {
+        const reg = setupComposableRegistry()
+
+        const entry = (id: string, name: string, isLayoutComposable: boolean) => ({
+            id,
+            name,
+            componentFile: 'C.ts',
+            componentUid: 1,
+            status: 'mounted' as const,
+            leak: false,
+            refs: {},
+            history: [],
+            sharedKeys: [],
+            watcherCount: 0,
+            intervalCount: 0,
+            lifecycle: { hasOnMounted: false, hasOnUnmounted: false, watchersCleaned: true, intervalsCleaned: true },
+            file: 'C.ts',
+            line: 1,
+            route: '/',
+            isLayoutComposable,
+        })
+
+        reg.register(entry('layout-nav', 'useLayoutNav', true))
+        reg.register(entry('page-data', 'usePageData', false))
+        reg.clearNonLayout()
+
+        expect(reg.getAll().map((item) => item.name)).toEqual(['useLayoutNav'])
+    })
+})
+
 describe('setupComposableRegistry — clear() (session reset)', () => {
     it('clear() removes all entries', () => {
         const reg = setupComposableRegistry()
@@ -1435,6 +1466,25 @@ describe('safeValue — function and unserializable branches', () => {
 
         // safeValue(fn) → undefined (functions stripped from snapshot)
         expect(reg.getAll()[0].refs['fn'].value).toBeUndefined()
+
+        app.unmount()
+    })
+
+    it('stringifies an object that structuredClone cannot copy', () => {
+        const reg = setupComposableRegistry()
+        getWindow().__observatory__ = { composable: reg }
+
+        const Comp = defineComponent({
+            setup() {
+                __trackComposable('useBadSnapshot', () => ({ payload: ref({ run() { return 1 } }) }), { file: 'F.ts', line: 1 })
+
+                return () => h('div')
+            },
+        })
+        const app = createApp(Comp)
+        app.mount(document.createElement('div'))
+
+        expect(reg.getAll()[0].refs['payload'].value).toBe('[object Object]')
 
         app.unmount()
     })
