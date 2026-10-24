@@ -162,6 +162,34 @@ describe('createTrackedTransition', () => {
         app.unmount()
     })
 
+    it('records the default name when the transition name is not a string', () => {
+        const Comp = defineComponent({
+            setup() {
+                return () =>
+                    h(
+                        TrackedTransition,
+                        {
+                            name: 1,
+                            appear: true,
+                            css: false,
+                            onEnter: (_el: Element, done: () => void) => done(),
+                        },
+                        { default: () => h('div', 'content') }
+                    )
+            },
+        })
+
+        const app = createApp(Comp)
+        app.config.warnHandler = () => {}
+        app.mount(document.createElement('div'))
+
+        const entry = reg.getAll().find((item) => item.direction === 'enter')
+
+        expect(entry?.transitionName).toBe('default')
+
+        app.unmount()
+    })
+
     it('updates phase to entered when onAfterEnter fires via JS-mode done()', async () => {
         const Comp = defineComponent({
             setup() {

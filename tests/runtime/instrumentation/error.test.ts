@@ -48,6 +48,15 @@ describe('recordErrorSpan', () => {
         expect(span.metadata?.stack).toEqual(expect.any(String))
     })
 
+    it.each([
+        { label: 'a string', error: 'render failed', message: 'render failed' },
+        { label: 'a number', error: 404, message: '404' },
+        { label: 'an object without a message', error: { statusCode: 500 }, message: 'unknown error' },
+        { label: 'an empty string', error: '', message: 'unknown error' },
+    ])('records the message from $label', ({ error, message }) => {
+        expect(recordErrorSpan('app', error).metadata?.message).toBe(message)
+    })
+
     it('marks the active route trace as error', () => {
         const { nuxtApp, trigger, options } = (() => {
             const hooks: Record<string, Array<() => void>> = {}
