@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineComponent, h, ref, watch, type VNode } from 'vue'
+import { computed, defineComponent, h, ref, toRaw, watch, type VNode } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useVirtualizationConfig } from '@observatory-client/composables/useVirtualizationConfig'
 import { useResizablePane } from '@observatory-client/composables/useResizablePane'
@@ -102,6 +102,7 @@ const TreeNode = defineComponent({
             const node = props.node!
             const expanded = props.expandedIds?.has(node.id) ?? false
             const canExpand = node.children.length > 0
+            const toggleGlyph = expanded ? '⌄' : '›'
             const metric = props.mode === 'count' ? `${node.rerenders + node.mountCount}` : `${node.avgMs.toFixed(1)}ms`
             const metricLabel = props.mode === 'count' ? 'renders' : 'avg'
             const badges = nodeBadges(node)
@@ -139,7 +140,7 @@ const TreeNode = defineComponent({
                                           emit('toggle', node.id)
                                       },
                                   },
-                                  expanded ? '⌄' : '›'
+                                  toggleGlyph
                               )
                             : null,
                         h('div', { class: 'tree-copy' }, [
@@ -913,7 +914,7 @@ function toggleFreeze() {
         return
     }
 
-    frozenSnapshot.value = JSON.parse(JSON.stringify(renders.value)) as IRenderEntry[]
+    frozenSnapshot.value = structuredClone(toRaw(renders.value))
     frozen.value = true
 }
 
@@ -1036,8 +1037,8 @@ function formatTimestamp(t: number): string {
         </div>
 
         <div class="render-heatmap__inspector">
-            <aside class="render-heatmap__roots-panel">
-                <div class="render-heatmap__panel-title tracker-section-label">apps</div>
+            <aside class="render-heatmap__roots-panel" aria-labelledby="render-heatmap-apps">
+                <div id="render-heatmap-apps" class="render-heatmap__panel-title tracker-section-label">apps</div>
                 <button
                     v-for="entry in appEntries"
                     :key="entry.id"
@@ -1160,7 +1161,11 @@ function formatTimestamp(t: number): string {
 
             <div class="tracker-resize-handle" @mousedown="onDetailHandleMouseDown" />
 
-            <aside class="render-heatmap__detail-panel tracker-detail-panel" :style="{ width: detailWidth + 'px' }">
+            <aside
+                class="render-heatmap__detail-panel tracker-detail-panel"
+                :style="{ width: detailWidth + 'px' }"
+                :aria-label="activeSelected ? `Details for ${activeSelected.label}` : 'Component details'"
+            >
                 <template v-if="activeSelected">
                     <div class="render-heatmap__detail-header">
                         <span class="render-heatmap__detail-title mono bold">{{ activeSelected.label }}</span>

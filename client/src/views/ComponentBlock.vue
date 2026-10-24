@@ -48,17 +48,13 @@ function heatColor(val: number, max: number) {
 
     if (r < 0.25) {
         return { bg: '#EAF3DE', text: '#27500A', border: '#97C459' }
-    } else {
-        if (r < 0.55) {
-            return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
-        } else {
-            if (r < 0.8) {
-                return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
-            } else {
-                return { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' }
-            }
-        }
+    } else if (r < 0.55) {
+        return { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }
+    } else if (r < 0.8) {
+        return { bg: '#FAECE7', text: '#712B13', border: '#D85A30' }
     }
+
+    return { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' }
 }
 
 function isHotNode(n: IComponentNode) {
@@ -80,17 +76,9 @@ function isHotNode(n: IComponentNode) {
 function shouldShow(n: IComponentNode): boolean {
     if (!props.hotOnly) {
         return true
-    } else {
-        if (isHotNode(n)) {
-            return true
-        } else {
-            if (n.children.some(isHotNode)) {
-                return true
-            } else {
-                return false
-            }
-        }
     }
+
+    return isHotNode(n) || n.children.some(isHotNode)
 }
 
 function handleSelect(n: IComponentNode) {

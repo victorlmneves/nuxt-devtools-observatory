@@ -26,7 +26,7 @@ const pathMap: Record<string, string> = {
     keepalive: 'keepalive',
 }
 
-const segment = window.location.pathname.split('/').filter(Boolean).pop() ?? ''
+const segment = window.location.pathname.split('/').findLast((part) => part !== '') ?? ''
 const activeTab = ref(pathMap[segment] ?? 'fetch')
 
 const { features } = useObservatoryData()

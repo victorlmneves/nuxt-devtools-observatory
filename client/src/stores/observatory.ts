@@ -104,7 +104,7 @@ function applySnapshot(data: IObservatorySnapshot) {
     const snapshotMode = features.value?.composableNavigationMode
 
     if (desiredMode && snapshotMode !== desiredMode) {
-        features.value = { ...(features.value || {}), composableNavigationMode: desiredMode }
+        features.value = { ...features.value, composableNavigationMode: desiredMode }
 
         rpc?.setComposableMode(desiredMode)
             .then(() => rpc?.requestSnapshot())
@@ -220,7 +220,7 @@ export function setComposableMode(mode: 'route' | 'session') {
     desiredMode = mode
 
     // Keep UI responsive even when RPC is still initializing.
-    features.value = { ...(features.value || {}), composableNavigationMode: mode }
+    features.value = { ...features.value, composableNavigationMode: mode }
 
     if (!rpc) {
         queuedMode = mode

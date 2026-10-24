@@ -287,7 +287,7 @@ export default defineNuxtModule<IModuleOptions>({
             }
             nitroOptions.nitro = nitroOptions.nitro ?? {}
             nitroOptions.nitro.env = {
-                ...(nitroOptions.nitro.env ?? {}),
+                ...nitroOptions.nitro.env,
                 OBSERVATORY_MAX_TRACES: String(resolved.maxTraces ?? 50),
             }
             addServerPlugin(resolver.resolve('./runtime/nitro/fetch-capture'))
@@ -377,26 +377,38 @@ export default defineNuxtModule<IModuleOptions>({
             rpc = extendServerRpc<IObservatoryClientFunctions, IObservatoryServerFunctions>(
                 'observatory',
                 {
-                    async getSnapshot() {
-                        return latestSnapshot
+                    getSnapshot() {
+                        return Promise.resolve(latestSnapshot)
                     },
-                    async requestSnapshot() {
+                    requestSnapshot() {
                         emitCommand({ cmd: 'request-snapshot' })
+
+                        return Promise.resolve()
                     },
-                    async clearComposables() {
+                    clearComposables() {
                         emitCommand({ cmd: 'clear-composables' })
+
+                        return Promise.resolve()
                     },
-                    async setComposableMode(mode) {
+                    setComposableMode(mode) {
                         emitCommand({ cmd: 'set-mode', mode })
+
+                        return Promise.resolve()
                     },
-                    async editComposableValue(id, key, value) {
+                    editComposableValue(id, key, value) {
                         emitCommand({ cmd: 'edit-composable', id, key, value })
+
+                        return Promise.resolve()
                     },
-                    async clearPiniaStores() {
+                    clearPiniaStores() {
                         emitCommand({ cmd: 'clear-pinia' })
+
+                        return Promise.resolve()
                     },
-                    async editPiniaState(storeId, path, value) {
+                    editPiniaState(storeId, path, value) {
                         emitCommand({ cmd: 'edit-pinia', storeId, path, value })
+
+                        return Promise.resolve()
                     },
                 },
                 nuxt

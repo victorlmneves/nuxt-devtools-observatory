@@ -1,7 +1,6 @@
 /* eslint-disable no-console */
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import chalk from 'chalk'
+import { exec } from 'node:child_process'
+import { promisify, styleText } from 'node:util'
 
 const execAsync = promisify(exec)
 
@@ -23,11 +22,11 @@ interface ITestSuiteReport {
 }
 
 class VerificationRunner {
-    private results: IVerificationResult[] = []
+    private readonly results: IVerificationResult[] = []
     
     async runAll(): Promise<boolean> {
         // eslint-disable-next-line no-console
-        console.info(chalk.bold.blue('\n🔍 Running Observatory Verification Suite v1.0\n'))
+        console.info(styleText(['bold', 'blue'], '\n🔍 Running Observatory Verification Suite v1.0\n'))
         
         const testSuites: string[] = [
             'trace-viewer',
@@ -39,9 +38,10 @@ class VerificationRunner {
             'fetch-dashboard'
         ]
         
-        for (const suite of testSuites) {
-            await this.runTestSuite(suite)
-        }
+        await testSuites.reduce(
+            (previous, suite) => previous.then(() => this.runTestSuite(suite)),
+            Promise.resolve(),
+        )
         
         this.printReport()
 
@@ -50,7 +50,7 @@ class VerificationRunner {
     
     private async runTestSuite(suite: string): Promise<void> {
         // eslint-disable-next-line no-console
-        console.info(chalk.yellow(`\n📋 Running ${suite} tests...`))
+        console.info(styleText('yellow', `\n📋 Running ${suite} tests...`))
         
         try {
             const start: number = performance.now()
@@ -78,12 +78,12 @@ class VerificationRunner {
             })
             
             if (passed) {
-                console.info(chalk.green(`✅ ${suite} passed (${duration.toFixed(2)}ms)`))
+                console.info(styleText('green', `✅ ${suite} passed (${duration.toFixed(2)}ms)`))
             } else {
-                console.info(chalk.red(`❌ ${suite} failed`))
+                console.info(styleText('red', `❌ ${suite} failed`))
 
                 if (stderr) {
-                    console.error(chalk.red(stderr))
+                    console.error(styleText('red', stderr))
                 }
             }
         } catch (error: unknown) {
@@ -95,16 +95,16 @@ class VerificationRunner {
                 error: errorMessage
             })
 
-            console.error(chalk.red(`❌ ${suite} failed to run: ${errorMessage}`))
+            console.error(styleText('red', `❌ ${suite} failed to run: ${errorMessage}`))
         }
     }
     
     private printReport(): void {
-        console.info(chalk.bold.blue('\n📊 Verification Report\n'))
+        console.info(styleText(['bold', 'blue'], '\n📊 Verification Report\n'))
 
-        console.info(chalk.bold('┌─────────────┬────────┬────────────┬──────────────────────────────┐'))
-        console.info(chalk.bold('│ Test Suite  │ Status │ Duration   │ Error                        │'))
-        console.info(chalk.bold('├─────────────┼────────┼────────────┼──────────────────────────────┤'))
+        console.info(styleText('bold', '┌─────────────┬────────┬────────────┬──────────────────────────────┐'))
+        console.info(styleText('bold', '│ Test Suite  │ Status │ Duration   │ Error                        │'))
+        console.info(styleText('bold', '├─────────────┼────────┼────────────┼──────────────────────────────┤'))
         
         for (const result of this.results) {
             const statusText: string = result.passed ? '✅ PASS' : '❌ FAIL'
@@ -116,24 +116,29 @@ class VerificationRunner {
             )
         }
 
-        console.info(chalk.bold('└─────────────┴────────┴────────────┴──────────────────────────────┘'))
+        console.info(styleText('bold', '└─────────────┴────────┴────────────┴──────────────────────────────┘'))
 
         const totalPassed: number = this.results.filter((r: IVerificationResult) => r.passed).length
         const totalFailed: number = this.results.filter((r: IVerificationResult) => !r.passed).length
         const totalTests: number = this.results.length
 
-        console.info(chalk.bold(`\nSummary: ${totalPassed} passed, ${totalFailed} failed (${totalTests} total)\n`))
+        console.info(styleText('bold', `\nSummary: ${totalPassed} passed, ${totalFailed} failed (${totalTests} total)\n`))
         
         if (totalFailed === 0) {
-            console.info(chalk.green.bold('🎉 All verification tests passed! Observatory data is accurate.'))
+            console.info(styleText(['bold', 'green'], '🎉 All verification tests passed! Observatory data is accurate.'))
         } else {
-            console.info(chalk.red.bold(`⚠️ ${totalFailed} test suites failed. Review the errors above.`))
+            console.info(styleText(['bold', 'red'], `⚠️ ${totalFailed} test suites failed. Review the errors above.`))
         }
     }
 }
 
 // Run verification
 const runner: VerificationRunner = new VerificationRunner()
-runner.runAll().then((success: boolean): void => {
+
+try {
+    const success: boolean = await runner.runAll()
     process.exit(success ? 0 : 1)
-})
+} catch (error: unknown) {
+    console.error(error)
+    process.exit(1)
+}
