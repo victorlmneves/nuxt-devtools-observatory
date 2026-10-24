@@ -246,13 +246,28 @@ section {
     border-radius: 8px;
     text-decoration: none;
     color: #1a1a18;
-    transition: all 0.2s;
+    transition:
+        border-color 0.2s,
+        transform 0.2s,
+        box-shadow 0.2s;
 }
 
 .verification-link:hover {
     border-color: #42b883;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgb(66 184 131 / 10%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .verification-link {
+        transition:
+            border-color 0.2s,
+            box-shadow 0.2s;
+    }
+
+    .verification-link:hover {
+        transform: none;
+    }
 }
 
 .verification-link strong {

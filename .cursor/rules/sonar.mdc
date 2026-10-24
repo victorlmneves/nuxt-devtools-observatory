@@ -33,6 +33,7 @@ When a fix introduces a Sonar or lint pattern that is not listed here, add a sho
 - Import Node builtins with the `node:` prefix, such as `node:path` and `node:util`.
 - Mark a class field `readonly` when nothing reassigns it.
 - Do not `await` inside a loop. Sequence dependent steps by returning the next promise from `.then`, or from a recursive function.
+- Do not nest functions more than 5 levels deep. Move the inner function to module scope.
 - In an ES module entry script, use top-level `await` inside `try/catch`.
 - Make a function `async` when it awaits. Do not mark a function `async` when its body has no `await`. A function that only returns `new Promise`, such as a timer, stays a normal function.
 - Do not `await` a value that is not a promise.
@@ -47,6 +48,7 @@ When a fix introduces a Sonar or lint pattern that is not listed here, add a sho
 - Handle a returned promise: `await` it, use `void` when its rejection is already handled, or attach `.catch` on an entry point.
 - An `eslint-disable` comment names the rule it disables.
 - Name the properties in a `transition`. Do not use `transition: all`.
+- When a transition moves an element, such as `transform` or `translate`, override that motion inside `@media (prefers-reduced-motion: reduce)`.
 
 ```ts
 // ❌ BAD

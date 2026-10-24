@@ -242,7 +242,10 @@ function getSpanTypeColor(type: string): string {
     font-size: 10px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+        background 0.2s,
+        border-color 0.2s,
+        color 0.2s;
 }
 
 .trace-filter__type-badge:hover {
@@ -342,7 +345,10 @@ function getSpanTypeColor(type: string): string {
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+        background 0.2s,
+        border-color 0.2s,
+        color 0.2s;
 }
 
 .trace-filter__clear-btn:hover {

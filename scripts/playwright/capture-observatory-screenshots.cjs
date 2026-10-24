@@ -221,7 +221,12 @@ const mockData = {
   const browser = await chromium.launch();
   const page = await browser.newPage();
 
-  for (const tab of screenshots) {
+  async function captureScreenshot(index) {
+    if (index >= screenshots.length) {
+      return;
+    }
+
+    const tab = screenshots[index];
     await page.goto(BASE_URL + tab.path);
     // Wait for SPA to load/render
     await page.waitForTimeout(1000);
@@ -328,7 +333,10 @@ const mockData = {
     // Save screenshot
     await page.screenshot({ path: path.resolve(tab.file), fullPage: true });
     console.log(`Saved screenshot: ${tab.file}`);
+    await captureScreenshot(index + 1);
   }
+
+  await captureScreenshot(0);
 
   await browser.close();
   await viteServer.close();

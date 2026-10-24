@@ -134,7 +134,7 @@ test.describe('Trace Viewer Correctness', () => {
         }
 
         const traces = await api.getTraces()
-        expect(traces.length).toBe(routeCount)
+        expect(traces).toHaveLength(routeCount)
 
         for (let i = 0; i < traces.length - 1; i++) {
             const currentTrace = traces[i]

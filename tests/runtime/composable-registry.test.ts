@@ -1484,7 +1484,7 @@ describe('safeValue — function and unserializable branches', () => {
         const app = createApp(Comp)
         app.mount(document.createElement('div'))
 
-        expect(reg.getAll()[0].refs['payload'].value).toBe('[object Object]')
+        expect(reg.getAll()[0].refs['payload'].value).toBe('[unserializable]')
 
         app.unmount()
     })
