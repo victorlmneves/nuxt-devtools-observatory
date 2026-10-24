@@ -46,6 +46,7 @@ When a fix introduces a Sonar or lint pattern that is not listed here, add a sho
 - Keep a function to 7 parameters or fewer. Put related arguments on one object.
 - Handle a returned promise: `await` it, use `void` when its rejection is already handled, or attach `.catch` on an entry point.
 - An `eslint-disable` comment names the rule it disables.
+- Name the properties in a `transition`. Do not use `transition: all`.
 
 ```ts
 // ❌ BAD

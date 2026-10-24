@@ -1317,7 +1317,9 @@ function formatTimestamp(t: number): string {
     cursor: pointer;
     font-size: 11px;
     border-radius: 3px;
-    transition: all 0.12s;
+    transition:
+        background 0.12s,
+        color 0.12s;
     font-family: var(--mono);
 }
 
