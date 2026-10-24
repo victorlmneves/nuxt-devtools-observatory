@@ -546,7 +546,7 @@ const edges = computed<IEdge[]>(() => {
                 </div>
                 <div v-if="layout.length" class="provide-graph__canvas-stage">
                     <div class="provide-graph__canvas-wrap" :style="{ width: `${canvasW}px`, height: `${canvasH}px` }">
-                        <svg class="provide-graph__edges-svg" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
+                        <svg class="provide-graph__edges-svg" aria-hidden="true" :width="canvasW" :height="canvasH" :viewBox="`0 0 ${canvasW} ${canvasH}`">
                             <path
                                 v-for="edge in edges"
                                 :key="edge.id"

@@ -85,6 +85,15 @@ function truncatePayload(payload: unknown): unknown {
     }
 }
 
+function emit(event: string, data: unknown) {
+    if (!import.meta.client) {
+        return
+    }
+
+    const channel = (window as IObservatoryWindow).__nuxt_devtools__?.channel
+    channel?.send(event, data)
+}
+
 export function setupFetchRegistry() {
     const entries = new Map<string | number, IFetchEntry>()
 
@@ -152,15 +161,6 @@ export function setupFetchRegistry() {
         entries.clear()
         markDirty()
         emit('fetch:clear', {})
-    }
-
-    function emit(event: string, data: unknown) {
-        if (!import.meta.client) {
-            return
-        }
-
-        const channel = (window as IObservatoryWindow).__nuxt_devtools__?.channel
-        channel?.send(event, data)
     }
 
     return { register, update, getAll, getSnapshot, clear, entries: readonly(entries) }
@@ -357,7 +357,8 @@ export function __devFetchCall(
             const ms = Math.round(endTime - lastCallStart)
             const size = Number(response.headers?.get('content-length')) || undefined
             const cached = response.headers?.get('x-nuxt-cache') === 'HIT'
-            const status = cached ? 'cached' : response.ok ? 'ok' : ('error' as const)
+            const responseStatus = response.ok ? 'ok' : 'error'
+            const status = cached ? 'cached' : responseStatus
 
             if (responseCount === 1 && !initialWasSsr) {
                 // First HTTP response for a CSR fetch — update the pending entry.
@@ -426,12 +427,14 @@ export function __devFetchCall(
     const statusValue = result?.status?.value
     const isSsrHydrated = statusValue === 'success'
     const isDeduplicatedError = statusValue === 'error'
+    const initialStatus = isDeduplicatedError ? 'error' : 'pending'
+    const status = isSsrHydrated ? 'cached' : initialStatus
 
     registry.register({
         id,
         key: meta.key,
         url: resolvedUrl,
-        status: isSsrHydrated ? 'cached' : isDeduplicatedError ? 'error' : 'pending',
+        status,
         origin: isSsrHydrated ? 'ssr' : 'csr',
         startTime,
         endTime: isSsrHydrated || isDeduplicatedError ? startTime : undefined,

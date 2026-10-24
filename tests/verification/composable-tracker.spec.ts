@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
+import { getTestBridge, waitForBridge } from './helpers/observatory-bridge'
+import type { IObservatoryTestAPI } from './types/observatory.types'
 
 test.describe('Composable Tracker Correctness', () => {
     let api: IObservatoryTestAPI
@@ -9,7 +10,7 @@ test.describe('Composable Tracker Correctness', () => {
         page = testPage
         await page.goto('http://localhost:3000/test/composable-verification')
         await waitForBridge()
-        api = await getTestBridge()
+        api = getTestBridge()
         await api.clearAllData()
     })
 
@@ -40,7 +41,7 @@ test.describe('Composable Tracker Correctness', () => {
         const entries = await api.getComposableEntries()
         const sharedEntries = entries.filter((entry) => entry.name === 'useSharedState')
 
-        expect(sharedEntries.length).toBe(2)
+        expect(sharedEntries).toHaveLength(2)
 
         const firstEntry = sharedEntries[0]
         const secondEntry = sharedEntries[1]
@@ -97,14 +98,19 @@ test.describe('Composable Tracker Correctness', () => {
         const changeCount = 5
         for (let i = 0; i < changeCount; i++) {
             await page.click('[data-testid="increment-counter"]')
-            await page.waitForTimeout(100)
+            await expect.poll(async () => {
+                const entries = await api.getComposableEntries()
+                const counterEntry = entries.find((entry) => entry.name === 'useCounter')
+
+                return counterEntry?.history.length ?? 0
+            }).toBe(i + 1)
         }
 
         const entries = await api.getComposableEntries()
         const counterEntry = entries.find((entry) => entry.name === 'useCounter')
 
         expect(counterEntry).toBeDefined()
-        expect(counterEntry?.history.length).toBe(changeCount)
+        expect(counterEntry?.history).toHaveLength(changeCount)
 
         if (counterEntry) {
             // Verify chronological order

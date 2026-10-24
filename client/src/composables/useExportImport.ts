@@ -31,18 +31,18 @@ export function importJson(): Promise<unknown> {
                 return
             }
 
-            const reader = new FileReader()
-
-            reader.addEventListener('load', () => {
-                try {
-                    resolve(JSON.parse(reader.result as string))
-                } catch {
-                    reject(new Error('Invalid JSON file'))
-                }
-            })
-
-            reader.addEventListener('error', () => reject(new Error('Failed to read file')))
-            reader.readAsText(file)
+            void file
+                .text()
+                .then((text) => {
+                    try {
+                        resolve(JSON.parse(text))
+                    } catch {
+                        reject(new Error('Invalid JSON file'))
+                    }
+                })
+                .catch(() => {
+                    reject(new Error('Failed to read file'))
+                })
         })
 
         // Reject if the dialog is cancelled (focus returns without a change event)

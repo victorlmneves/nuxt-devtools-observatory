@@ -94,20 +94,12 @@ describe('provideInjectPlugin', () => {
     })
 
     describe('file filtering', () => {
-        it('returns undefined for node_modules paths', () => {
-            const result = transform(`provide('k', v)`, '/project/node_modules/lib/index.ts')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('skips own runtime file: provide-inject-registry', () => {
-            const result = transform(`provide('k', v)`, '/project/src/runtime/provide-inject-registry.ts')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('returns undefined for non-ts/vue file extensions', () => {
-            const result = transform(`provide('k', v)`, '/project/src/page.html')
+        it.each([
+            { file: '/project/node_modules/lib/index.ts', label: 'node_modules paths' },
+            { file: '/project/src/runtime/provide-inject-registry.ts', label: 'its own runtime file' },
+            { file: '/project/src/page.html', label: 'non-ts/vue file extensions' },
+        ])('returns undefined for $label', ({ file }) => {
+            const result = transform(`provide('k', v)`, file)
 
             expect(result).toBeUndefined()
         })

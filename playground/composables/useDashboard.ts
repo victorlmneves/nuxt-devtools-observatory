@@ -65,13 +65,16 @@ export function useDashboard() {
 
     if (import.meta.client) {
         onMounted(() => {
-            fetchStats()
+            void fetchStats()
             intervalId = setInterval(fetchStats, 4000)
         })
     }
 
     onUnmounted(() => {
-        if (intervalId !== null) clearInterval(intervalId)
+        if (intervalId !== null) {
+            clearInterval(intervalId)
+        }
+
         stopEffect()
     })
 

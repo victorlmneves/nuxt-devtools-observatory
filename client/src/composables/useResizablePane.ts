@@ -26,7 +26,7 @@ export function useResizablePane(defaultWidth: number, storageKey?: string) {
         paneWidth.value = Math.max(160, Math.min(600, startWidth + delta))
 
         if (storageKey) {
-            // eslint-disable-next-line
+            // eslint-disable-next-line no-restricted-properties -- pane width, not a credential
             localStorage.setItem(storageKey, String(paneWidth.value))
         }
     }

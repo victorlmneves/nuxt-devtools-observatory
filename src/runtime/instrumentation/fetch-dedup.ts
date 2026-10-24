@@ -13,7 +13,7 @@ export function isObservatoryTrackedFetch(options?: Record<string, unknown>): bo
 
 export function markObservatoryTrackedFetch(options?: Record<string, unknown>): Record<string, unknown> {
     return {
-        ...(options ?? {}),
+        ...options,
         [OBSERVATORY_FETCH_TRACKED]: true,
     }
 }

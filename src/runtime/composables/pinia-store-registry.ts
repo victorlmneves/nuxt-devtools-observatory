@@ -1,4 +1,4 @@
-import { getCurrentInstance } from 'vue'
+import { getCurrentInstance, toRaw } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 import type {
     IPiniaHydrationEvent,
@@ -46,7 +46,7 @@ function nowMs() {
 
 function safeSnapshot<T>(value: T): T {
     try {
-        return JSON.parse(JSON.stringify(value)) as T
+        return structuredClone(toRaw(value))
     } catch {
         return value
     }
@@ -91,7 +91,13 @@ function setAtPath(target: Record<string, unknown>, path: string, value: unknown
         return
     }
 
-    ;(cursor as Record<string, unknown>)[String(parts[parts.length - 1])] = value
+    const lastPart = parts.at(-1)
+
+    if (lastPart === undefined) {
+        return
+    }
+
+    ;(cursor as Record<string, unknown>)[String(lastPart)] = value
 }
 
 function collectDiff(before: unknown, after: unknown, path = '', depth = 0, out: IPiniaStateDiff[] = []): IPiniaStateDiff[] {
@@ -162,8 +168,11 @@ function inferDependencyFromInstance(): IPiniaStoreDependency | null {
     }
 }
 
+const CALLSITE_LINE = /^at ([^()]+) \((.+):\d+:\d+\)$/
+const FILE_ONLY_LINE = /^at (.+):\d+:\d+$/
+
 function parseStackLine(line: string): { name?: string; file?: string } {
-    const callsiteMatch = line.match(/^at ([^()]+) \((.+):\d+:\d+\)$/)
+    const callsiteMatch = CALLSITE_LINE.exec(line)
 
     if (callsiteMatch) {
         return {
@@ -172,7 +181,7 @@ function parseStackLine(line: string): { name?: string; file?: string } {
         }
     }
 
-    const fileOnlyMatch = line.match(/^at (.+):\d+:\d+$/)
+    const fileOnlyMatch = FILE_ONLY_LINE.exec(line)
 
     if (fileOnlyMatch) {
         return {
@@ -258,7 +267,6 @@ export function setupPiniaStoreRegistry(options: {
     const entries = new Map<string, IPiniaStoreEntry>()
     const stores = new Map<string, TPiniaStoreLike>()
     const stopHandles = new Map<string, Array<() => void>>()
-    const activeActions = new Map<string, IPiniaMutationEvent>()
     const listeners = new Set<() => void>()
 
     let dirty = true
@@ -416,7 +424,6 @@ export function setupPiniaStoreRegistry(options: {
             current.timeline.push(event)
             trimTimeline(current)
             current.lastActionAt = start
-            activeActions.set(actionId, event)
             notifyChange()
 
             after(() => {
@@ -435,7 +442,6 @@ export function setupPiniaStoreRegistry(options: {
                 event.diff = collectDiff(event.beforeState, afterState)
                 done.state = afterState
                 done.lastMutationAt = end
-                activeActions.delete(actionId)
                 notifyChange()
             })
 
@@ -456,7 +462,6 @@ export function setupPiniaStoreRegistry(options: {
                 event.error = error instanceof Error ? error.message : String(error)
                 done.state = afterState
                 done.lastMutationAt = end
-                activeActions.delete(actionId)
                 notifyChange()
             })
         })
@@ -583,7 +588,6 @@ export function setupPiniaStoreRegistry(options: {
         stopHandles.clear()
         stores.clear()
         entries.clear()
-        activeActions.clear()
         listeners.clear()
         dirty = true
         cached = '[]'

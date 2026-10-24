@@ -12,12 +12,9 @@ function getGlobalCarrier(): TTraceContextCarrier {
 
 export function setCurrentTraceId(traceId: string | undefined, carrier?: TTraceContextCarrier) {
     const target = carrier ?? getGlobalCarrier()
+    const context = (target[TRACE_CONTEXT_KEY] ??= {})
 
-    if (!target[TRACE_CONTEXT_KEY]) {
-        target[TRACE_CONTEXT_KEY] = {}
-    }
-
-    target[TRACE_CONTEXT_KEY]!.currentTraceId = traceId
+    context.currentTraceId = traceId
 }
 
 export function getCurrentTraceId(carrier?: TTraceContextCarrier) {

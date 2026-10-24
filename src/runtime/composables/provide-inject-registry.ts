@@ -1,4 +1,4 @@
-import { isRef, isReactive, unref, getCurrentInstance, provide, inject } from 'vue'
+import { isRef, isReactive, unref, toRaw, getCurrentInstance, provide, inject } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 
 export interface IProvideEntry {
@@ -40,6 +40,16 @@ export interface IInjectEntry {
 type TInternalProvideEntry = IProvideEntry & {
     /** Live source for reactive values, used to refresh snapshots on read. */
     __valueSource?: unknown
+}
+
+function emit(event: string, data: unknown) {
+    if (!import.meta.client) {
+        return
+    }
+
+    const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
+        .__nuxt_devtools__?.channel
+    channel?.send(event, data)
 }
 
 /**
@@ -149,16 +159,6 @@ export function setupProvideInjectRegistry(): {
         dirty = false
 
         return cachedSnapshot
-    }
-
-    function emit(event: string, data: unknown) {
-        if (!import.meta.client) {
-            return
-        }
-
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
-            .__nuxt_devtools__?.channel
-        channel?.send(event, data)
     }
 
     return { registerProvide, registerInject, getAll, getSnapshot, clear }
@@ -283,7 +283,7 @@ function safeSnapshot(value: unknown): unknown {
         }
 
         if (typeof value === 'object') {
-            return JSON.parse(JSON.stringify(value))
+            return structuredClone(toRaw(value))
         }
 
         return value

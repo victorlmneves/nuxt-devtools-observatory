@@ -35,6 +35,17 @@ test.describe('Pinia Tracker Correctness', () => {
         })
     }
 
+    async function waitForAddedCartItem(targetPage: Page): Promise<void> {
+        await expect(targetPage.getByTestId('pinia-state-readout')).toContainText(/Items: 1(?!\d)/)
+        await expect.poll(async () => {
+            const stores = await getPiniaStores(targetPage)
+            const cartStore = stores.find((store) => store.id === 'cart')
+            const state = cartStore?.state as { items?: unknown[] } | undefined
+
+            return Array.isArray(state?.items) && state.items.length > 0
+        }).toBe(true)
+    }
+
     test.beforeEach(async ({ page: testPage }) => {
         page = testPage
         await page.goto('http://localhost:3000/test/pinia-verification')
@@ -44,7 +55,7 @@ test.describe('Pinia Tracker Correctness', () => {
 
     test('exposes tracked pinia stores through the bridge snapshot', async () => {
         await page.click('[data-testid="pinia-add-item"]')
-        await page.waitForTimeout(250)
+        await waitForAddedCartItem(page)
 
         const stores: IPiniaStoreEntry[] = await getPiniaStores(page)
         const userStore = stores.find((store) => store.id === 'user')
@@ -63,7 +74,7 @@ test.describe('Pinia Tracker Correctness', () => {
 
     test('captures component and composable dependency edges', async () => {
         await page.click('[data-testid="pinia-add-item"]')
-        await page.waitForTimeout(150)
+        await waitForAddedCartItem(page)
 
         const stores: IPiniaStoreEntry[] = await getPiniaStores(page)
         const cartStore = stores.find((store) => store.id === 'cart')
@@ -78,7 +89,7 @@ test.describe('Pinia Tracker Correctness', () => {
 
     test('records hydration attribution timeline for store initialization', async () => {
         await page.click('[data-testid="pinia-add-item"]')
-        await page.waitForTimeout(200)
+        await waitForAddedCartItem(page)
 
         const stores: IPiniaStoreEntry[] = await getPiniaStores(page)
         const cartStore = stores.find((store) => store.id === 'cart')

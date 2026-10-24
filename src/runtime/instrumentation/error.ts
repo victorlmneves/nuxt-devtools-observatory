@@ -102,9 +102,9 @@ export function recordErrorSpan(source: 'vue' | 'app' | 'navigation', error: unk
     const traceId = getCurrentTraceId()
     const trace = traceId ? traceStore.getTrace(traceId) : undefined
 
-    if (trace && trace.status === 'active') {
+    if (trace?.status === 'active') {
         trace.status = 'error'
-        trace.metadata = { ...(trace.metadata ?? {}), hasError: true, errorSource: source }
+        trace.metadata = { ...trace.metadata, hasError: true, errorSource: source }
     }
 
     return span.span

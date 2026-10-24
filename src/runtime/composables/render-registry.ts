@@ -46,6 +46,35 @@ export interface IRenderEntry {
     route: string
 }
 
+function isInternalInstance(instance: ComponentPublicInstance): boolean {
+    const file = (instance.$.type as { __file?: string }).__file
+
+    return !file || file.includes('node_modules')
+}
+
+function nearestTrackedAncestorUid(instance: ComponentPublicInstance): number | undefined {
+    let cursor = instance.$parent
+
+    while (cursor) {
+        if (!isInternalInstance(cursor)) {
+            return cursor.$.uid
+        }
+
+        cursor = cursor.$parent
+    }
+
+    return undefined
+}
+
+function emit(event: string, data: unknown) {
+    if (!import.meta.client) {
+        return
+    }
+
+    const channel = (window as IDevtoolsWindow).__nuxt_devtools__?.channel
+    channel?.send(event, data)
+}
+
 /**
  * Sets up a render registry for tracking render-related metrics (e.g. rerenders, render time, etc.)
  * The registry is exposed over the WebSocket channel, and can be accessed from the browser's devtools.
@@ -73,26 +102,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function setRoute(path: string) {
         currentRoute = path
-    }
-
-    function isInternalInstance(instance: ComponentPublicInstance): boolean {
-        const file = (instance.$.type as { __file?: string }).__file
-
-        return !file || file.includes('node_modules')
-    }
-
-    function nearestTrackedAncestorUid(instance: ComponentPublicInstance): number | undefined {
-        let cursor = instance.$parent
-
-        while (cursor) {
-            if (!isInternalInstance(cursor)) {
-                return cursor.$.uid
-            }
-
-            cursor = cursor.$parent
-        }
-
-        return undefined
     }
 
     function ensureEntry(instance: ComponentPublicInstance) {
@@ -319,15 +328,6 @@ export function setupRenderRegistry(nuxtApp: { vueApp: import('vue').App }, opti
 
     function snapshot(): IRenderEntry[] {
         return getAll()
-    }
-
-    function emit(event: string, data: unknown) {
-        if (!import.meta.client) {
-            return
-        }
-
-        const channel = (window as IDevtoolsWindow).__nuxt_devtools__?.channel
-        channel?.send(event, data)
     }
 
     return { getAll, getSnapshot, snapshot, reset, setRoute }

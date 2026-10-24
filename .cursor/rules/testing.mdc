@@ -18,3 +18,28 @@ alwaysApply: false
 - Registries must be asserted through `getSnapshot()`, not private maps.
 - Verification specs talk to the playground via `tests/verification/helpers/observatory-bridge.ts` and types in `tests/verification/types/observatory.types.ts`.
 - Do not add Playwright coverage for a change that a unit test can prove.
+- Wait for an observable condition, such as `expect(locator).toBeVisible()` or `expect.poll(...)`. Do not use `waitForTimeout`.
+- Assert a collection size with `expect(items).toHaveLength(n)`. Do not use `expect(items.length).toBe(n)`.
+- When three or more tests differ only by inputs and the expected result, write one `it.each`. Keep a separate test when the assertion or the setup is different.
+
+```ts
+// ❌ BAD
+it('returns undefined for node_modules paths', () => {
+    expect(transform(`provide('k', v)`, '/project/node_modules/lib/index.ts')).toBeUndefined()
+})
+it('skips its own runtime file', () => {
+    expect(transform(`provide('k', v)`, '/project/src/runtime/registry.ts')).toBeUndefined()
+})
+it('returns undefined for non-ts/vue extensions', () => {
+    expect(transform(`provide('k', v)`, '/project/src/page.html')).toBeUndefined()
+})
+
+// ✅ GOOD
+it.each([
+    { file: '/project/node_modules/lib/index.ts', label: 'node_modules paths' },
+    { file: '/project/src/runtime/registry.ts', label: 'its own runtime file' },
+    { file: '/project/src/page.html', label: 'non-ts/vue extensions' },
+])('returns undefined for $label', ({ file }) => {
+    expect(transform(`provide('k', v)`, file)).toBeUndefined()
+})
+```
