@@ -271,7 +271,7 @@ export function createTrackedTransition(registry: ReturnType<typeof setupTransit
             })
 
             return () => {
-                const transitionName = String(attrs.name ?? 'default')
+                const transitionName = typeof attrs.name === 'string' ? attrs.name : 'default'
                 const isAppear = Boolean(attrs.appear)
                 const mode = typeof attrs.mode === 'string' ? attrs.mode : undefined
 

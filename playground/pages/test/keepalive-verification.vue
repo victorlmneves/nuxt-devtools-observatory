@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* eslint-disable vue/one-component-per-file -- playground page defines the panes it renders */
 import { defineAsyncComponent, defineComponent, h, onMounted, ref, shallowRef } from 'vue'
 
 const tab = ref<'a' | 'b' | 'c'>('a')
@@ -7,19 +8,28 @@ const fallbackSeen = ref(0)
 const resolveSeen = ref(0)
 const suspenseReady = ref(false)
 
+const SLOW_ASYNC_DELAY_MS = 600
+
+function renderSlowAsyncPanel() {
+    return h('div', { 'data-testid': 'suspense-ready' }, 'Async panel resolved')
+}
+
+const SlowAsyncPanel = defineComponent({
+    name: 'SlowAsyncPanel',
+    setup: renderSlowAsyncPanel,
+})
+
+function loadSlowAsyncPanel() {
+    return new Promise<{ default: typeof SlowAsyncPanel }>((resolve) => {
+        setTimeout(() => {
+            resolve({ default: SlowAsyncPanel })
+        }, SLOW_ASYNC_DELAY_MS)
+    })
+}
+
 function createSlowAsync() {
     return defineAsyncComponent({
-        loader: () =>
-            new Promise<{ default: ReturnType<typeof defineComponent> }>((resolve) => {
-                setTimeout(() => {
-                    resolve({
-                        default: defineComponent({
-                            name: 'SlowAsyncPanel',
-                            setup: () => () => h('div', { 'data-testid': 'suspense-ready' }, 'Async panel resolved'),
-                        }),
-                    })
-                }, 600)
-            }),
+        loader: loadSlowAsyncPanel,
     })
 }
 

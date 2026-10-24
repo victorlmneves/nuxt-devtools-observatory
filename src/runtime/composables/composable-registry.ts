@@ -119,7 +119,7 @@ function safeValue(val: unknown): unknown {
         try {
             return structuredClone(toRaw(val))
         } catch {
-            return String(val)
+            return '[unserializable]'
         }
     }
 

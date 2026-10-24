@@ -954,7 +954,10 @@ function handleCrossTraceRowClick(componentKey: string) {
     color: var(--text-secondary);
     cursor: pointer;
     font-size: 14px;
-    transition: all 0.2s;
+    transition:
+        background 0.2s,
+        border-color 0.2s,
+        color 0.2s;
     border-radius: 3px;
 }
 
@@ -977,7 +980,9 @@ function handleCrossTraceRowClick(componentKey: string) {
     cursor: pointer;
     font-size: 11px;
     border-radius: 3px;
-    transition: all 0.12s;
+    transition:
+        background 0.12s,
+        color 0.12s;
     font-family: var(--mono);
 }
 
@@ -999,7 +1004,7 @@ function handleCrossTraceRowClick(componentKey: string) {
     cursor: pointer;
     font-size: 11px;
     border-radius: 3px;
-    transition: all 0.12s;
+    transition: opacity 0.12s;
     font-family: var(--mono);
 }
 
