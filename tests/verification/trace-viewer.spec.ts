@@ -1,6 +1,29 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { TSpanType } from './types/observatory.types'
+import { getTestBridge, waitForBridge } from './helpers/observatory-bridge'
+import type { IObservatoryTestAPI, ITraceEntry, TSpanType } from './types/observatory.types'
+
+const TRACE_ROUTE_PATHS = ['/', '/route-1', '/route-2', '/route-3', '/route-4']
+
+function traceRoutePattern(path: string): RegExp {
+    return path === '/' ? /\/$/ : new RegExp(`${path}$`)
+}
+
+async function waitForFetchSpans(readTraces: () => Promise<ITraceEntry[]>, count: number): Promise<void> {
+    await expect.poll(async () => {
+        const traces = await readTraces()
+
+        return traces.flatMap((trace) => trace.spans).filter((span) => span.type === 'fetch').length
+    }).toBeGreaterThanOrEqual(count)
+}
+
+async function waitForSpanTypes(readTraces: () => Promise<ITraceEntry[]>, types: TSpanType[]): Promise<void> {
+    await expect.poll(async () => {
+        const traces = await readTraces()
+        const found = new Set(traces.flatMap((trace) => trace.spans).map((span) => span.type))
+
+        return types.every((type) => found.has(type))
+    }).toBe(true)
+}
 
 test.describe('Trace Viewer Correctness', () => {
     let api: IObservatoryTestAPI
@@ -10,7 +33,7 @@ test.describe('Trace Viewer Correctness', () => {
         page = testPage
         await page.goto('http://localhost:3000/test/trace-verification')
         await waitForBridge()
-        api = await getTestBridge()
+        api = getTestBridge()
         await api.clearAllData()
     })
 
@@ -72,7 +95,7 @@ test.describe('Trace Viewer Correctness', () => {
 
     test('should maintain correct parent-child relationships in async flows', async () => {
         await page.click('[data-testid="nested-async-operations"]')
-        await page.waitForTimeout(500)
+        await waitForFetchSpans(() => api.getTraces(), 2)
 
         const traces = await api.getTraces()
         const firstTrace = traces[0]
@@ -104,8 +127,10 @@ test.describe('Trace Viewer Correctness', () => {
         const routeCount = 5
 
         for (let i = 0; i < routeCount; i++) {
+            const path = TRACE_ROUTE_PATHS[i] ?? '/'
             await page.click(`[data-testid="nav-to-route-${i}"]`)
-            await page.waitForTimeout(50)
+            await expect(page).toHaveURL(traceRoutePattern(path))
+            await expect.poll(async () => (await api.getTraces()).length).toBe(i + 1)
         }
 
         const traces = await api.getTraces()
@@ -129,7 +154,7 @@ test.describe('Trace Viewer Correctness', () => {
         const expectedTypes: TSpanType[] = ['navigation', 'component', 'render', 'fetch', 'server', 'composable', 'transition']
 
         await page.click('[data-testid="trigger-all-spans"]')
-        await page.waitForTimeout(500)
+        await waitForSpanTypes(() => api.getTraces(), expectedTypes)
 
         const traces = await api.getTraces()
         const allSpans = traces.flatMap((trace) => trace.spans)
@@ -144,8 +169,11 @@ test.describe('Trace Viewer Correctness', () => {
         const routeCount = 20
 
         for (let i = 0; i < routeCount; i++) {
-            await page.click(`[data-testid="nav-to-route-${i % 5}"]`)
-            await page.waitForTimeout(20)
+            const routeIndex = i % TRACE_ROUTE_PATHS.length
+            const path = TRACE_ROUTE_PATHS[routeIndex] ?? '/'
+            await page.click(`[data-testid="nav-to-route-${routeIndex}"]`)
+            await expect(page).toHaveURL(traceRoutePattern(path))
+            await expect.poll(async () => (await api.getTraces()).length).toBeGreaterThanOrEqual(i + 1)
         }
 
         const startedAt = Date.now()

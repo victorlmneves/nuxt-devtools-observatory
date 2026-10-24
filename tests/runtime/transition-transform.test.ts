@@ -25,16 +25,15 @@ describe('transitionTrackerPlugin', () => {
     })
 
     describe('resolveId', () => {
-        it('returns undefined for non-vue imports', async () => {
+        it.each([
+            { id: 'lodash', importer: '/app/src/Page.vue', label: 'non-vue imports' },
+            { id: 'vue', importer: undefined, label: 'an undefined importer' },
+            { id: 'vue', importer: '/app/node_modules/some-lib/index.js', label: 'node_modules importers' },
+            { id: 'vue', importer: '/app/src/runtime/plugin.ts', label: 'src/runtime importers' },
+            { id: 'vue', importer: '/app/dist/runtime/composables/fetch-registry.js', label: 'dist/runtime importers' },
+        ])('returns undefined for $label', async ({ id, importer }) => {
             const { resolveId } = makePlugin()
-            const result = await resolveId('lodash', '/app/src/Page.vue')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('returns undefined when importer is undefined', async () => {
-            const { resolveId } = makePlugin()
-            const result = await resolveId('vue', undefined)
+            const result = await resolveId(id, importer)
 
             expect(result).toBeUndefined()
         })
@@ -52,27 +51,6 @@ describe('transitionTrackerPlugin', () => {
 
             // Should resolve to real vue, not the virtual ID
             expect(result).not.toBe('\0obs:vue-proxy')
-        })
-
-        it('skips node_modules importers', async () => {
-            const { resolveId } = makePlugin()
-            const result = await resolveId('vue', '/app/node_modules/some-lib/index.js')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('skips src/runtime importers to avoid double-wrapping', async () => {
-            const { resolveId } = makePlugin()
-            const result = await resolveId('vue', '/app/src/runtime/plugin.ts')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('skips dist/runtime importers', async () => {
-            const { resolveId } = makePlugin()
-            const result = await resolveId('vue', '/app/dist/runtime/composables/fetch-registry.js')
-
-            expect(result).toBeUndefined()
         })
     })
 

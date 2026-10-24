@@ -1,6 +1,22 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { ITransitionEntry, TTransitionPhase } from './types/observatory.types'
+import { getTestBridge, waitForBridge } from './helpers/observatory-bridge'
+import type { IObservatoryTestAPI, ITransitionEntry, TTransitionPhase } from './types/observatory.types'
+
+async function waitForTransitionPhase(readEntries: () => Promise<ITransitionEntry[]>, phase: TTransitionPhase): Promise<void> {
+    await expect.poll(async () => {
+        const entries = await readEntries()
+
+        return entries.some((entry) => entry.phase === phase)
+    }).toBe(true)
+}
+
+async function waitForCancelledTransition(readEntries: () => Promise<ITransitionEntry[]>): Promise<void> {
+    await expect.poll(async () => {
+        const entries = await readEntries()
+
+        return entries.some((entry) => entry.cancelled)
+    }).toBe(true)
+}
 
 test.describe('Transition Tracker Correctness', () => {
     let api: IObservatoryTestAPI
@@ -10,7 +26,7 @@ test.describe('Transition Tracker Correctness', () => {
         page = testPage
         await page.goto('http://localhost:3000/test/transition-verification')
         await waitForBridge()
-        api = await getTestBridge()
+        api = getTestBridge()
         await api.clearAllData()
     })
 
@@ -19,11 +35,13 @@ test.describe('Transition Tracker Correctness', () => {
 
         // Trigger enter transition
         await page.click('[data-testid="show-transition"]')
-        await page.waitForTimeout(300)
+        await expect(page.getByTestId('transition-visible')).toBeVisible()
+        await waitForTransitionPhase(() => api.getTransitionEntries(), 'entered')
 
         // Trigger leave transition
         await page.click('[data-testid="hide-transition"]')
-        await page.waitForTimeout(300)
+        await expect(page.getByTestId('transition-visible')).toBeHidden()
+        await waitForTransitionPhase(() => api.getTransitionEntries(), 'left')
 
         const transitions: ITransitionEntry[] = await api.getTransitionEntries()
         const phasesCaptured: TTransitionPhase[] = transitions.map((t: ITransitionEntry) => t.phase)
@@ -38,7 +56,7 @@ test.describe('Transition Tracker Correctness', () => {
 
         for (let i = 0; i < toggleCount; i++) {
             await page.click('[data-testid="toggle-transition-rapid"]')
-            await page.waitForTimeout(50)
+            await expect(page.getByTestId('toggle-transition-rapid')).toContainText(`Cancellations: ${(i + 1) * 5}`)
         }
 
         const transitions: ITransitionEntry[] = await api.getTransitionEntries()
@@ -72,7 +90,8 @@ test.describe('Transition Tracker Correctness', () => {
     test('should handle transitions without CSS classes gracefully', async () => {
         // This should not throw errors
         await page.click('[data-testid="show-broken-transition"]')
-        await page.waitForTimeout(300)
+        await expect(page.getByRole('heading', { name: 'Broken Transition' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Broken Transition' })).toBeHidden()
 
         const transitions: ITransitionEntry[] = await api.getTransitionEntries()
         const brokenTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.name === 'BrokenTransition')
@@ -87,7 +106,8 @@ test.describe('Transition Tracker Correctness', () => {
 
     test('should record parent component for each transition', async () => {
         await page.click('[data-testid="show-nested-transition"]')
-        await page.waitForTimeout(300)
+        await expect(page.getByRole('heading', { name: 'Parent Transition' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Parent Transition' })).toBeHidden()
 
         const transitions: ITransitionEntry[] = await api.getTransitionEntries()
         const nestedTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.name === 'NestedFade')
@@ -109,9 +129,9 @@ test.describe('Transition Tracker Correctness', () => {
         const transitionCount: number = 20
         for (let i = 0; i < transitionCount; i++) {
             await page.click('[data-testid="show-transition"]')
-            await page.waitForTimeout(50)
+            await expect(page.getByTestId('transition-visible')).toBeVisible()
             await page.click('[data-testid="hide-transition"]')
-            await page.waitForTimeout(50)
+            await expect(page.getByTestId('transition-visible')).toBeHidden()
         }
 
         const transitions: ITransitionEntry[] = await api.getTransitionEntries()
@@ -121,9 +141,9 @@ test.describe('Transition Tracker Correctness', () => {
     test('should mark cancelled transitions with cancelled flag', async () => {
         // Rapid toggle to cause cancellation
         await page.click('[data-testid="show-transition"]')
-        await page.waitForTimeout(50) // Halfway through transition
+        await expect(page.getByTestId('transition-visible')).toBeVisible()
         await page.click('[data-testid="hide-transition"]')
-        await page.waitForTimeout(100)
+        await waitForCancelledTransition(() => api.getTransitionEntries())
 
         const transitions: ITransitionEntry[] = await api.getTransitionEntries()
         const cancelledTransition: ITransitionEntry | undefined = transitions.find((t: ITransitionEntry) => t.cancelled === true)

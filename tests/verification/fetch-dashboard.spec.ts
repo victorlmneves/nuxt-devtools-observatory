@@ -1,6 +1,14 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { IFetchEntry } from './types/observatory.types'
+import { getTestBridge, waitForBridge } from './helpers/observatory-bridge'
+import type { IFetchEntry, IObservatoryTestAPI } from './types/observatory.types'
+
+async function waitForSettledFetches(readEntries: () => Promise<IFetchEntry[]>, count: number): Promise<void> {
+    await expect.poll(async () => {
+        const entries = await readEntries()
+
+        return entries.filter((entry) => entry.status !== 'pending').length
+    }).toBeGreaterThanOrEqual(count)
+}
 
 test.describe('Fetch Dashboard Correctness', () => {
     let api: IObservatoryTestAPI
@@ -10,13 +18,13 @@ test.describe('Fetch Dashboard Correctness', () => {
         page = testPage
         await page.goto('http://localhost:3000/test/fetch-verification')
         await waitForBridge()
-        api = await getTestBridge()
+        api = getTestBridge()
         await api.clearAllData()
     })
 
     test('should capture useFetch calls with correct metadata', async () => {
         await page.click('[data-testid="trigger-fetch"]')
-        await page.waitForTimeout(500)
+        await expect(page.getByTestId('fetch-complete')).toContainText('SUCCESS')
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         const testFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/test'))
@@ -36,7 +44,7 @@ test.describe('Fetch Dashboard Correctness', () => {
         const startTime: number = await page.evaluate(() => performance.now())
 
         await page.click('[data-testid="trigger-slow-fetch"]')
-        await page.waitForSelector('[data-testid="fetch-complete"]')
+        await expect(page.getByTestId('fetch-complete')).toContainText('Status: SUCCESS')
 
         const actualDuration: number = await page.evaluate((start: number) => {
             return performance.now() - start
@@ -56,16 +64,16 @@ test.describe('Fetch Dashboard Correctness', () => {
     test('should track cache keys for cached fetches', async () => {
         // First fetch - should populate cache
         await page.click('[data-testid="trigger-cached-fetch"]')
-        await page.waitForTimeout(200)
+        await waitForSettledFetches(() => api.getFetchEntries(), 1)
 
         // Second fetch - should use cache
         await page.click('[data-testid="trigger-cached-fetch"]')
-        await page.waitForTimeout(200)
+        await waitForSettledFetches(() => api.getFetchEntries(), 2)
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         const cachedFetches: IFetchEntry[] = fetchEntries.filter((entry: IFetchEntry) => entry.url.includes('/api/cached'))
 
-        expect(cachedFetches.length).toBe(2)
+        expect(cachedFetches).toHaveLength(2)
 
         const firstFetch: IFetchEntry | undefined = cachedFetches[0]
         const secondFetch: IFetchEntry | undefined = cachedFetches[1]
@@ -92,7 +100,7 @@ test.describe('Fetch Dashboard Correctness', () => {
         })
 
         await page.click('[data-testid="trigger-failed-fetch"]')
-        await page.waitForTimeout(500)
+        await expect(page.getByTestId('fetch-complete')).toContainText('Status: ERROR')
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         const failedFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/fail'))
@@ -108,11 +116,11 @@ test.describe('Fetch Dashboard Correctness', () => {
     test('should track SSR vs CSR fetch origin', async () => {
         // Trigger SSR fetch (requires page reload with SSR)
         await page.reload()
-        await page.waitForTimeout(500)
+        await expect(page.getByTestId('trigger-fetch')).toBeVisible()
 
         // Trigger CSR fetch
         await page.click('[data-testid="trigger-fetch"]')
-        await page.waitForTimeout(500)
+        await expect(page.getByTestId('fetch-complete')).toContainText('Status: SUCCESS')
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         const ssrFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.origin === 'ssr')
@@ -130,9 +138,9 @@ test.describe('Fetch Dashboard Correctness', () => {
         await api.clearAllData()
 
         const fetchCount: number = 10
-        for (let i = 0; i < fetchCount; i++) {
+        for (let i = 1; i <= fetchCount; i++) {
             await page.click(`[data-testid="trigger-fetch-${i}"]`)
-            await page.waitForTimeout(100)
+            await expect(page.getByTestId('fetch-complete')).toContainText(`Fetch ${i} completed`)
         }
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
@@ -142,7 +150,7 @@ test.describe('Fetch Dashboard Correctness', () => {
     test('should display waterfall timing correctly', async () => {
         // Trigger multiple fetches in sequence
         await page.click('[data-testid="trigger-parallel-fetches"]')
-        await page.waitForTimeout(1000)
+        await expect(page.getByTestId('fetch-complete')).toContainText('5 parallel fetches completed')
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         expect(fetchEntries.length).toBeGreaterThanOrEqual(3)
@@ -168,7 +176,7 @@ test.describe('Fetch Dashboard Correctness', () => {
         await api.clearAllData()
 
         await page.click('[data-testid="trigger-large-payload-fetch"]')
-        await page.waitForTimeout(500)
+        await expect(page.getByTestId('fetch-complete')).toContainText('Large payload fetch completed')
 
         const fetchEntries: IFetchEntry[] = await api.getFetchEntries()
         const largeFetch: IFetchEntry | undefined = fetchEntries.find((entry: IFetchEntry) => entry.url.includes('/api/large'))

@@ -151,8 +151,13 @@ describe('fetchInstrumentPlugin', () => {
     })
 
     describe('file filtering', () => {
-        it('returns undefined for node_modules paths', () => {
-            const result = transform(`useFetch('/api/test')`, '/project/node_modules/some-lib/index.ts')
+        it.each([
+            { source: `useFetch('/api/test')`, file: '/project/node_modules/some-lib/index.ts', label: 'node_modules paths' },
+            { source: `useFetch('/api')`, file: '/project/src/runtime/fetch-registry.ts', label: 'its fetch registry runtime file' },
+            { source: `useFetch('/api')`, file: '/project/src/runtime/composable-registry.ts', label: 'its composable registry runtime file' },
+            { source: `useFetch('/api')`, file: '/project/src/page.html', label: 'non-ts/vue/js file extensions' },
+        ])('returns undefined for $label', ({ source, file }) => {
+            const result = transform(source, file)
 
             expect(result).toBeUndefined()
         })
@@ -161,23 +166,6 @@ describe('fetchInstrumentPlugin', () => {
             const result = transform(`const x = doSomething()`)
 
             expect(result).toBeFalsy()
-        })
-
-        it('skips own runtime file: fetch-registry', () => {
-            const result = transform(`useFetch('/api')`, '/project/src/runtime/fetch-registry.ts')
-            expect(result).toBeUndefined()
-        })
-
-        it('skips own runtime file: composable-registry', () => {
-            const result = transform(`useFetch('/api')`, '/project/src/runtime/composable-registry.ts')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('returns undefined for non-ts/vue/js file extensions', () => {
-            const result = transform(`useFetch('/api')`, '/project/src/page.html')
-
-            expect(result).toBeUndefined()
         })
     })
 

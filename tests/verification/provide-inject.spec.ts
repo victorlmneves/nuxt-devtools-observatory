@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
-import type { IGraphData, IProvideEntry, IInjectEntry } from './types/observatory.types'
+import { getTestBridge, waitForBridge } from './helpers/observatory-bridge'
+import type { IGraphData, IObservatoryTestAPI, IProvideEntry, IInjectEntry } from './types/observatory.types'
 
 test.describe('Provide/Inject Graph Correctness', () => {
     let api: IObservatoryTestAPI
@@ -10,7 +10,7 @@ test.describe('Provide/Inject Graph Correctness', () => {
         page = testPage
         await page.goto('http://localhost:3000/test/provide-inject-verification')
         await waitForBridge()
-        api = await getTestBridge()
+        api = getTestBridge()
         await api.clearAllData()
     })
 
@@ -96,7 +96,14 @@ test.describe('Provide/Inject Graph Correctness', () => {
 
         // Update the value in component
         await page.click('[data-testid="update-user-profile"]')
-        await page.waitForTimeout(100)
+        await expect(page.getByText('Updated Name')).toBeVisible()
+        await expect.poll(async () => {
+            const graph = await api.getProvideInjectGraph()
+            const provider = graph.provides.find((entry) => entry.key === 'userProfile')
+            const value = provider?.value as { name?: unknown } | undefined
+
+            return value?.name
+        }).toBe('Updated Name')
 
         // Verify graph updates with new value
         const updatedGraph: IGraphData = await api.getProvideInjectGraph()

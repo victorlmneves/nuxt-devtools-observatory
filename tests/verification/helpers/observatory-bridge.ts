@@ -1,24 +1,14 @@
-import type {
-    IObservatoryTestAPI,
-    ITestWindow,
-    ITraceEntry,
-    IHeatmapData,
-    IComposableEntry,
-    IFetchEntry,
-    IGraphData,
-    ITransitionEntry,
-    IInternalCounts,
-} from '../types/observatory.types'
+import type { IObservatoryTestAPI, ITestWindow } from '../types/observatory.types'
 
 function getSafeWindow(): ITestWindow {
     if (typeof window === 'undefined') {
-        throw new Error('Window is not defined - this code must run in browser environment')
+        throw new TypeError('Window is not defined - this code must run in browser environment')
     }
 
     return window as ITestWindow
 }
 
-export async function getTestBridge(): Promise<IObservatoryTestAPI> {
+export function getTestBridge(): IObservatoryTestAPI {
     const win = getSafeWindow()
 
     if (!win.__OBSERVATORY_TEST_BRIDGE) {
@@ -28,20 +18,31 @@ export async function getTestBridge(): Promise<IObservatoryTestAPI> {
     return win.__OBSERVATORY_TEST_BRIDGE
 }
 
-export async function waitForBridge(timeoutMs: number = 5000): Promise<void> {
-    const startTime = Date.now()
+const BRIDGE_POLL_INTERVAL_MS = 100
 
-    while (Date.now() - startTime < timeoutMs) {
-        const win = getSafeWindow()
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms)
+    })
+}
 
-        if (win.__OBSERVATORY_TEST_BRIDGE) {
-            return
-        }
-
-        await new Promise<void>((resolve) => setTimeout(resolve, 100))
+async function pollForBridge(deadline: number, timeoutMs: number): Promise<void> {
+    if (Date.now() >= deadline) {
+        throw new Error(`Observatory test bridge not initialized within ${timeoutMs}ms`)
     }
 
-    throw new Error(`Observatory test bridge not initialized within ${timeoutMs}ms`)
+    const win = getSafeWindow()
+
+    if (win.__OBSERVATORY_TEST_BRIDGE) {
+        return
+    }
+
+    await delay(BRIDGE_POLL_INTERVAL_MS)
+    await pollForBridge(deadline, timeoutMs)
+}
+
+export function waitForBridge(timeoutMs: number = 5000): Promise<void> {
+    return pollForBridge(Date.now() + timeoutMs, timeoutMs)
 }
 
 type TWritableTestWindowKey = '__lastMountStart' | '__heavyRenderStart' | '__editableComponentCounter'
@@ -56,5 +57,3 @@ export function getTestMetadata(key: TWritableTestWindowKey): number | undefined
 
     return win[key]
 }
-
-export type { IObservatoryTestAPI, ITraceEntry, IHeatmapData, IComposableEntry, IFetchEntry, IGraphData, ITransitionEntry, IInternalCounts }

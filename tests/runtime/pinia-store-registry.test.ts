@@ -188,7 +188,7 @@ describe('setupPiniaStoreRegistry', () => {
 
         const entry = registry.getAll()[0]
 
-        expect(entry.timeline.length).toBe(3)
+        expect(entry.timeline).toHaveLength(3)
     })
 
     it('edits nested state path through editState', () => {

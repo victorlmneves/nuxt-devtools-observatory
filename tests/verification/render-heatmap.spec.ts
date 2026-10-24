@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
-import { getTestBridge, waitForBridge, type IObservatoryTestAPI } from './helpers/observatory-bridge'
+import { getTestBridge, waitForBridge } from './helpers/observatory-bridge'
+import type { IObservatoryTestAPI } from './types/observatory.types'
 
 test.describe('Render Heatmap Correctness', () => {
     let api: IObservatoryTestAPI
@@ -9,7 +10,7 @@ test.describe('Render Heatmap Correctness', () => {
         page = testPage
         await page.goto('http://localhost:3000/test/heatmap-verification')
         await waitForBridge()
-        api = await getTestBridge()
+        api = getTestBridge()
     })
 
     test('should not increment mount count for persistent components on navigation', async () => {
@@ -30,9 +31,9 @@ test.describe('Render Heatmap Correctness', () => {
         const navigationCount = 10
         for (let i = 0; i < navigationCount; i++) {
             await page.click('[data-testid="nav-to-other-route"]')
-            await page.waitForTimeout(100)
+            await expect(page).toHaveURL(/\/settings$/)
             await page.goBack()
-            await page.waitForTimeout(100)
+            await expect(page).toHaveURL(/heatmap-verification/)
         }
 
         const finalCount = await getMountCount()

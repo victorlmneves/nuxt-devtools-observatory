@@ -164,20 +164,12 @@ describe('composableTrackerPlugin', () => {
     })
 
     describe('file filtering', () => {
-        it('returns undefined for node_modules paths', () => {
-            const result = transform(`useCounter()`, '/project/node_modules/lib/index.ts')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('skips own runtime file: composable-registry', () => {
-            const result = transform(`useCounter()`, '/project/src/runtime/composable-registry.ts')
-
-            expect(result).toBeUndefined()
-        })
-
-        it('returns undefined for non-ts/vue file extensions', () => {
-            const result = transform(`useCounter()`, '/project/src/page.html')
+        it.each([
+            { file: '/project/node_modules/lib/index.ts', label: 'node_modules paths' },
+            { file: '/project/src/runtime/composable-registry.ts', label: 'its own runtime file' },
+            { file: '/project/src/page.html', label: 'non-ts/vue file extensions' },
+        ])('returns undefined for $label', ({ file }) => {
+            const result = transform(`useCounter()`, file)
 
             expect(result).toBeUndefined()
         })
