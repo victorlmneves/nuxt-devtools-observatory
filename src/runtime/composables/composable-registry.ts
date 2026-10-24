@@ -1,4 +1,4 @@
-import { isRef, isReactive, isReadonly, unref, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
+import { isRef, isReactive, isReadonly, unref, toRaw, computed, watchEffect, getCurrentInstance, onUnmounted } from 'vue'
 import { getSsrRequestContext } from '../nitro/ssr-request-context'
 import { addSsrPhaseSpan } from '../nitro/ssr-trace-store'
 import { bumpSnapshotRevision } from '../snapshot-revision'
@@ -106,6 +106,36 @@ export function __recordSsrComposableSpan(
     })
 }
 
+function safeValue(val: unknown): unknown {
+    if (val === undefined || val === null) {
+        return val
+    }
+
+    if (typeof val === 'function') {
+        return undefined
+    }
+
+    if (typeof val === 'object') {
+        try {
+            return structuredClone(toRaw(val))
+        } catch {
+            return String(val)
+        }
+    }
+
+    return val
+}
+
+function emit(event: string, data: unknown) {
+    if (!import.meta.client) {
+        return
+    }
+
+    const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
+        .__nuxt_devtools__?.channel
+    channel?.send(event, data)
+}
+
 /**
  * Registers a new composable entry, updates an existing one, or retrieves all entries.
  * @remarks The returned object exposes the following methods:
@@ -200,7 +230,7 @@ export function setupComposableRegistry() {
         // Return cached result if available
         let nameCache = sharedKeysCache.get(name)
 
-        if (nameCache && nameCache.has(id)) {
+        if (nameCache?.has(id)) {
             return nameCache.get(id)!
         }
 
@@ -431,26 +461,6 @@ export function setupComposableRegistry() {
         emit('composable:update', updated)
     }
 
-    function safeValue(val: unknown): unknown {
-        if (val === undefined || val === null) {
-            return val
-        }
-
-        if (typeof val === 'function') {
-            return undefined
-        }
-
-        if (typeof val === 'object') {
-            try {
-                return JSON.parse(JSON.stringify(val))
-            } catch {
-                return String(val)
-            }
-        }
-
-        return val
-    }
-
     function sanitize(entry: IComposableEntry): IComposableEntry {
         // Re-read live ref values on every snapshot so the devtools panel
         // reflects the current reactive state rather than setup-time values.
@@ -529,16 +539,6 @@ export function setupComposableRegistry() {
         return cachedSnapshot
     }
 
-    function emit(event: string, data: unknown) {
-        if (!import.meta.client) {
-            return
-        }
-
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
-            .__nuxt_devtools__?.channel
-        channel?.send(event, data)
-    }
-
     function clear() {
         // Cancel any pending rAF so it doesn't fire after clearing and push stale/empty state
         if (_pendingFrame !== null) {
@@ -566,10 +566,12 @@ export function setupComposableRegistry() {
         }
 
         // Only clear non-layout composables, preserving layout-level ones
-        const layoutIds = [...entries.entries()].filter(([, entry]) => entry.isLayoutComposable).map(([id]) => id)
+        const layoutIds = new Set(
+            [...entries.entries()].filter(([, entry]) => entry.isLayoutComposable).map(([id]) => id),
+        )
 
         for (const [id] of entries.entries()) {
-            if (!layoutIds.includes(id)) {
+            if (!layoutIds.has(id)) {
                 const stop = liveRefWatchers.get(id)
 
                 if (stop) {
@@ -776,13 +778,13 @@ export function __trackComposable<T>(name: string, callFn: () => T, meta: { file
         callerComponentFile = inst.parent.type.__file
     } else if (inst?.__vueParentComponent?.fileName) {
         callerComponentFile = inst.__vueParentComponent.fileName
-    } else if (inst?.type?.name && inst?.type?.name.includes('default')) {
+    } else if (inst?.type?.name?.includes('default')) {
         // Layouts in Nuxt are typically named 'default'
         callerComponentFile = `layouts/${inst.type.name}.vue`
     }
 
     // Normalize path separator for cross-platform matching
-    const normalizedFile = callerComponentFile?.replace(/\\/g, '/') ?? ''
+    const normalizedFile = callerComponentFile?.replaceAll('\\', '/') ?? ''
     const isLayoutComponent = normalizedFile.includes('/layouts/')
 
     const entry: IComposableEntry = {

@@ -67,7 +67,7 @@ export function mergeSsrTraceRecord(record: IMergeableSsrRecord, options?: { sto
             startTime: traceStartTime + span.startTime,
             endTime: span.endTime !== undefined ? traceStartTime + span.endTime : undefined,
             status: span.status,
-            metadata: { ...(span.metadata ?? {}), origin: 'ssr' },
+            metadata: { ...span.metadata, origin: 'ssr' },
         })
         knownSpanIds.add(span.id)
     }

@@ -291,7 +291,7 @@ export function addSsrPhaseSpan(
         status: opts.error ? 'error' : 'ok',
         metadata: {
             origin: 'ssr',
-            ...(opts.metadata ?? {}),
+            ...opts.metadata,
         },
     })
 }

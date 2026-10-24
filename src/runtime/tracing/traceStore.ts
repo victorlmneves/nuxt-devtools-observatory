@@ -107,7 +107,7 @@ export class TraceStore {
 
         if (input.metadata) {
             trace.metadata = {
-                ...(trace.metadata ?? {}),
+                ...trace.metadata,
                 ...input.metadata,
             }
         }
@@ -137,7 +137,7 @@ export class TraceStore {
 
         if (input.metadata) {
             span.metadata = {
-                ...(span.metadata ?? {}),
+                ...span.metadata,
                 ...input.metadata,
             }
         }

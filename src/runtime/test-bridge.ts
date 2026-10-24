@@ -103,7 +103,7 @@ export function injectTestBridge(): void {
             return transitionRegistry.getEntries()
         },
 
-        async getPiniaStores() {
+        getPiniaStores() {
             const observatory = (window as IObservatoryRuntimeWindow).__observatory__
             const registry = observatory?.pinia
 
@@ -114,7 +114,7 @@ export function injectTestBridge(): void {
             return registry.getAll()
         },
 
-        async getInternalCounts(): Promise<IInternalCounts> {
+        getInternalCounts(): IInternalCounts {
             const counts: IInternalCounts = {
                 componentMounts: {},
                 renderOperations: {},

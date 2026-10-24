@@ -1,5 +1,4 @@
-import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition } from 'vue'
-import type { Slots } from 'vue'
+import { h, defineComponent, getCurrentInstance, onUnmounted, Transition as VueTransition, type Slots } from 'vue'
 import { bumpSnapshotRevision } from '../snapshot-revision'
 import { startSpan } from '../tracing/tracing'
 import type { ISpan } from '../tracing/trace'
@@ -23,6 +22,16 @@ export interface ITransitionEntry {
 // Allow configuration via .env or Nuxt runtime config
 const MAX_TRANSITIONS =
     typeof process !== 'undefined' && process.env.OBSERVATORY_MAX_TRANSITIONS ? Number(process.env.OBSERVATORY_MAX_TRANSITIONS) : 500
+
+function emit(event: string, data: unknown) {
+    if (!import.meta.client) {
+        return
+    }
+
+    const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
+        .__nuxt_devtools__?.channel
+    channel?.send(event, data)
+}
 
 export function setupTransitionRegistry() {
     const activeSpans = new Map<string, ReturnType<typeof startSpan>>()
@@ -97,7 +106,7 @@ export function setupTransitionRegistry() {
 
         if (active) {
             active.span.metadata = {
-                ...(active.span.metadata ?? {}),
+                ...active.span.metadata,
                 id: updated.id,
                 transitionName: updated.transitionName,
                 parentComponent: updated.parentComponent,
@@ -158,6 +167,9 @@ export function setupTransitionRegistry() {
             const parentComponent = typeof metadata.parentComponent === 'string' ? metadata.parentComponent : 'unknown'
             const direction: ITransitionEntry['direction'] = metadata.direction === 'leave' ? 'leave' : 'enter'
             const knownPhase = metadata.phase
+            const finishedPhase = direction === 'enter' ? 'entered' : 'left'
+            const activePhase = direction === 'enter' ? 'entering' : 'leaving'
+            const fallbackPhase = span.endTime ? finishedPhase : activePhase
             const phase: ITransitionEntry['phase'] =
                 knownPhase === 'entering' ||
                 knownPhase === 'entered' ||
@@ -167,13 +179,7 @@ export function setupTransitionRegistry() {
                 knownPhase === 'leave-cancelled' ||
                 knownPhase === 'interrupted'
                     ? knownPhase
-                    : span.endTime
-                      ? direction === 'enter'
-                          ? 'entered'
-                          : 'left'
-                      : direction === 'enter'
-                        ? 'entering'
-                        : 'leaving'
+                    : fallbackPhase
 
             return {
                 id,
@@ -220,16 +226,6 @@ export function setupTransitionRegistry() {
         dirty = false
 
         return cachedSnapshot
-    }
-
-    function emit(event: string, data: unknown) {
-        if (!import.meta.client) {
-            return
-        }
-
-        const channel = (window as Window & { __nuxt_devtools__?: { channel?: { send: (event: string, data: unknown) => void } } })
-            .__nuxt_devtools__?.channel
-        channel?.send(event, data)
     }
 
     return { register, update, getAll, getSnapshot, clear }

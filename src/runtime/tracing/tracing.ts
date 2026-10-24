@@ -36,14 +36,12 @@ export function startSpan(input: IStartSpanInput, options: IStartSpanOptions = {
 
     let trace = activeTraceId ? store.getTrace(activeTraceId) : undefined
 
-    if (!trace) {
-        trace = store.createTrace({
-            id: activeTraceId,
-            name: options.traceName ?? input.name,
-            metadata: options.traceMetadata,
-            startTime: input.startTime,
-        })
-    }
+    trace ??= store.createTrace({
+        id: activeTraceId,
+        name: options.traceName ?? input.name,
+        metadata: options.traceMetadata,
+        startTime: input.startTime,
+    })
 
     setCurrentTraceId(trace.id, options.carrier as never)
 
