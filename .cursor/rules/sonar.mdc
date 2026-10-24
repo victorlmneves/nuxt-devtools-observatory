@@ -34,7 +34,7 @@ When a fix introduces a Sonar or lint pattern that is not listed here, add a sho
 - Mark a class field `readonly` when nothing reassigns it.
 - Do not `await` inside a loop. Sequence dependent steps by returning the next promise from `.then`, or from a recursive function.
 - In an ES module entry script, use top-level `await` inside `try/catch`.
-- Do not mark a function `async` when its body has no `await`. When the signature must return a `Promise`, return `Promise.resolve(value)` from a normal function.
+- Make a function `async` when it awaits. Do not mark a function `async` when its body has no `await`. A function that only returns `new Promise`, such as a timer, stays a normal function.
 - Do not `await` a value that is not a promise.
 - Throw `TypeError` when a `typeof` check fails. Keep `Error` for other failures.
 - Use `replaceAll` when every match should be replaced. `findLast` replaces `filter(...).pop()`.

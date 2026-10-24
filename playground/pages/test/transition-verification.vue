@@ -25,19 +25,17 @@ function delay(ms: number): Promise<void> {
     })
 }
 
-function runRapidToggle(remaining: number): Promise<void> {
+async function runRapidToggle(remaining: number): Promise<void> {
     if (remaining === 0) {
-        return Promise.resolve()
+        return
     }
 
     showTransition.value = true
-
-    return delay(RAPID_TOGGLE_STEP_MS).then(() => {
-        showTransition.value = false
-        cancellationCount.value++
-
-        return delay(RAPID_TOGGLE_STEP_MS).then(() => runRapidToggle(remaining - 1))
-    })
+    await delay(RAPID_TOGGLE_STEP_MS)
+    showTransition.value = false
+    cancellationCount.value++
+    await delay(RAPID_TOGGLE_STEP_MS)
+    await runRapidToggle(remaining - 1)
 }
 
 const rapidToggle = (): Promise<void> => runRapidToggle(RAPID_TOGGLE_COUNT)
