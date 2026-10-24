@@ -7,12 +7,15 @@ alwaysApply: true
 
 SonarCloud runs on CI. Write code that already passes these checks.
 
+When a fix introduces a Sonar or lint pattern that is not listed here, add a short bullet to this file. Put test-only patterns in `testing.mdc`. Skip a pattern that is already covered or that only applies to one call site.
+
 - Keep cognitive complexity at or below 15. Extract a helper when a function nests loops, conditions, or boolean chains.
 - Define a function at module scope when it does not use variables from the enclosing function.
 - Alphabetical `sort` and `toSorted` must take a compare function that uses `String.localeCompare` (typescript:S2871). Do not call either with no comparer. Sort numbers with a numeric comparer.
 - Do not pass `unknown` or `object` values to `String()`. Narrow with `typeof value === 'string'` first.
 - Compare with `undefined` directly instead of `typeof x === 'undefined'` (typescript:S7741). Reserve `typeof` for a binding that may not exist, such as `window` during server render.
 - Use `??` when the only fallback is `null` or `undefined`.
+- Use `??=` when a missing value should be assigned before it is used. Do not check it and then assign it.
 - Import snapshot types from `src/types/snapshot.ts`. Do not re-export them from the file that uses them.
 - Do not use `Math.random()` for tokens, secrets, session ids, passwords, or nonces (typescript:S2245). Use `crypto.randomUUID()` or `crypto.getRandomValues()`. `Math.random()` is only acceptable for non-security values such as UI jitter or demo data.
 - Prefer `Number` static methods and properties over the global equivalents (typescript:S7773): `Number.parseInt`, `Number.parseFloat`, `Number.isNaN`, `Number.isFinite`, `Number.NaN`, `Number.POSITIVE_INFINITY`, and `Number.NEGATIVE_INFINITY`.
@@ -22,10 +25,34 @@ SonarCloud runs on CI. Write code that already passes these checks.
 - Do not set `aria-hidden="true"` on a focusable element (Web:S6825): links, buttons, inputs, selects, textareas, `contenteditable`, or anything with `tabindex` of 0 or more. Put `aria-hidden` on a decorative child, such as an icon, instead of the control.
 - Keep regular expressions linear (typescript:S8786). Do not nest quantifiers or overlap alternatives that can match the same text, such as `(a+)+` or `(a|aa)+`. Use one quantifier or a negated character class.
 - Use a collection's contents or do not create it (typescript:S4030). Do not build an array, set, or map that is never read. Use `forEach` or a loop for side effects, and keep the result of `map`, `filter`, `slice`, and `concat`.
+- Deep-clone with `structuredClone`. Clone `toRaw(value)` when the value may be a Vue reactive proxy.
+- Do not nest ternaries. Assign the inner choice to a const, then use that const.
+- Use a `Set` and `.has()` when a collection only answers whether a value is present. Do not build an array and call `.includes()`.
+- Do not write `...(value ?? {})` or `...(value || {})`. Object spread already ignores `null` and `undefined`.
+- Prefer optional chaining (`value?.field`) over `value && value.field`.
+- Import Node builtins with the `node:` prefix, such as `node:path` and `node:util`.
+- Mark a class field `readonly` when nothing reassigns it.
+- Do not `await` inside a loop. Sequence dependent steps by returning the next promise from `.then`, or from a recursive function.
+- In an ES module entry script, use top-level `await` inside `try/catch`.
+- Do not mark a function `async` when its body has no `await`. When the signature must return a `Promise`, return `Promise.resolve(value)` from a normal function.
+- Do not `await` a value that is not a promise.
+- Throw `TypeError` when a `typeof` check fails. Keep `Error` for other failures.
+- Use `replaceAll` when every match should be replaced. `findLast` replaces `filter(...).pop()`.
+- Prefer `.at(-1)` over `[array.length - 1]`. Use `.at(index)` for any other index counted from the end.
+- Read a non-global regex match with `pattern.exec(value)`. Do not use `value.match(pattern)`.
+- Read a `Blob` or `File` with `blob.text()`. Do not use `FileReader#readAsText()`.
+- Use `else if` for mutually exclusive branches. Do not nest a second `if` inside the `else`.
+- Give `aside`, `nav`, and `section` an `aria-label` or `aria-labelledby`. A decorative SVG with no text gets `aria-hidden="true"`.
+- Keep a function to 7 parameters or fewer. Put related arguments on one object.
+- Handle a returned promise: `await` it, use `void` when its rejection is already handled, or attach `.catch` on an entry point.
+- An `eslint-disable` comment names the rule it disables.
 
 ```ts
 // ❌ BAD
 return typeof window.localStorage === 'undefined' ? null : window.localStorage
+if (!target.context) {
+    target.context = {}
+}
 return names.sort()
 return names.toSorted()
 const sessionId = Math.random().toString(36)
@@ -33,9 +60,16 @@ const port = parseInt(raw, 10)
 const letters = /^(a+)+$/
 names.map((name) => name.toLowerCase())
 const scale = 0x1_0000_0000
+const cloned = JSON.parse(JSON.stringify(value))
+const status = cached ? 'cached' : response.ok ? 'ok' : 'error'
+const layoutIds = ids.filter((id) => keep(id))
+layoutIds.includes(id)
+const last = items[items.length - 1]
+const callsite = line.match(/^at (.+)$/)
 
 // ✅ GOOD
 return window.localStorage ?? null
+const context = (target.context ??= {})
 return names.sort((left, right) => left.localeCompare(right))
 return names.toSorted((left, right) => left.localeCompare(right))
 const sessionId = crypto.randomUUID()
@@ -43,6 +77,13 @@ const port = Number.parseInt(raw, 10)
 const letters = /^a+$/
 const normalized = names.map((name) => name.toLowerCase())
 const scale = 2 ** 32
+const cloned = structuredClone(toRaw(value))
+const responseStatus = response.ok ? 'ok' : 'error'
+const status = cached ? 'cached' : responseStatus
+const layoutIds = new Set(ids)
+layoutIds.has(id)
+const last = items.at(-1)
+const callsite = /^at (.+)$/.exec(line)
 ```
 
 ```vue
