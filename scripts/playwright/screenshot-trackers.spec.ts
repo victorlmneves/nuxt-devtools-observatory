@@ -1,4 +1,4 @@
-import { test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
 const BASE_URL = 'http://localhost:4949' // Adjust if your dev server runs elsewhere
 
@@ -40,8 +40,7 @@ test.describe('Tracker Screenshots', () => {
         test(`Capture screenshot for ${tracker.name}`, async ({ page }) => {
             console.log(`Navigating to: ${BASE_URL}${tracker.path}`)
             await page.goto(`${BASE_URL}${tracker.path}`)
-            // Wait for the main panel to load (adjust selector as needed)
-            await page.waitForTimeout(1000)
+            await expect(page.locator('main.tab-content')).toBeVisible()
             console.log(`Saving screenshot to: ${tracker.screenshot}`)
             await page.screenshot({ path: tracker.screenshot, fullPage: true })
         })

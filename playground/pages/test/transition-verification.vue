@@ -16,15 +16,31 @@ const toggleTransition = (): void => {
     }
 }
 
-const rapidToggle = async (): Promise<void> => {
-    for (let i = 0; i < 5; i++) {
-        showTransition.value = true
-        await new Promise((resolve) => setTimeout(resolve, 50))
+const RAPID_TOGGLE_COUNT = 5
+const RAPID_TOGGLE_STEP_MS = 50
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms)
+    })
+}
+
+function runRapidToggle(remaining: number): Promise<void> {
+    if (remaining === 0) {
+        return Promise.resolve()
+    }
+
+    showTransition.value = true
+
+    return delay(RAPID_TOGGLE_STEP_MS).then(() => {
         showTransition.value = false
         cancellationCount.value++
-        await new Promise((resolve) => setTimeout(resolve, 50))
-    }
+
+        return delay(RAPID_TOGGLE_STEP_MS).then(() => runRapidToggle(remaining - 1))
+    })
 }
+
+const rapidToggle = (): Promise<void> => runRapidToggle(RAPID_TOGGLE_COUNT)
 
 const showBroken = (): void => {
     showBrokenTransition.value = true
